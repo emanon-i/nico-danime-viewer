@@ -1,0 +1,30 @@
+# --- Node / build ---
+node_modules/
+dist/
+.cache/
+*.tsbuildinfo
+
+# --- 環境・秘密情報 ---
+.env
+.env.*
+!.env.example
+
+# --- fetch スクリプトの生成物（ビルド/CI で都度生成する想定） ---
+# 静的サイトが読む JSON はコミットせず、デプロイ前に `npm run fetch` で再生成する。
+data/*.json
+data/**/*.json
+
+# --- 急上昇用の日次スナップショット（phase2、肥大化するためコミットしない） ---
+data/snapshots/
+
+# --- OS / エディタ ---
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# --- ログ ---
+*.log
+npm-debug.log*

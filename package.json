@@ -1,0 +1,17 @@
+{
+  "name": "nico-danime-viewer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "dアニメストア ニコニコ支店 非公式ビューア（発見UI）",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "fetch": "node scripts/fetch.mjs",
+    "dev": "echo \"[TODO] web/ の開発サーバ未設定（Vite 等を導入予定）\" && exit 1",
+    "build": "echo \"[TODO] web/ のビルド未設定\" && exit 1",
+    "serve": "echo \"[TODO] ビルド済み dist/ の配信未設定\" && exit 1"
+  },
+  "license": "MIT"
+}
