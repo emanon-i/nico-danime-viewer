@@ -173,3 +173,102 @@ count: {"view":65317,"comment":9508,"mylist":137,"like":1625}
 **最終結論**: 「dアニメ支店スコープの**週間・月間・急上昇**ランキング」は、snapshot/公開ランキング API の**どちらからも直接は取得できない**。
 実現するには **`viewCounter`（累計）を日次でスナップショット蓄積し、期間デルタ（週/月）・伸び率（急上昇）を自前計算**する必要がある（既存の「将来機能＝自前蓄積」方針と一致）。
 **総合（累計）と新着のみ snapshot から支店スコープで直接構築可能**。
+
+---
+
+# 検証（3回目）: 五十音・ジャンル所在・概要・各話取得元・出所マップ
+
+> 実施日 2026-06-15。UA 付き・低頻度・非営利。
+
+## A. 五十音フィードビリティ（最重要）
+
+### (1) snapshot に読み仮名フィールドはあるか → **無い**
+snapshot の全16フィールドに `yomi/kana/読み` 系は**存在しない**（2回目検証で列挙済み。`title` は表記のみ）。
+
+### (2) 五十音インデックスを取れる経路 → **list.json の `col_key` で可能**
+`site.nicovideo.jp/danime/static/data/list.json`（**6,698シリーズ**、キーは `title, col_key, url` のみ）。
+`col_key` が**読みベースの五十音「行」バケット**。実測分布（欠落 0 件）:
+
+```
+は:1255  あ:1088  か:1065  さ:1024  た:815  ま:458  ら:369  な:310  や:256  わ:58   （計6698 / 空0）
+```
+
+- 例: `{"title":"ああっ女神さまっ","col_key":"あ","url":".../series/109288"}`。表記が漢字でも読みの行で分類される想定。
+- **結論: 五十音ボタン（あ/か/さ/た/な/は/ま/や/ら/わ の10行）での振り分けは list.json `col_key` で直接可能**。シリーズ単位・支店カタログ全件に付与。
+- **制約**: 完全な読み（yomi）は無い → **行内の厳密な50音ソートは不可**（`title` 文字列順フォールバック。漢字先頭は音順にならない）。「行」までの粒度なら正確。
+
+## B. ジャンルの所在（1話だけか／全話か）
+
+snapshot は `contentId`・`channelId` とも **filter 不可**（個別話の直接引きは 400）。そこで**支店タグ集合（`q=dアニメストア&targets=tagsExact`＝総数 87,327）に `filters[genre]` を重ねて分布**を取得:
+
+| genre | 件数 |
+|-------|------|
+| アニメ | **87,281** |
+| ラジオ | 17 |
+| エンターテイメント | 11 |
+| 音楽・サウンド | 1 |
+| その他 / ゲーム | 0 |
+
+- **genre は（最古話だけでなく）ほぼ全話に入っている**: 非空 = 87,281+α ≒ **99.95%**（空/その他は数十件のみ）。
+- ただし値は**ほぼ一律「アニメ」**＝**サブジャンルの判別には使えない**（1回目検証と一致）。
+- 個別サンプル: `ああっ女神さまっ 第1話`(so36422583) も `genre=アニメ`。
+- **シリーズのジャンル決定ルール**: genre は実質「アニメ」一色なので**ジャンル別ブラウズの軸には不適**。
+  カテゴリ分けは **`tags`/`categoryTags` を主軸**にする（genre は「アニメか否か」程度の補助）。
+
+## C. 概要（あらすじ）= 各話 description は話ごとか → **話ごとの個別あらすじ**
+
+`ぼっち・ざ・ろっく！` の各話 description（実測・抜粋）:
+
+```
+#5 飛べない魚 : オリジナルソングも出来上がり、いよいよライブだと意気込む４人。星歌に出演させて…
+#8 ぼっち・ざ・ろっく : ライブ当日。台風の影響で呼んでいたはずの家族や友達から続々とキャンセル…
+#12 君に朝が降る : バンドを組み様々な人たちに出会い、ひとりでは今まで見えてこなかった景色が… <br…
+```
+
+- **各話 description はその話固有のあらすじ**（話ごとに異なる）。**HTML（`<br>` 等）混じり**＝サニタイズ要。
+- nvapi series の **series 直下 description は空**のことが多い（`ああっ女神さまっ` は空）。真の「シリーズ概要」源は無い。
+- **判定**: 「シリーズ概要＝第1話 description 流用」は**第1話のあらすじを表示することになる**（厳密なシリーズ要約ではない）。
+  proxy としては許容可だが「第1話のあらすじ」と明示するのが正直。HTML 除去が前提。
+
+## D. 各話の取得元（シリーズページ）→ **nvapi v2 series が最適**
+
+`https://nvapi.nicovideo.jp/v2/series/<id>`（ヘッダ `X-Frontend-Id: 6`）→ **200**。`data.detail` ＋ `data.items[]`（各話）。
+
+```
+detail: id, owner, title, description, decoratedDescriptionHtml, thumbnailUrl, isListed, createdAt, updatedAt
+detail.owner.channel.id = "ch2632720" / name "dアニメストア ニコニコ支店"   ← 支店判定に使える
+items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail, shortDescription, duration …
+例: series 109288「ああっ女神さまっ」 totalCount=26 / items=26（第1話→第26話の順で返る）
+```
+
+- **各話リスト・話順・contentId・再生数が一発で取れる**。**snapshot+list.json の series グルーピングより確実**
+  （snapshot は series id を持たず、タイトル検索はノイズ＋低再生話の取りこぼしがあり不適）。
+- **owner.channel.id == "ch2632720" でシリーズ単位の支店判定**も可能（list.json は元から支店カタログ）。
+- 役割分担: **各話リスト＝nvapi series**、**ジャンル/タグ＝snapshot**、**五十音＝list.json `col_key`**。
+
+## E. 出所マップ（詳細ページ「?」ツールチップ用）
+
+| 表示フィールド | 取得元（1行） |
+|----------------|---------------|
+| タイトル | list.json `title` ／ nvapi series `detail.title` |
+| シリーズ・サムネ | nvapi series `detail.thumbnailUrl` |
+| 各話サムネ | snapshot `thumbnailUrl` ／ nvapi item `video.thumbnail` |
+| ジャンル | snapshot `genre`（ほぼ「アニメ」一律＝補助のみ） |
+| タグ | snapshot `tags` / `categoryTags` |
+| シリーズ概要 | **第1話の snapshot `description`**（=第1話あらすじ・HTML除去。真のシリーズ要約源は無し） |
+| 各話あらすじ | snapshot `description`（話ごと・HTML混じり） |
+| 再生数 | snapshot `viewCounter`（累計） ／ nvapi `count.view` |
+| 各話リスト（#/話順/contentId） | **nvapi v2 series `items[]`**（主源） |
+| 公式シリーズリンク | nvapi series `id` → `nicovideo.jp/series/<id>` ／ list.json `url` |
+| 各話リンク | `nicovideo.jp/watch/<contentId>` |
+| 勢いスコア | **計算**（`viewCounter` ÷ 投稿経過日数 等・蓄積なし近似） |
+| 読み（五十音バケット） | list.json `col_key`（行レベル。完全 yomi は無し） |
+| 支店判定 | snapshot `channelId==2632720` ／ nvapi series `owner.channel.id=="ch2632720"` |
+
+## 結論（要点）
+
+- **五十音（A）**: ✅ **可能**。list.json `col_key` で10行バケットに直接振り分け（読みベース・全件付与・欠落0）。
+  ただし完全 yomi が無いため**行内の厳密50音ソートは不可**（title順フォールバック）。
+- **ジャンル（B）**: 全話に入るが**ほぼ「アニメ」一色**＝サブジャンル軸に使えない → **tags/categoryTags 主軸**。
+- **概要（C）**: 各話 description は**話ごとの個別あらすじ**（HTML混じり）。シリーズ概要の真源は無く、**第1話あらすじを流用**するのが現実解（その旨明示）。
+- **各話取得元（D）**: **nvapi v2 series が最適**（話順・contentId・支店判定込み）。snapshot グルーピングより確実。
