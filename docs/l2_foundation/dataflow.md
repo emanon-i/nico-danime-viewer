@@ -49,7 +49,8 @@
 
 ## 4. 加工: SQLite（ファイル DB・Actions 内・サーバ無し）
 
-- 取得結果を SQLite に入れ、**DB 側で**: 増分 upsert ／ ランキング・勢い（合算再生数 ÷ 公開からの経過日数）集計 ／
+- スキーマ・インデックス・UPSERT/delta・PRAGMA・2 ジョブの詳細は **[`db-design.md`](db-design.md)**。
+- 取得結果を SQLite に入れ、**DB 側で**: 増分 upsert（`prev_view_counter` に旧値退避＝前日比 delta）／ ランキング・勢い（delta＋velocity＋recency のブレンド）集計 ／
   タグ正規化（dアニメ 接頭 `^dアニメ_`・接尾 `_dアニメ(ストア)?$` の両対応）／ フランチャイズ束ね（共有タグ）／ period 由来クール結合。
 - **SQLite の置き場**:
   - **第一候補＝GitHub Actions のキャッシュ**（key 付き・`git` を膨らませない・壊れても再生成可）。
