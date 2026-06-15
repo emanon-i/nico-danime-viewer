@@ -47,7 +47,7 @@
   正規化したキュレーションタグは**通常タグと同じ平面のフラットなタグ**として扱う（別 facet にしない。品質が高いので候補の優先表示はしてよい）。
 - **クール判定**: **period HTML を源**にする（`<title>` に「<年><季>アニメ dアニメストア(ニコニコ支店)」、作品は `/detail/<slug>`）。
   過去季も支店スコープで取得可。`startTime` 推定は現行季しか当たらないため使わない。series 紐付けは `/detail/<slug>` ↔ series を
-  **タイトル一致で吸収**（△）。取得は**変更検知アサート必須**（§5.4）。
+  **正規化タイトル＋信頼度スコアで結合**（句読点・サブタイトル・リメイク・別季名でブレるため単純一致は不可）。**未一致/曖昧はレポート**し、**少数の手動オーバーライド表**（docs/data 配下）を併用（△）。取得は**変更検知アサート必須**（§5.4）。
 - **勢いスコアの定義**: **前日比デルタ（今回 − 前回 `viewCounter`。`prev_view_counter` に旧値を退避＝1 スロットの bounded 保持）と
   velocity（シリーズ合算再生数 ÷ 公開からの経過日数）と recency（直近性）のブレンド**（係数は L3）。候補は直近 `startTime` で絞る。
   **正直な制約**: **delta は2回目更新（翌日）から有効・解像度は日次**（無制限の時系列は持たないため真の週/月トレンドではない）。初日は velocity 主体。
@@ -56,7 +56,7 @@
 ### 1.3 データストア
 
 - **実行時（配信）のデータ層＝静的 JSON ファイル（`data/*.json`）。** 常時稼働 DB・サーバは持たない。
-- **ビルド/CI 時の加工＝SQLite（ファイル DB・サーバ無し）**: 取得結果を SQLite に入れ、**DB 側で**増分 upsert・ランキング/勢い集計・タグ正規化（dアニメ 接頭/接尾）・フランチャイズ束ね・period 由来クール結合を行い、用途別 JSON に export する。SQLite は**中間生成物**（置き場は **Actions キャッシュ**を第一候補・再生成可能、必要なら repo コミットも可）。**スキーマ・インデックス・UPSERT/delta・PRAGMA・2 ジョブフローは [`db-design.md`](db-design.md)**、全体のデータフローは [`dataflow.md`](dataflow.md)。
+- **ビルド/CI 時の加工＝SQLite（ファイル DB・サーバ無し）**: 取得結果を SQLite に入れ、**DB 側で**増分 upsert・ランキング/勢い集計・タグ正規化（dアニメ 接頭/接尾）・フランチャイズ束ね・period 由来クール結合を行い、用途別 JSON に export する。SQLite は**中間生成物**（再生成可能）。**状態（DB・`prev_view_counter`・HWM）の真実源は専用 artifact もしくは state ブランチ**、`actions/cache` は高速化フォールバック・状態書き込みは単一 state-writer の concurrency group（詳細は [`db-design.md`](db-design.md) §7）。**スキーマ・インデックス・UPSERT/delta・PRAGMA・2 ジョブフローは [`db-design.md`](db-design.md)**、全体のデータフローは [`dataflow.md`](dataflow.md)。
 - **ユーザー状態（お気に入り/見た）＝ブラウザの localStorage**（「id＋フラグ」程度の小さな JSON・クライアント側・サーバに出さない・配信層とは別物）。大規模化する場合は IndexedDB を再検討。
 - **export メタ**: 各 JSON に**最終更新時刻**を含める（ヘッダ ⚙ 設定/情報モーダルの「データ最終更新」表示用。詳細は [`dataflow.md`](dataflow.md)）。
 - 増分取得の cursor（新着の最終 id、snapshot の最大 `startTime` 等）は SQLite／状態ファイルで保持（§2.5）。

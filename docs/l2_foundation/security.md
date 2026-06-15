@@ -30,7 +30,8 @@
 - **脅威**: 注入されたスクリプト/リソースの実行・外部送信。
 - **対策**: Pages はレスポンスヘッダ設定が難しいため **`<meta http-equiv="Content-Security-Policy">`** で絞る:
   - `default-src 'self'`、`script-src 'self'`（**インライン script を避ける**）、`connect-src 'self'`（自分の静的 JSON＝同一オリジンのみ）、
-    `img-src` は**ニコニコのサムネ画像ドメイン**（`*.nimg.jp` 等）＋`'self'`、`style-src 'self'`（必要なら最小の `'unsafe-inline'` 検討）、`frame-ancestors 'none'`、`base-uri 'self'`。
+    `img-src` は**ニコニコのサムネ画像ドメイン**（`*.nimg.jp` 等）＋`'self'`、`style-src 'self'`（必要なら最小の `'unsafe-inline'` 検討）、`base-uri 'self'`。
+  - **`frame-ancestors` は `<meta>` CSP では強制されない**（HTTP レスポンスヘッダ専用）。**クリックジャッキング対策が必要なら、実 HTTP ヘッダを設定できるホスティングが必要**（GitHub Pages では meta の保証外）。
   - 可能な範囲で段階的に強める（L3 で確定）。
 
 ## 4. ブラウザの通信範囲

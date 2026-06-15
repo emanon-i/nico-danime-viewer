@@ -102,7 +102,7 @@ Header: User-Agent: nico-danime-viewer/0.1 (...)
 | `channelId` filter | 不可（取得のみ） | クライアント側 `==2632720` 絞り込み |
 | `startTime` filter | TZ 必須（無し→400） | ISO8601＋`+09:00` を厳守。期間ウィンドウ分割にも使用 |
 | `genre` 粒度 | 粗い（一律「アニメ」） | ジャンル/近ジャンル・リコメンドは `tags`/`categoryTags` 主軸 |
-| 急上昇（時系列） | API は返さない | `viewCounter` 日次差分を自前蓄積（phase2） |
+| 急上昇（時系列） | API は返さない | 前日比 delta は `prev_view_counter`（1スロット bounded）で自前算出し v1 の勢いに織り込む。正確な週/月の急上昇はスコープ外 |
 | 個人化（履歴） | API に無い | 視聴履歴を集める別プロジェクト依存・本ビューアのスコープ外（将来） |
 | 全件上限 | `_offset`≤100000 / `_limit`≤100 | `startTime` 期間ウィンドウ＋ページング |
 | `programlist` 画像キー | `imgpagh`（綴り） | その綴りで参照 |
@@ -170,8 +170,8 @@ count: {"view":65317,"comment":9508,"mylist":137,"like":1625}
 | **月間** | ✗ 直接不可 | 同上 → **30日デルタを自前計算**（公開 ranking の month は支店に絞れない） |
 | **急上昇（伸び率）** | ✗ 直接不可 | 専用 term も無い → **日次 `viewCounter` 履歴のデルタ／伸び率を自前算出**（snapshot・ranking いずれからも直接は不可） |
 
-**最終結論**: 「dアニメ支店スコープの**週間・月間・急上昇**ランキング」は、snapshot/公開ランキング API の**どちらからも直接は取得できない**。
-実現するには **`viewCounter`（累計）を日次でスナップショット蓄積し、期間デルタ（週/月）・伸び率（急上昇）を自前計算**する必要がある（既存の「将来機能＝自前蓄積」方針と一致）。
+**最終結論**: 「dアニメ支店スコープの**週間・月間**ランキング」は、snapshot/公開ランキング API の**どちらからも直接は取得できない**。
+本ビューアは **`prev_view_counter`（1スロット bounded）で前日比 delta を自前算出し、velocity・recency とブレンドして「勢い」**とする（無制限履歴は持たないため正確な週/月の期間デルタはスコープ外）。
 **総合（累計）と新着のみ snapshot から支店スコープで直接構築可能**。
 
 ---
@@ -261,7 +261,7 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
 | 各話リスト（#/話順/contentId） | **nvapi v2 series `items[]`**（主源） |
 | 公式シリーズリンク | nvapi series `id` → `nicovideo.jp/series/<id>` ／ list.json `url` |
 | 各話リンク | `nicovideo.jp/watch/<contentId>` |
-| 勢いスコア | **計算**（`viewCounter` ÷ 投稿経過日数 等・蓄積なし近似） |
+| 勢いスコア | **計算**（前日比 delta＋velocity＋recency のブレンド・`prev_view_counter` の1スロット bounded） |
 | 読み（五十音バケット） | list.json `col_key`（行レベル。完全 yomi は無し） |
 | 支店判定 | snapshot `channelId==2632720` ／ nvapi series `owner.channel.id=="ch2632720"` |
 
@@ -312,7 +312,7 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
 | 尺 | snapshot `lengthSeconds` | ○ | 100%（>0） | 秒 | — |
 | 公式シリーズURL | list.json `url` / nvapi series `id` | ○ | 100% | `nicovideo.jp/series/<id>` | — |
 | 公式watchURL | snapshot `contentId` | ○ | 100% | `nicovideo.jp/watch/<contentId>`（`so…`） | — |
-| 勢いスコア | 計算 | ○(計算) | — | 蓄積なし近似。**新着は comment/like/mylist 疎→view 主体に** | viewCounter ÷ 投稿経過日数 等（formula は L3） |
+| 勢いスコア | 計算 | ○(計算) | — | 前日比 delta＋velocity＋recency のブレンド（1スロット bounded）。**新着は comment/like/mylist 疎→view 主体に** | 式は db-design.md / foundation §1.2 |
 | クール判定 | snapshot `startTime`（現行季）/ programlist・period（過去季） | △ | 現行季 ◎ / **過去季 ✗** | **back-catalog は startTime＝バルク投稿日で放送季と無関係** | startTime→年・季（現行のみ） |
 | 新着シリーズ判定 | 計算（series 内 `startTime` 最小） | ○(計算) | — | nvapi series で各話網羅が前提 | min(各話 startTime) |
 | 最新話判定 | 計算（`startTime` 最大） | ○(計算) | — | — | max(各話 startTime) |

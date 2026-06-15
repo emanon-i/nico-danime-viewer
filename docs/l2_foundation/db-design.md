@@ -7,7 +7,7 @@
 
 - **一括ロードはトランザクションで一括**（公式 FAQ Q19: 個別 INSERT は数十 tx/s だが `BEGIN…COMMIT` でまとめると **50,000+ inserts/s**、commit コストを全 INSERT で償却）・**prepared statement＋バッチ（executemany 相当）**・**インデックスは一括 INSERT 後に作成**・**集計は set-based**（行ごとループを避ける）。
 - ビルド時 DB は**再生成可能な中間生成物**なので**耐久性 PRAGMA は緩めてよい**（速度優先）。
-- delta（前日比）は **prev 値を 1 スロット退避**して `今回 − 前回` で得る（**無制限履歴にしない**）。任意で 7 スロットの bounded ring。
+- delta（前日比）は **prev 値を 1 スロット退避**して `今回 − 前回` で得る（**無制限履歴にしない**）。**7 スロット ring は v1 非対象・将来用**（UI ランキングに使わない）。
 
 ## 1. スキーマ（SQLite）
 
@@ -44,6 +44,18 @@ CREATE TABLE episodes (
   last_updated      TEXT
 );
 
+-- RSS 新着のステージング（watch id を contentId に解決してから episodes へ統合）
+CREATE TABLE rss_items (
+  watch_id           TEXT PRIMARY KEY,    -- RSS の数値 watch id（snapshot の contentId 'so…' とは形式が違う）
+  guid               TEXT,                -- HWM cursor
+  pub_date           TEXT,
+  title              TEXT,
+  title_norm         TEXT,                -- 正規化タイトル（突合用）
+  link               TEXT,                -- nicovideo.jp/watch/<watch_id>
+  resolved_content_id TEXT,              -- 解決済み 'so…'（未解決は NULL）
+  resolution_status  TEXT DEFAULT 'unresolved' -- unresolved / resolved / rss_only
+);
+
 -- 正規化タグ（フラット）
 CREATE TABLE tags (
   tag_id         INTEGER PRIMARY KEY,
@@ -66,7 +78,8 @@ CREATE TABLE meta_state (
   last_full_refresh_at             TEXT
 );
 
--- 任意: 7スロットの bounded ring（週次 delta 用。無制限にしない）
+-- 将来用（v1 非対象・UI ランキングに使わない）: 7スロットの bounded ring（週次 delta の実験用）。
+-- v1 の delta は prev_view_counter の 1 スロットのみ。これは作らない。
 CREATE TABLE episode_view_history (
   content_id  TEXT REFERENCES episodes(content_id),
   slot        INTEGER,                    -- 0..6（曜日 or 日インデックス・上書き循環）
@@ -172,28 +185,33 @@ PRAGMA foreign_keys = ON;      -- 整合性（FK）
 
 ### 6.1 毎時ジョブ（軽量・短時間）
 
-1. Actions キャッシュから DB 復元（無ければ空で開始）。
+1. 状態（DB）を真実源から復元（§7）。
 2. **RSS page1 のみ**取得（条件付き GET。304 ならスキップ）。
-3. `meta_state.rss_last_guid` を HWM に、新しい item だけ `episodes`/`series` に **UPSERT**（トランザクション一括）。
-4. 新着系の軽い JSON を export。DB をキャッシュ保存。
+3. `meta_state.rss_last_guid` を HWM に、新しい item を **`rss_items` にステージング**（`watch_id` / `title_norm` / `pub_date`）。
+4. **watch id → `contentId` 解決**: ① `nicovideo.jp/watch/<watch_id>` の redirect/解決で `so…` を得る、または ② **正規化タイトル＋pubDate 一致**で snapshot/既存 episodes と突合。
+   - 解決できたら `resolved_content_id` を埋めて `episodes` に UPSERT・統合（`resolution_status='resolved'`）。
+   - **未解決は `resolution_status='rss_only'`** とし、**RSS-only の「最新の動画」枠としてのみ export**（誤った id 統合・identity 破壊をしない）。後続の日次フルで解決を再試行。
+5. 新着系の軽い JSON を export。状態を保存。
 
 ### 6.2 日次ジョブ（フル）
 
 1. DB 復元 → **version ゲート**（`…/snapshot/version` の `last_modified` が `meta_state` と同じなら全件パスをスキップ）。
 2. snapshot フル取得（`_offset` 上限は `startTime` 範囲分割・逐次・前回レスポンス時間ぶん待機・503 は 5 分バックオフ）。
 3. **`BEGIN` … 一括 UPSERT（prev_view_counter に旧値退避）… `COMMIT`**。
-4. nvapi series でシリーズ束ね（話順・支店判定）、タグ正規化、フランチャイズ束ね、period クール結合。
+4. nvapi series でシリーズ束ね（話順・支店判定）、タグ正規化（**各シリーズの最古話＝フル取得済み episode から導出。per-series の `contentId` 直引きはしない**）、フランチャイズ束ね、period クール結合（正規化タイトル＋信頼度＋手動 override）。
 5. **set-based で `series_metrics` 再計算**（velocity＋delta＋recency＝hot_score）。
 6. `first_seen`/`is_available` 等を更新（欠損作品は `is_available=0`）。
 7. 用途別 **静的 JSON を export**（export メタに最終更新時刻）。`ANALYZE`。DB をキャッシュ保存。
 
 - いずれも**変更検知アサート（`foundation.md` §5.4）**を通過したときだけ公開。**壊れ/空は公開しない**（前回正常物を保持）。
 
-## 7. Actions でのファイル DB 運用
+## 7. Actions でのファイル DB 運用（状態の真実源）
 
-- **キャッシュ復元 → 更新 → 保存**。`actions/cache` のエントリは key ごとに**不変**なので、**`key: nico-db-<日付/run_id>` ＋ `restore-keys: nico-db-` で直近を引き継ぐ**（最新を復元しつつ新エントリを書く）。
-  - 代替: DB を **repo にコミット**（履歴で差分追跡したい場合）。いずれも DB は再生成可能。
-- **prev_view_counter は日次ジョブ間で生き残る必要がある**（delta のため）。キャッシュが落ちると delta は次回まで無効＝**「2 回目更新から有効」と正直に扱う**（壊さない）。
+- **状態（DB・`prev_view_counter`・HWM cursor）の真実源は、専用 artifact もしくは専用 state ブランチ**に置く。
+  `actions/cache` のエントリは key ごとに**不変**で、2 ジョブが古いキャッシュを復元して**分岐した不変キーを書く**と状態が割れるため、**`actions/cache` は高速化のフォールバック**に限定する。
+- **単一 state-writer**: 状態を書くジョブは **concurrency group（同時実行 1・直列）**にし、毎時/日次が同時に状態を更新して壊さないようにする。
+- 各ジョブ＝**真実源から復元 → 更新 → 真実源へ保存（コミット/アップロード）**。DB は再生成可能。
+- **prev_view_counter は日次ジョブ間で生き残る必要がある**（delta のため）。真実源が失われた回は **delta を無効扱い（その回は velocity 主体）と正直に扱う**（壊さない）。
 - **サイズ管理**: bounded 履歴（無制限にしない）、不要列を持たない、肥大時は `VACUUM`。
 
 ## 8. 出典

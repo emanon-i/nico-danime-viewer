@@ -16,7 +16,7 @@
                  │  ・日次フルリフレッシュ（viewCounter 等の可変メトリクス用）
                  ▼
  ┌─ 加工: SQLite（ファイルDB・Actions 内・サーバ無し）──────────┐
- │ upsert（増分マージ）／ランキング・勢い(=合算再生数÷経過日数)集計 │
+ │ upsert（prev退避＝前日比delta）／勢い(delta＋velocity＋recency)集計 │
  │ タグ正規化(dアニメ 接頭/接尾)／フランチャイズ束ね／period クール結合│
  └───────────────┬───────────────────────────────────────────┘
                  │ export（用途別の静的 JSON）
@@ -42,7 +42,8 @@
 
 ## 3. 取り込み方針（HWM 増分＋日次フル）
 
-- **新着（毎時・HWM 増分）**: RSS page1 のみ取得し、保存済み cursor（最終 `guid`/watch id）より新しい item だけ採用。境界 `>=`＋**id dedup**（遅延・同時刻の取りこぼし/重複対策）。初回のみ `?page=` 遡及でシード。
+- **新着（毎時・HWM 増分）**: RSS page1 のみ取得し、保存済み cursor（最終 `guid`）より新しい item だけ採用。境界 `>=`＋**id dedup**。初回のみ `?page=` 遡及でシード。
+  - **ID 解決**: RSS は**数値 watch id**で snapshot の `contentId`（`so…`）と形式が違う。**`rss_items` にステージング → redirect もしくは「正規化 title＋pubDate」一致で `contentId` に解決 → `episodes` に統合**。未解決は **RSS-only の「最新の動画」枠としてのみ export**（db-design.md §6.1）。
 - **発見系の差分（日次・HWM）**: snapshot を `filters[startTime][gte]=<保存済み最大 startTime>`（TZ 付き）で日次差分。境界 `>=`＋id dedup。
 - **可変メトリクスは日次フルリフレッシュ**: `viewCounter` 等は既存話の数値が伸びるため HWM では拾えない → ランキング/勢い用に**日次で全件再取得**（`_offset` 上限 100000 は `startTime` 範囲分割で回避）。
 - 増分 cursor は SQLite（または `data/state/`）に保持。
@@ -52,10 +53,8 @@
 - スキーマ・インデックス・UPSERT/delta・PRAGMA・2 ジョブの詳細は **[`db-design.md`](db-design.md)**。
 - 取得結果を SQLite に入れ、**DB 側で**: 増分 upsert（`prev_view_counter` に旧値退避＝前日比 delta）／ ランキング・勢い（delta＋velocity＋recency のブレンド）集計 ／
   タグ正規化（dアニメ 接頭 `^dアニメ_`・接尾 `_dアニメ(ストア)?$` の両対応）／ フランチャイズ束ね（共有タグ）／ period 由来クール結合。
-- **SQLite の置き場**:
-  - **第一候補＝GitHub Actions のキャッシュ**（key 付き・`git` を膨らませない・壊れても再生成可）。
-  - 必要なら **repo にコミット**も可（履歴で差分追跡したい場合）。いずれも**再生成可能**な中間生成物として扱う。
-- DB は**中間生成物**。配信には出さず、§5 の用途別 JSON に export する。
+- **状態（DB・`prev_view_counter`・HWM）の真実源**＝専用 artifact もしくは state ブランチ。`actions/cache` は高速化フォールバックに限定（不変キーで 2 ジョブが状態を割らないため）。状態書き込みは**単一 state-writer の concurrency group**（詳細は [`db-design.md`](db-design.md) §7）。
+- DB は**中間生成物**（再生成可能）。配信には出さず、§5 の用途別 JSON に export する。
 
 ## 5. 出力（用途別の静的 JSON）
 
@@ -79,5 +78,7 @@
 | **発見系フル（snapshot/カタログ/period）** | **日次** | **version ゲート**（`…/snapshot/version` の `last_modified` が変わった時だけ全件パス）。**AM5:00(JST) 索引切替後の閑散帯に1回**。**逐次取得（並列で叩かない）**・**前回レスポンス時間ぶん待機**・`_offset` 上限は `startTime` 範囲分割・**503 は 5 分以上バックオフ** |
 | **各話（nvapi series）** | **低頻度/オンデマンド** | 全件を毎回引かない。**RSS で新着が出た／変化したシリーズだけ**、または**週次程度**に更新 |
 
+- **リクエスト予算（具体値は L3 受け入れ条件で確定）**: 日次フルは `startTime` 範囲分割のページ数・実行時間を見積り、**job timeout と fail 時挙動**を定義（超過時は当該回を fail＝前回正常物を保持）。
+  - **第1話タグは日次フルで取得済みの全 episode から各シリーズの最古話（min `start_time`）を選んで導出**する＝**per-series の `contentId` 直引きをしない**（数千リクエストの増加を避ける）。`contentId` 直引きは個別検証・少数のみ。
 - **各源のフェイル時**: 変更検知アサート（`foundation.md` §5.4）が外れたら **Actions を fail** させ、**壊れた/空の JSON を公開しない**（前回正常な公開物を保持）。
 - ToS 厳守（非営利・User-Agent 必須・前回レスポンス時間ぶん待機・503 バックオフ）。
