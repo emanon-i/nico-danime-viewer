@@ -199,7 +199,7 @@ snapshot の全16フィールドに `yomi/kana/読み` 系は**存在しない**
 
 ## B. ジャンルの所在（1話だけか／全話か）
 
-snapshot は `contentId`・`channelId` とも **filter 不可**（個別話の直接引きは 400）。そこで**支店タグ集合（`q=dアニメストア&targets=tagsExact`＝総数 87,327）に `filters[genre]` を重ねて分布**を取得:
+snapshot は `channelId` が **filter 不可**（取得のみ。詳細は後述「filter 可否の確定」）。そこで**支店タグ集合（`q=dアニメストア&targets=tagsExact`＝総数 87,327）に `filters[genre]` を重ねて分布**を取得:
 
 | genre | 件数 |
 |-------|------|
@@ -514,3 +514,30 @@ item 要素: title, link, guid, pubDate, description, nicoch:isPremium
   - RSS の id は **数値 watch 形式**（例 `1781226663`）で、snapshot の `contentId`（`so…`）と**形式が異なる** → snapshot/series データとの突き合わせは watch id 解決 or タイトル一致が要る（△）。
   - RSS は**各話（動画）単位**＝「最新の動画」に最適。「新着シリーズ」はこの RSS ＋ カタログ/series 束ねで構成する。
   - RSS は非公式契約のない公開フィードのため**変更検知アサート必須**（XML パース可・`channel.title` に支店名・item 数下限）。低頻度（毎時）厳守。
+
+---
+
+# 検証（filter 可否の確定 + version）
+
+> 実施日 2026-06-15。公式ガイド（https://site.nicovideo.jp/search-api-docs/snapshot ）と挙動の食い違いを実機で確定。
+
+## contentId の filter → ○ 可能
+
+- 書式 `filters[contentId][0]=so41433905`（支店各話の `so…` ID）で `meta.status=200`・`totalCount=1`・該当 `contentId` を返す。
+- **`contentId` は filter 可能**（個別話の直接引きができる）。
+
+## channelId の filter → ✗ 不可（API が許可フィールドを明示）
+
+- `filters[channelId][0]=2632720` は **400 `QUERY_PARSE_ERROR`**。エラーが**許可される filter フィールドを列挙**:
+  ```
+  contentType, startTime, cmsid, contentId, commentCounter, title, viewCounter,
+  categoryTags, tagsExact, lengthSeconds, lastCommentTime, tags, mylistCounter,
+  thumbnailUrl, genre.keyword, likeCounter, lastResBody, genre, description
+  ```
+  → **`channelId` は filter 不可**（一覧に無い）。支店絞りは取得後にクライアント側 `channelId==2632720`。
+- `startTime` の filter は ISO8601＋TZ（`+09:00`）必須。
+
+## version エンドポイント → 鮮度・変更検知に使える
+
+- `GET https://snapshot.search.nicovideo.jp/api/v2/snapshot/version` → `{"last_modified":"2026-06-15T07:14:26+09:00"}`
+- 現在参照中データの切替日時。**fetch 前に取得して前回値と比較**すれば、索引が更新されたか（再取得の価値があるか）を低コストで判定でき、変更検知にも使える。
