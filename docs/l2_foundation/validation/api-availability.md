@@ -103,6 +103,6 @@ Header: User-Agent: nico-danime-viewer/0.1 (...)
 | `startTime` filter | TZ 必須（無し→400） | ISO8601＋`+09:00` を厳守。期間ウィンドウ分割にも使用 |
 | `genre` 粒度 | 粗い（一律「アニメ」） | ジャンル/近ジャンル・リコメンドは `tags`/`categoryTags` 主軸 |
 | 急上昇（時系列） | API は返さない | `viewCounter` 日次差分を自前蓄積（phase2） |
-| 個人化（履歴） | API に無い | ローカルファースト連携（phase2） |
+| 個人化（履歴） | API に無い | 視聴履歴を集める別プロジェクト依存・本ビューアのスコープ外（将来） |
 | 全件上限 | `_offset`≤100000 / `_limit`≤100 | `startTime` 期間ウィンドウ＋ページング |
 | `programlist` 画像キー | `imgpagh`（綴り） | その綴りで参照 |
