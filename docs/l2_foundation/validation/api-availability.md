@@ -272,3 +272,72 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
 - **ジャンル（B）**: 全話に入るが**ほぼ「アニメ」一色**＝サブジャンル軸に使えない → **tags/categoryTags 主軸**。
 - **概要（C）**: 各話 description は**話ごとの個別あらすじ**（HTML混じり）。シリーズ概要の真源は無く、**第1話あらすじを流用**するのが現実解（その旨明示）。
 - **各話取得元（D）**: **nvapi v2 series が最適**（話順・contentId・支店判定込み）。snapshot グルーピングより確実。
+
+---
+
+# 検証（4回目）: データ可用性マトリクス（全表示項目監査）
+
+> 実施日 2026-06-15。UA 付き・低頻度・非営利。3画面（トップ/一覧/詳細）で出したい全項目の「取れる vs 出せる」を実測。
+> カバレッジは**支店サンプル 100件 × 2軸**（`-viewCounter`＝人気順／`-startTime`＝新着順、各 channelId==2632720 該当 100/100）。
+
+## カバレッジ実測（サンプル断片）
+
+```
+[人気順100] 全フィールド 非空/>0 = 100%
+[新着順100] title/description/thumbnailUrl/tags/categoryTags/genre/viewCounter/lengthSeconds/startTime = 100%
+            commentCounter>0 = 46%   likeCounter>0 = 51%   mylistCounter>0 = 40%   ← 投稿直後は希薄
+```
+
+→ **新着話は viewCounter 以外のエンゲージ指標（コメント/いいね/マイリスト）が 4〜5 割しか値を持たない**（投稿直後で0）。
+人気作・既出話では 100%。likeは機能導入(2020)以降。
+
+## マトリクス（行＝表示項目）
+
+| 表示項目 | 取得元 | 取得可否 | カバレッジ（実測） | 信頼度・注意 | 算出方法 |
+|----------|--------|:---:|------------------|-------------|---------|
+| タイトル | list.json `title` / nvapi `detail.title` / snapshot `title` | ○ | 100% | 表記のみ（読み無し） | — |
+| **読み（五十音）** | list.json `col_key` | △ | 行バケット 100%（6,698件・欠落0） | **行（あ〜わ10）粒度のみ正確。完全 yomi 無し→行内厳密ソート不可** | — |
+| サムネ | snapshot `thumbnailUrl`（各話）/ nvapi `detail.thumbnailUrl`（シリーズ） | ○ | 100% | — | — |
+| ジャンル | snapshot `genre` | △ | 非空 99.95%（87,281/87,327）だが**「アニメ」一色** | サブジャンル判別不可 → **tags 主軸** | — |
+| タグ | snapshot `tags` | ○ | 100% | スペース区切り・表記揺れ有り | — |
+| categoryTags | snapshot `categoryTags` | ○ | 100% | tags の補助 | — |
+| 概要（あらすじ） | 各話 snapshot `description`（シリーズは**第1話を流用**） | △ | 各話 100% ／ シリーズ概要の真源**無し** | **HTML 混じり（要除去）**。流用＝「第1話あらすじ」と明示 | — |
+| 各話リスト・話数順 | **nvapi v2 series `items[]`** | ○ | シリーズ単位で全話・順序付き | snapshot+list.json 集約より確実 | — |
+| 各話再生数 | snapshot `viewCounter` / nvapi `count.view` | ○ | 100%（>0） | **累計のみ**（期間内なし） | — |
+| シリーズ合算/代表再生数 | 計算（各話 `viewCounter` 合算 or 代表話） | ○(計算) | — | 合算は各話の網羅取得が前提（nvapi series 推奨） | Σ各話 viewCounter |
+| 投稿日 | snapshot `startTime` | ○ | 100% | ISO8601＋TZ。**ニコ投稿日＝放送日と異なる場合あり** | — |
+| コメント数 | snapshot `commentCounter` | ○取得 / △有用 | 人気100% / **新着46%** | 新着話は 0 が多い | — |
+| いいね | snapshot `likeCounter` | ○取得 / △有用 | 人気100% / **新着51%** | like は2020〜・新着話 0 多い | — |
+| マイリスト | snapshot `mylistCounter` | ○取得 / △有用 | 人気100% / **新着40%** | 新着話 0 多い | — |
+| 尺 | snapshot `lengthSeconds` | ○ | 100%（>0） | 秒 | — |
+| 公式シリーズURL | list.json `url` / nvapi series `id` | ○ | 100% | `nicovideo.jp/series/<id>` | — |
+| 公式watchURL | snapshot `contentId` | ○ | 100% | `nicovideo.jp/watch/<contentId>`（`so…`） | — |
+| 勢いスコア | 計算 | ○(計算) | — | 蓄積なし近似。**新着は comment/like/mylist 疎→view 主体に** | viewCounter ÷ 投稿経過日数 等（formula は L3） |
+| クール判定 | snapshot `startTime`（現行季）/ programlist・period（過去季） | △ | 現行季 ◎ / **過去季 ✗** | **back-catalog は startTime＝バルク投稿日で放送季と無関係** | startTime→年・季（現行のみ） |
+| 新着シリーズ判定 | 計算（series 内 `startTime` 最小） | ○(計算) | — | nvapi series で各話網羅が前提 | min(各話 startTime) |
+| 最新話判定 | 計算（`startTime` 最大） | ○(計算) | — | — | max(各話 startTime) |
+
+## クール判定の根拠（実データ）
+
+- `ぼっち・ざ・ろっく！` 各話 `startTime` = 2022-11〜12 → **2022秋**（放送季と一致＝現行季の同時配信は startTime で判定可）。
+- `ああっ女神さまっ` 全26話 `startTime` = **2020-03-13 で一律**（バルク投稿）→ 原作放送(2005〜)と無関係。
+  **→ 過去作（back-catalog）は startTime からクールを判定できない。** 過去季は `anime.nicovideo.jp/period/<年>-<季>-danime.html` ／ programlist 補助が必要、無ければ「クール不明」。
+
+## 落とし所（画面に載せる項目の正当化）
+
+| 項目 | 判断 |
+|------|------|
+| 読み（五十音） | **採用＝行バケット（col_key）**。「あ〜わ」ボタンのみ。**行内の厳密50音ソートは諦め**（title順）。 |
+| ジャンル別ブラウズ | **genre を軸に使わない**。タグ/categoryTags ベースに置換。 |
+| シリーズ概要 | **第1話 description を HTML 除去して表示**＋「第1話のあらすじ」表記。別途のシリーズ要約は出さない。 |
+| コメント/いいね/マイリスト | **新着では出さない or 0 を隠す**。勢いスコアの主因にしない（view 主体）。詳細・人気作では補助表示可。 |
+| クール（過去季） | startTime で出せるのは現行季のみ。過去季は period/programlist で補完、不明は「クール不明」で正直に。 |
+| 各話リスト | **nvapi v2 series を主源**に（snapshot 集約は代替）。 |
+
+## 5点の結論（実データ）
+
+1. **五十音**: ✅ list.json `col_key` で**行バケット振り分け可能**（全6,698件・欠落0）。読み(yomi)は無く**行内厳密ソートは不可**（公式の細かい50音 yomi 経路は確認できず＝行粒度で割り切る）。
+2. **ジャンル**: 全話に在るが**99.95%「アニメ」**＝サブジャンル不可。**決定ルール: genre は「アニメ判定」程度に留め、分類は tags 主軸**。
+3. **概要**: description は**各話固有のあらすじ**（HTML混じり）。シリーズ概要の真源は無く、**「第1話あらすじ流用（明示）」が妥当**。
+4. **各話取得元**: **nvapi v2 `series/<id>` が最も信頼できる**（全話・話順・contentId・owner.channel で支店判定）。snapshot+list.json 集約より優位。
+5. **クール判定**: **現行季のみ startTime で機械判定可**。**過去作はバルク投稿日のため不可** → period/programlist 補助 or 「不明」。
