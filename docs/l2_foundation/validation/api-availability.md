@@ -418,7 +418,10 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
 
 - `list.json` は各シーズンを**別 series として個別エントリ化**（例 みなみけ / みなみけ おかわり / みなみけ ただいま = 別 series id・別 `col_key`）。複数シーズンを束ねる上位 work ID は無い。
 - `programlist.json` も `series`（数値）のみで work 束ね無し。nvapi series `detail` にも parent/work 無し。
-- → **複数シーズンを束ねる公式 work ID は確認できない。**
+- **Nアニメ作品ページ** `anime.nicovideo.jp/detail/<slug>`（period の作品ページ）は Nuxt SPA で、`payload.js` に
+  **`related` フィールドを持つが実測は空 `related:[]`**（淡島百景 `awajima-anime` ／ 春夏秋冬代行者 `4seasons-anime` で確認）。
+  `_P`/`_S` 等の兄弟 slug は存在するが、payload に series id 参照も関連リンクも無い。スキーマはあれど中身が無い。
+- → **複数シーズンを束ねる公式 work ID／関連リストは（静的JSON・nvapi・Nアニメ作品ページのいずれにも）確認できない。**
 
 ## D-2. 共有フランチャイズタグで束ねられるか → ○ 最有力
 
