@@ -106,3 +106,70 @@ Header: User-Agent: nico-danime-viewer/0.1 (...)
 | 個人化（履歴） | API に無い | 視聴履歴を集める別プロジェクト依存・本ビューアのスコープ外（将来） |
 | 全件上限 | `_offset`≤100000 / `_limit`≤100 | `startTime` 期間ウィンドウ＋ページング |
 | `programlist` 画像キー | `imgpagh`（綴り） | その綴りで参照 |
+
+---
+
+# 検証（2回目）: ランキング・時間窓メトリクスの支店スコープ取得可否
+
+> 実施日 2026-06-15。UA 付き・低頻度・非営利。月間/週間/急上昇ランキングを「dアニメ支店」スコープで**直接取れるか**の切り分け。
+
+## 1. snapshot API: 全 fields と時間窓メトリクスの有無
+
+`fields` に既知の全項目を要求 → **返却された 16 フィールド**（item0）:
+
+```
+categoryTags, channelId, commentCounter, contentId, description, genre,
+lastCommentTime, lengthSeconds, likeCounter, mylistCounter, startTime,
+tags, thumbnailUrl, title, userId, viewCounter
+```
+
+- **時間窓メトリクスは存在しない。** `viewCounter` は**累計のみ**（「直近7日の再生数」等の期間内カウントは無い）。
+  `lastCommentTime`（最終コメント時刻）はあるが「最近活発」止まりで再生数の伸びではない。
+- **sort 可能フィールド（実証・各 `status=200`、top が変化）**:
+  `-viewCounter` / `-mylistCounter` / `-commentCounter` / `-likeCounter` / `-lastCommentTime`（＋既出 `-startTime`）。
+  いずれも**絶対値/累計**。**期間内デルタでの sort は不可**。
+
+## 2. ランキング系 API/RSS の現行エンドポイント
+
+| 試行 | 結果 |
+|------|------|
+| 旧 RSS `nicovideo.jp/ranking/genre/anime?...&rss=2.0` | **廃止扱い**。`Content-Type: text/html` で React SPA の HTML を返す（RSS ではない）。XML としては実質使えない |
+| 旧 `nvapi …/v1/ranking/teiban/<genre>` | **404/400**（このパスは無効） |
+| **現行 `nvapi.nicovideo.jp/v1/ranking/genre/<key>?term=<term>`** | **OK（200・100件）**。要ヘッダ `X-Frontend-Id: 6`／`X-Frontend-Version: 0` |
+| `term` 値 | **`hour` / `24h` / `week` / `month` / `total` すべて 200**（毎時・24時間・週間・月間・全期間）。「急上昇」専用 term は無い |
+| `pageSize`/`page` パラメータ | `pageSize` を付けると **400 INVALID_PARAMETER**（無効パラメータ。付けない） |
+| ジャンルキー一覧 `nvapi …/v1/genres` | OK。`anime=アニメ`, `game=ゲーム`, `music_sound=…` 等。アニメのキーは **`anime`** |
+
+ランキング item の構造（実物・`genre/anime?term=24h` top）:
+
+```
+id=so46418087  title=黄泉のツガイ 第十一話「兄と弟」
+owner: type=channel  id=ch2650080  name=黄泉のツガイ
+count: {"view":65317,"comment":9508,"mylist":137,"like":1625}
+（tags フィールドは ranking item に無い）
+```
+
+## 3. 支店スコープに絞れるか
+
+| 方法 | 結果 |
+|------|------|
+| (a) `channelId=2632720` で絞る | **不可**。ranking item の `owner.id` は**作品ごとの個別チャンネル**（`ch2650080`「黄泉のツガイ」等）。`genre/anime` の **top100 に 支店(2632720) は 0 件**（`term=24h`/`month` とも）。ranking に channel フィルタ引数も無い |
+| (b) タグ "dアニメストア" でランキング | **不可**。`genre/anime?term=week&tag=dアニメストア` は **404**。tag 絞り込みのランキングは現行エンドポイントに無い |
+| (c) どの粒度まで絞れるか | ジャンル（`anime` 等の固定キー）止まり。**チャンネル／タグ単位の絞り込みは不可** |
+
+> 要点: 公開ランキング(`genre/anime`)は**ニコニコの通常アニメchの母集団**で、**dアニメ支店(2632720)は事実上現れない**。
+> 支店だけの月間/週間/急上昇ランキングは**この API からは直接取得できない**。
+
+## 4. 結論表（種別 × 取得可否）
+
+| 種別 | API で直接・支店スコープ取得 | 必要な対応 |
+|------|------------------------------|-----------|
+| **総合（累計再生数）** | △ 半分可 | snapshot を `-viewCounter`＋`channelId==2632720` 絞りで **累計ランキング**は作れる（＝全期間 cumulative）。公開 ranking API では支店スコープ不可 |
+| **新着** | ○ 可 | snapshot `-startTime`＋支店絞りで取得可（既出）。ランキング API 不要 |
+| **週間** | ✗ 直接不可 | snapshot に期間内メトリクス無し／ranking API は支店スコープ不可 → **`viewCounter` を日次蓄積し 7日デルタを自前計算** |
+| **月間** | ✗ 直接不可 | 同上 → **30日デルタを自前計算**（公開 ranking の month は支店に絞れない） |
+| **急上昇（伸び率）** | ✗ 直接不可 | 専用 term も無い → **日次 `viewCounter` 履歴のデルタ／伸び率を自前算出**（snapshot・ranking いずれからも直接は不可） |
+
+**最終結論**: 「dアニメ支店スコープの**週間・月間・急上昇**ランキング」は、snapshot/公開ランキング API の**どちらからも直接は取得できない**。
+実現するには **`viewCounter`（累計）を日次でスナップショット蓄積し、期間デルタ（週/月）・伸び率（急上昇）を自前計算**する必要がある（既存の「将来機能＝自前蓄積」方針と一致）。
+**総合（累計）と新着のみ snapshot から支店スコープで直接構築可能**。
