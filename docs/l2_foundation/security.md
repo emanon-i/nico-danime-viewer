@@ -42,10 +42,9 @@
 
 - **脅威**: 依存・action の汚染、過剰権限のトークン、秘密漏洩。
 - **対策**:
-  - **`GITHUB_TOKEN` は最小権限**（`permissions:` を必要分のみ・原則 `read`、Pages publish に要る箇所だけ `write`）。
-  - サードパーティ action は **SHA（またはバージョン）固定**。
-  - **`pnpm install --frozen-lockfile`**、**`pnpm audit`／Dependabot** で依存を監視。
+  - **`pnpm install --frozen-lockfile`** で依存を固定。
   - **秘密情報を持たない・コミットしない**（公開 API のみ・認証不要）。検証用メール等の個人情報もコミットしない。
+  - **リポジトリ設定は標準ハードニングを適用**: `GITHUB_TOKEN` 最小権限（既定 read・必要ジョブのみ write）／**main のブランチ保護**／**secret scanning ＋ push protection**／**Dependabot（依存・Actions の更新）**／サードパーティ action は **SHA 固定**。
 
 ## 6. 個人データ / プライバシー
 
@@ -66,6 +65,6 @@
 | 外部リンク | `noopener noreferrer`・スキーム/ホスト allowlist・id 検証 | ✓ |
 | CSP | `<meta>` CSP で `default-src 'self'` 等・インライン script 回避 | ✓（可能な範囲） |
 | 通信範囲 | ブラウザは自JSON＋画像CDNのみ・API/RSS直叩き禁止 | ✓ |
-| サプライチェーン | 最小権限トークン・action 固定・`--frozen-lockfile`・audit | ✓ |
+| サプライチェーン | 最小権限トークン・action SHA固定・`--frozen-lockfile`・Dependabot・ブランチ保護・secret scanning＋push protection | ✓ |
 | プライバシー | localStorage のみ・送信なし・解析なし | ✓ |
 | データ完全性 | 公開前検証・中間物は非配信 | ✓ |
