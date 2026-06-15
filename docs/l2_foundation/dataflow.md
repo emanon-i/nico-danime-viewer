@@ -59,6 +59,7 @@
 ## 5. 出力（用途別の静的 JSON）
 
 - `data/*.json`（`works / ranking / tags / cours / kana / new / series` 等）に export → **GitHub Pages で静的配信**。
+- **トップのタグ導線**: Hotのタグ＝Hot（勢い）上位 N 作品のタグを集計した頻出タグ、人気のタグ＝人気TOP（累計）上位 N 作品の頻出タグ、ランダムタグ＝正規化タグ辞書からサンプル。いずれも**正規化済みタグ**から生成して JSON に出力（click → 一覧 `?tag=…`）。
 - フロントは**事前生成 JSON を読むだけ**（API/DB を直叩きしない）。分割粒度は L3。
 
 ## 6. ユーザー状態（IndexedDB・クライアント側）
