@@ -5,7 +5,7 @@
 
 ## 0. 方針（調査の結論）
 
-- **一括ロードはトランザクションで一括**・**prepared statement＋バッチ（executemany 相当）**・**インデックスは一括 INSERT 後に作成**・**集計は set-based**（行ごとループを避ける）。
+- **一括ロードはトランザクションで一括**（公式 FAQ Q19: 個別 INSERT は数十 tx/s だが `BEGIN…COMMIT` でまとめると **50,000+ inserts/s**、commit コストを全 INSERT で償却）・**prepared statement＋バッチ（executemany 相当）**・**インデックスは一括 INSERT 後に作成**・**集計は set-based**（行ごとループを避ける）。
 - ビルド時 DB は**再生成可能な中間生成物**なので**耐久性 PRAGMA は緩めてよい**（速度優先）。
 - delta（前日比）は **prev 値を 1 スロット退避**して `今回 − 前回` で得る（**無制限履歴にしない**）。任意で 7 スロットの bounded ring。
 
@@ -198,6 +198,7 @@ PRAGMA foreign_keys = ON;      -- 整合性（FK）
 
 ## 8. 出典
 
-- UPSERT（`excluded.` と素カラム＝更新前値）: SQLite 公式 https://sqlite.org/lang_upsert.html
-- PRAGMA（journal_mode/synchronous/temp_store/cache_size/mmap_size 等）: SQLite 公式 https://sqlite.org/pragma.html ／ 性能解説 https://phiresky.github.io/blog/2020/sqlite-performance-tuning/
-- トランザクション一括・索引は一括ロード後・set-based 更新は SQLite の一般的ベストプラクティス（上記性能解説および公式 docs に準拠）。
+- **UPSERT**（DO UPDATE 内で素カラム＝更新前の値・`excluded.col`＝今回 INSERT しようとした値）: SQLite 公式 https://sqlite.org/lang_upsert.html
+- **トランザクション一括の効果**（個別 INSERT は数十 tx/s ⇄ `BEGIN…COMMIT` で 50,000+ inserts/s。commit を全 INSERT で償却。ビルド限定なら `PRAGMA synchronous=OFF` も可）: SQLite 公式 FAQ Q19 https://sqlite.org/faq.html
+- **PRAGMA**（`journal_mode=WAL` / `synchronous` / `temp_store=MEMORY` / `cache_size` / `mmap_size` 等）: SQLite 公式 https://sqlite.org/pragma.html ／ 性能解説 https://phiresky.github.io/blog/2020/sqlite-performance-tuning/
+- **インデックスは一括ロード後に作成・set-based 更新（行ループ回避）・ロード後 `ANALYZE`**: 上記 FAQ・性能解説・公式 docs に準拠。
