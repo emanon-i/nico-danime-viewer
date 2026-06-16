@@ -4,6 +4,7 @@ import {
   extractSeriesIdFromUrl,
   deriveSeriesOverviews,
   computeFranchiseKeys,
+  titleStem,
 } from '../../scripts/etl/series.mjs'
 import {
   openDatabase,
@@ -82,49 +83,61 @@ describe('deriveSeriesOverviews (F-0014)', () => {
   })
 })
 
-describe('computeFranchiseKeys (F-0017)', () => {
-  it('test_franchise_by_shared_tag: 共有タグで束ねる', () => {
+describe('computeFranchiseKeys (F-0017 / §15)', () => {
+  it('test_franchise_by_series_tag: `〜シリーズ` タグで束ねる（成分内で同一キー）', () => {
     const map = new Map([
       [1, ['アクション', 'ゆるキャン△シリーズ']],
       [2, ['ゆるキャン△シリーズ', 'ほのぼの']],
       [3, ['アクション']],
     ])
     const result = computeFranchiseKeys(map)
-    // シリーズ1と2は「ゆるキャン△シリーズ」で束ねられる
-    expect(result.get(1)).toBe('ゆるキャン△シリーズ')
-    expect(result.get(2)).toBe('ゆるキャン△シリーズ')
+    expect(result.get(1)).toBeDefined()
+    expect(result.get(1)).toBe(result.get(2)) // 同一フランチャイズ＝同一キー
+    expect(result.has(3)).toBe(false)
   })
 
-  it('test_franchise_null_when_unknown: 共有タグがない場合はマップに含まれない', () => {
+  it('test_franchise_null_when_unknown: 束ねる手掛かりが無ければマップに含まれない', () => {
     const map = new Map([
       [1, ['固有タグA']],
       [2, ['固有タグB']],
     ])
     const result = computeFranchiseKeys(map)
-    // 共有タグなし → franchise_key = NULL（マップに含まれない）
     expect(result.has(1)).toBe(false)
     expect(result.has(2)).toBe(false)
   })
 
-  it('シリーズ正規化タグ（〜シリーズ）が共有タグより優先される', () => {
+  it('§15: 声優/汎用の共有タグでは束ねない（誤束ね防止）', () => {
+    // 旧実装は 2〜50 件共有タグで束ねていたが、声優名等での誤束ねの主因だったため廃止
     const map = new Map([
-      [1, ['共有タグ', 'ゆるキャン△シリーズ']],
-      [2, ['共有タグ', 'ゆるキャン△シリーズ']],
+      [1, ['岸尾だいすけ', 'unique1']],
+      [2, ['岸尾だいすけ', 'unique2']],
     ])
     const result = computeFranchiseKeys(map)
-    expect(result.get(1)).toBe('ゆるキャン△シリーズ')
-    expect(result.get(2)).toBe('ゆるキャン△シリーズ')
+    expect(result.has(1)).toBe(false)
+    expect(result.has(2)).toBe(false)
   })
 
-  it('2作品以上共有するタグがフランチャイズ候補になる', () => {
-    const map = new Map([
-      [1, ['共有', 'unique1']],
-      [2, ['共有', 'unique2']],
-      [3, ['unique3']], // 共有なし
+  it('§15: タイトル語幹（続編マーカー除去）で束ねる', () => {
+    const tags = new Map([
+      [1, ['アクション']],
+      [2, ['アクション']],
+      [3, ['日常']],
     ])
-    const result = computeFranchiseKeys(map)
-    expect(result.get(1)).toBe('共有')
-    expect(result.get(2)).toBe('共有')
+    const titles = new Map([
+      [1, 'SPY×FAMILY'],
+      [2, 'SPY×FAMILY Season 2'],
+      [3, '全然別の作品'],
+    ])
+    const result = computeFranchiseKeys(tags, titles)
+    expect(result.get(1)).toBeDefined()
+    expect(result.get(1)).toBe(result.get(2))
     expect(result.has(3)).toBe(false)
+  })
+
+  it('titleStem: 続編/形式マーカーを除去して語幹を返す', () => {
+    expect(titleStem('SPY×FAMILY Season 2')).toBe('SPY×FAMILY')
+    expect(titleStem('進撃の巨人 The Final Season')).toBe('進撃の巨人')
+    expect(titleStem('転生したらスライムだった件 第3期')).toBe('転生したらスライムだった件')
+    expect(titleStem('Re:ゼロから始める異世界生活　2nd season')).toBe('Re:ゼロから始める異世界生活')
   })
 })

@@ -690,3 +690,8 @@ export function hiResThumb(url: string | null): string {
 
 > 11 は **Top 限定**（カード/行全体が外部）。一覧カードは従来どおり「本体＝うちの詳細・右上 ↗＝公式」を維持（ナビの一貫性）。
 > §9.1/§9.3 の「Top カードは主＝詳細／副＝↗」は本章 #11 で Top に限り上書きされる（一覧は §9.1/§9.3 のまま）。
+
+### 追加 2 件（v1.1 続き）
+
+- **14 クール源をタグ導出へ確定変更**：snapshot タグの `YYYY年<季>アニメ`（例「2022年秋アニメ」）をパースして放送季を導出する＝**追加 fetch 不要・放送季で正確・高 recall**（実測 **213 季・約 3,900 作品**）。`§10.3` の「クール判定の源は period HTML」を上書きし、**主源＝タグ導出**、`programlist`（今季）→ `period`（日本語タイトル突合）は欠落分の補完とする（`foundation.md` のクール源も同様）。実装: `etl/cours.mjs`（`coursFromTags`/`deriveCoursFromTags`）・`fetch.mjs`（`runCoursPipeline`）。
+- **15 関連シリーズ/続編の突合を刷新**：`etl/series.mjs` `computeFranchiseKeys` を **`〜シリーズ` タグ＋タイトル語幹（`titleStem`・続編/形式マーカー除去）の union-find** に変更。声優・スタッフ・汎用共有タグ（旧「2〜50 件共有」ルール＝誤束ねの主因）を**廃止**。続編チェーン（進撃/Re:ゼロ/転スラ/SPY 等）が正しく束ねられる。`franchise_key` は `f:<成分内最小 series_id>`（不透明・成分一致のみ意味を持つ）。サブタイトル付き映画・スピンオフは取りこぼし得る（ベストエフォート）。

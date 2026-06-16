@@ -127,6 +127,49 @@ export function makeCoursLabel(year, season) {
   return `${year}-${SEASON_JA[season] ?? season}`
 }
 
+const SEASON_ORDER = { 冬: 0, 春: 1, 夏: 2, 秋: 3 }
+
+/**
+ * タグ文字列から放送季ラベル（"YYYY-季"）を導出する。
+ * snapshot タグに `YYYY年<季>アニメ`（例「2022年秋アニメ」「2025年冬アニメ_dアニメストア」）が
+ * 入っているため、これを直接パースする＝追加 fetch 不要・放送季で正確（period 突合より高 recall）。
+ * 複数季が含まれる場合は**最も古い季**（放送開始＝オリジナルの季）を採用する。
+ * @param {string | null} tagsStr
+ * @returns {string | null} "YYYY-季" または null
+ */
+export function coursFromTags(tagsStr) {
+  if (!tagsStr) return null
+  const matches = [...tagsStr.matchAll(/(\d{4})年(春|夏|秋|冬)アニメ/gu)]
+  if (matches.length === 0) return null
+  matches.sort((a, b) =>
+    a[1] !== b[1] ? Number(a[1]) - Number(b[1]) : SEASON_ORDER[a[2]] - SEASON_ORDER[b[2]]
+  )
+  return `${matches[0][1]}-${matches[0][2]}`
+}
+
+/**
+ * 各シリーズの第1話（最古話）タグから放送季クールを導出する（クールの**主源**＝§14）。
+ * @param {import('better-sqlite3').Database} db
+ * @returns {Map<number, string>} series_id → "YYYY-季"
+ */
+export function deriveCoursFromTags(db) {
+  const rows = db
+    .prepare(
+      `SELECT s.series_id AS series_id, (
+         SELECT e.tags FROM episodes e WHERE e.series_id = s.series_id
+         ORDER BY e.start_time ASC, COALESCE(e.episode_no, 9999) ASC, e.content_id ASC LIMIT 1
+       ) AS first_tags
+       FROM series s WHERE s.is_available = 1`
+    )
+    .all()
+  const result = new Map()
+  for (const r of rows) {
+    const cours = coursFromTags(r.first_tags)
+    if (cours) result.set(r.series_id, cours)
+  }
+  return result
+}
+
 /**
  * タイトルをスラッグ突合用に正規化（小文字・記号除去）
  */

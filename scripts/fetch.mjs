@@ -49,6 +49,7 @@ import {
   makeCoursLabel,
   parsePeriodHtml,
   matchPeriodEntriesToSeries,
+  deriveCoursFromTags,
 } from './etl/cours.mjs'
 import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
@@ -151,6 +152,35 @@ async function derivePastCours(db, now) {
   return { seasons: seasonsWithData, assigned: assignedCount }
 }
 
+/**
+ * クール付与パイプライン（§14）。**主源＝タグ導出**（放送季・追加 fetch 不要・高 recall）、
+ * 欠落分を programlist（今季）→ period 日本語タイトル突合で補完する。
+ */
+async function runCoursPipeline(db, now) {
+  // 0. クリア（再生成のたび作り直す）
+  db.prepare('UPDATE series SET cours = NULL WHERE is_available = 1').run()
+
+  // 1. 主源＝第1話タグの「YYYY年<季>アニメ」から放送季を導出
+  const tagMap = deriveCoursFromTags(db)
+  for (const [id, cours] of tagMap) updateSeriesFields(db, id, { cours, updated_at: now })
+  logger.info('fetch', 'E3 cours from tags (primary)', { count: tagMap.size })
+
+  // 2. 補完＝今季 programlist（タグに季が無い作品のみ）
+  const programlist = await fetchProgramlist()
+  const coursLabel = makeCoursLabel(new Date(now).getFullYear(), currentSeason(now))
+  const curMap = mapCurrentCours(programlist, coursLabel)
+  const fillStmt = db.prepare(
+    'UPDATE series SET cours = ?, updated_at = ? WHERE series_id = ? AND cours IS NULL AND is_available = 1'
+  )
+  let curAdded = 0
+  for (const [id] of curMap) curAdded += fillStmt.run(coursLabel, now, id).changes
+  logger.info('fetch', 'E3b cours from programlist (fill)', { added: curAdded })
+
+  // 3. 補完＝period 日本語タイトル突合（さらに欠落分・derivePastCours は cours NULL のみ埋める）
+  const pastCours = await derivePastCours(db, now)
+  logger.info('fetch', 'E3c cours from period (fill)', pastCours)
+}
+
 /** --check-version: snapshot/version の last_modified を取得して終了 */
 async function checkVersion() {
   mkdirSync(DATA_DIR, { recursive: true })
@@ -187,22 +217,16 @@ async function runExportOnly() {
   }
   logger.info('fetch', 'E2 tags done', { count: seriesTags.length })
 
-  const programlist = await fetchProgramlist()
-  const season = currentSeason(now)
-  const year = new Date(now).getFullYear()
-  const coursLabel = makeCoursLabel(year, season)
-  const coursMap = mapCurrentCours(programlist, coursLabel)
-  for (const [seriesId, cours] of coursMap) {
-    updateSeriesFields(db, seriesId, { cours, updated_at: now })
-  }
-  logger.info('fetch', 'E3 cours done', { label: coursLabel, count: coursMap.size })
-
-  // E3b: 過去季クールを period HTML から配線（§10.3）
-  const pastCours = await derivePastCours(db, now)
-  logger.info('fetch', 'E3b past cours done', pastCours)
+  await runCoursPipeline(db, now)
 
   const seriesTagsMap = getSeriesTagsMap(db)
-  const franchiseKeys = computeFranchiseKeys(seriesTagsMap)
+  const titleMap = new Map(
+    db
+      .prepare('SELECT series_id, title FROM series WHERE is_available = 1')
+      .all()
+      .map((r) => [r.series_id, r.title])
+  )
+  const franchiseKeys = computeFranchiseKeys(seriesTagsMap, titleMap)
   db.prepare('UPDATE series SET franchise_key = NULL').run()
   for (const [seriesId, franchiseKey] of franchiseKeys) {
     updateSeriesFields(db, seriesId, { franchise_key: franchiseKey, updated_at: now })
@@ -395,23 +419,17 @@ async function main() {
   logger.info('fetch', 'E2 series tags done', { count: seriesTags.length })
 
   // E3: Cours（今季は programlist.json）
-  const programlist = await fetchProgramlist()
-  const season = currentSeason(now)
-  const year = new Date(now).getFullYear()
-  const coursLabel = makeCoursLabel(year, season)
-  const coursMap = mapCurrentCours(programlist, coursLabel)
-  for (const [seriesId, cours] of coursMap) {
-    updateSeriesFields(db, seriesId, { cours, updated_at: now })
-  }
-  logger.info('fetch', 'E3 cours done', { label: coursLabel, count: coursMap.size })
-
-  // E3b: 過去季クールを period HTML から配線（§10.3）
-  const pastCours = await derivePastCours(db, now)
-  logger.info('fetch', 'E3b past cours done', pastCours)
+  await runCoursPipeline(db, now)
 
   // E4: Franchise keys（共有タグ束ね）
   const seriesTagsMap = getSeriesTagsMap(db)
-  const franchiseKeys = computeFranchiseKeys(seriesTagsMap)
+  const titleMap = new Map(
+    db
+      .prepare('SELECT series_id, title FROM series WHERE is_available = 1')
+      .all()
+      .map((r) => [r.series_id, r.title])
+  )
+  const franchiseKeys = computeFranchiseKeys(seriesTagsMap, titleMap)
   db.prepare('UPDATE series SET franchise_key = NULL').run()
   for (const [seriesId, franchiseKey] of franchiseKeys) {
     updateSeriesFields(db, seriesId, { franchise_key: franchiseKey, updated_at: now })

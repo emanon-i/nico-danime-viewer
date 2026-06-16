@@ -5,6 +5,7 @@ import {
   makeCoursLabel,
   matchSlugsToSeries,
   mapCurrentCours,
+  coursFromTags,
 } from '../../scripts/etl/cours.mjs'
 
 const SAMPLE_PERIOD_HTML = `
@@ -46,6 +47,27 @@ describe('assertPeriodOk (F-0016)', () => {
   it('slug が下限未満で throw する', () => {
     const sparseHtml = `<html><head><title>秋アニメ dアニメストア(ニコニコ支店)</title></head><body></body></html>`
     expect(() => assertPeriodOk(sparseHtml, 'test', 1)).toThrow()
+  })
+})
+
+describe('coursFromTags (§14・タグから放送季導出)', () => {
+  it('「YYYY年<季>アニメ」から YYYY-季 を導出する', () => {
+    expect(coursFromTags('アニメ ぼっち・ざ・ろっく！ 2022年秋アニメ きらら')).toBe('2022-秋')
+    expect(coursFromTags('2018年冬アニメ ゆるキャン△')).toBe('2018-冬')
+  })
+
+  it('`_dアニメストア` 接尾付きでも導出する', () => {
+    expect(coursFromTags('2025年冬アニメ_dアニメストア 日常')).toBe('2025-冬')
+  })
+
+  it('複数季がある場合は最も古い季（放送開始）を採用する', () => {
+    expect(coursFromTags('2020年秋アニメ 2013年春アニメ 進撃の巨人')).toBe('2013-春')
+  })
+
+  it('季タグが無ければ null', () => {
+    expect(coursFromTags('アニメ アクション 日常')).toBeNull()
+    expect(coursFromTags(null)).toBeNull()
+    expect(coursFromTags('')).toBeNull()
   })
 })
 

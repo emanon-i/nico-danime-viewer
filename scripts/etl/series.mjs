@@ -79,51 +79,98 @@ export function getSeriesTagsMap(db) {
 }
 
 /**
- * 共有作品タグ・`〜シリーズ` タグでフランチャイズキーを決定する（ベストエフォート）。
- * タグのみ主源とし、タイトル語幹は使わない（誤束ねリスク）。
- * @param {Map<number, string[]>} seriesTagsMap - series_id → tag名[]
- * @returns {Map<number, string>} series_id → franchise_key（無い場合は含まれない）
+ * タイトルを「作品の語幹」に正規化する（続編/形式マーカーを除去）。
+ * 例「劇場版「進撃の巨人」Season 1 前編～紅蓮の弓矢～」→「進撃の巨人」。
+ * 続編束ねの主シグナル。短すぎる語幹（汎用）は呼び出し側で弾く。
+ * @param {string} title
+ * @returns {string}
  */
-export function computeFranchiseKeys(seriesTagsMap) {
-  // 各タグが何件のシリーズで使われているか集計
-  const tagCount = new Map()
-  for (const tags of seriesTagsMap.values()) {
+export function titleStem(title) {
+  let t = (title ?? '')
+    .replace(/[「」『』【】（）()｢｣"'`]/gu, ' ')
+    .replace(/^(?:劇場版|映画|総集編|TVアニメ|TV|アニメ|OVA|OAD)\s*/u, '')
+  // 続編/形式マーカーの手前で切る
+  t = t.split(/\s*(?:The\s+)?Final\s+Season/iu)[0]
+  t = t.split(/\s*(?:Season|SEASON|シーズン)\s*[0-9０-９]+/u)[0]
+  t = t.split(/\s*第?\s*[0-9０-９]+\s*期/u)[0]
+  t = t.split(/\s*[0-9０-９]+(?:st|nd|rd|th)\s*season/iu)[0]
+  t = t.split(/\s+(?:OAD|OVA|SP|スペシャル|劇場版|前編|後編|完結編|総集編|Blu-ray|BD|特典)/u)[0]
+  t = t.split(/[Ⅱ-Ⅻ]/u)[0]
+  t = t.split(/[~～].*$/u)[0]
+  return t.replace(/\s+/gu, ' ').trim()
+}
+
+/**
+ * フランチャイズ（続編/関連シリーズ）束ねキーを決定する（ベストエフォート・§15）。
+ * union-find で次のエッジを張り、同一連結成分を 1 フランチャイズとする:
+ *  (1) **タイトル語幹**（4 文字以上）が一致するシリーズ同士＝続編の主シグナル
+ *  (2) **`〜シリーズ` タグ**を共有するシリーズ同士＝キュレーション済みの束ね
+ * 声優・スタッフ・汎用タグ（旧実装の 2〜50 共有ルール）は**使わない**（誤束ねの主因）。
+ * @param {Map<number, string[]>} seriesTagsMap - series_id → tag名[]
+ * @param {Map<number, string>} [titleMap] - series_id → title（語幹計算用・省略時は語幹エッジ無し）
+ * @returns {Map<number, string>} series_id → franchise_key（成分サイズ 2 以上のみ）
+ */
+export function computeFranchiseKeys(seriesTagsMap, titleMap) {
+  const ids = new Set(seriesTagsMap.keys())
+  if (titleMap) for (const id of titleMap.keys()) ids.add(id)
+
+  // union-find
+  const parent = new Map()
+  for (const id of ids) parent.set(id, id)
+  const find = (x) => {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)))
+      x = parent.get(x)
+    }
+    return x
+  }
+  const union = (a, b) => {
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent.set(ra, rb)
+  }
+
+  // (1) タイトル語幹（4 文字以上）でエッジ
+  if (titleMap) {
+    const byStem = new Map()
+    for (const [id, title] of titleMap) {
+      const stem = titleStem(title)
+      if (stem.length >= 4) {
+        if (!byStem.has(stem)) byStem.set(stem, [])
+        byStem.get(stem).push(id)
+      }
+    }
+    for (const group of byStem.values()) {
+      for (let i = 1; i < group.length; i++) union(group[0], group[i])
+    }
+  }
+
+  // (2) `〜シリーズ` タグでエッジ
+  const bySeriesTag = new Map()
+  for (const [id, tags] of seriesTagsMap) {
     for (const tag of tags) {
-      tagCount.set(tag, (tagCount.get(tag) ?? 0) + 1)
+      if (/シリーズ$/u.test(tag)) {
+        if (!bySeriesTag.has(tag)) bySeriesTag.set(tag, [])
+        bySeriesTag.get(tag).push(id)
+      }
     }
   }
-
-  // フランチャイズ候補タグ:
-  // - `〜シリーズ` パターン（件数不問）
-  // - または 2〜50 シリーズで共有（「アニメ」等の汎用タグを除外）
-  const MAX_FRANCHISE_COUNT = 50
-  const franchiseTags = new Set()
-  for (const [tag, count] of tagCount) {
-    if (/シリーズ$/u.test(tag) || (count >= 2 && count <= MAX_FRANCHISE_COUNT)) {
-      franchiseTags.add(tag)
-    }
+  for (const group of bySeriesTag.values()) {
+    for (let i = 1; i < group.length; i++) union(group[0], group[i])
   }
 
+  // 連結成分を集計し、サイズ 2 以上のみ franchise_key を付与（キー＝成分内最小 id）
+  const members = new Map()
+  for (const id of ids) {
+    const root = find(id)
+    if (!members.has(root)) members.set(root, [])
+    members.get(root).push(id)
+  }
   const result = new Map()
-
-  for (const [seriesId, tags] of seriesTagsMap) {
-    // `〜シリーズ` タグを優先
-    const seriesStyleTags = tags.filter((t) => /シリーズ$/u.test(t) && franchiseTags.has(t))
-    if (seriesStyleTags.length > 0) {
-      result.set(seriesId, seriesStyleTags[0])
-      continue
-    }
-
-    // 共有タグの中で最も具体的（共有シリーズ数が少ない）ものをキーに
-    const sharedTags = tags.filter((t) => franchiseTags.has(t))
-    if (sharedTags.length > 0) {
-      const best = sharedTags.reduce((a, b) =>
-        (tagCount.get(a) ?? Infinity) <= (tagCount.get(b) ?? Infinity) ? a : b
-      )
-      result.set(seriesId, best)
-    }
-    // franchise_key = NULL if no shared tags (not added to result map)
+  for (const group of members.values()) {
+    if (group.length < 2) continue
+    const key = `f:${Math.min(...group)}`
+    for (const id of group) result.set(id, key)
   }
-
   return result
 }
