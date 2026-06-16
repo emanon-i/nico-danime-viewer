@@ -1,0 +1,344 @@
+// scripts/export/export.mjs
+// 用途別 静的 JSON export: works/ranking/tags/cours/kana/new/series
+
+import { writeFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+
+/** JSON ファイルに書き出す */
+function writeJson(outDir, filename, data) {
+  mkdirSync(outDir, { recursive: true })
+  writeFileSync(join(outDir, filename), JSON.stringify(data, null, 2), 'utf-8')
+}
+
+/**
+ * DB から works.json を生成（series 一覧 + tags + related）
+ */
+function exportWorks(db, outDir, lastUpdated) {
+  const seriesList = db
+    .prepare(
+      `SELECT s.series_id, s.title, s.thumbnail_url, s.description_first,
+              s.col_key, s.cours, s.franchise_key
+       FROM series s
+       WHERE s.is_available = 1
+       ORDER BY s.series_id`
+    )
+    .all()
+
+  const tagsBySeriesId = new Map()
+  const tagRows = db
+    .prepare(
+      `SELECT st.series_id, t.name
+       FROM series_tags st JOIN tags t ON st.tag_id = t.tag_id
+       JOIN series s ON st.series_id = s.series_id WHERE s.is_available = 1`
+    )
+    .all()
+  for (const row of tagRows) {
+    if (!tagsBySeriesId.has(row.series_id)) tagsBySeriesId.set(row.series_id, [])
+    tagsBySeriesId.get(row.series_id).push(row.name)
+  }
+
+  // 関連シリーズ（同一 franchise_key の他メンバー）
+  const relatedRows = db
+    .prepare(
+      `SELECT a.series_id AS target_id, b.series_id, b.title, b.thumbnail_url
+       FROM series a
+       JOIN series b ON a.franchise_key = b.franchise_key
+                     AND a.series_id != b.series_id
+                     AND b.is_available = 1
+       WHERE a.franchise_key IS NOT NULL AND a.is_available = 1`
+    )
+    .all()
+  const relatedBySeries = new Map()
+  for (const row of relatedRows) {
+    if (!relatedBySeries.has(row.target_id)) relatedBySeries.set(row.target_id, [])
+    relatedBySeries.get(row.target_id).push({
+      seriesId: row.series_id,
+      title: row.title,
+      thumbnailUrl: row.thumbnail_url,
+    })
+  }
+
+  const works = seriesList.map((s) => ({
+    seriesId: s.series_id,
+    title: s.title,
+    thumbnailUrl: s.thumbnail_url,
+    descriptionFirst: s.description_first,
+    tags: tagsBySeriesId.get(s.series_id) ?? [],
+    cours: s.cours,
+    franchiseKey: s.franchise_key,
+    colKey: s.col_key,
+    relatedSeries: relatedBySeries.get(s.series_id) ?? [],
+  }))
+
+  writeJson(outDir, 'works.json', { lastUpdated, works })
+}
+
+/**
+ * ranking.json（hot / popular）
+ */
+function exportRanking(db, outDir, lastUpdated) {
+  const hotRows = db
+    .prepare(
+      `SELECT s.series_id, s.title, s.thumbnail_url,
+              COALESCE(m.total_views, 0) AS total_views,
+              COALESCE(m.hot_score, 0)   AS hot_score
+       FROM series s
+       LEFT JOIN series_metrics m ON s.series_id = m.series_id
+       WHERE s.is_available = 1
+       ORDER BY COALESCE(m.hot_score, 0) DESC,
+                COALESCE(m.total_views, 0) DESC,
+                s.series_id ASC
+       LIMIT 200`
+    )
+    .all()
+
+  const popularRows = db
+    .prepare(
+      `SELECT s.series_id, s.title, s.thumbnail_url,
+              COALESCE(m.total_views, 0) AS total_views,
+              COALESCE(m.hot_score, 0)   AS hot_score
+       FROM series s
+       LEFT JOIN series_metrics m ON s.series_id = m.series_id
+       WHERE s.is_available = 1
+       ORDER BY COALESCE(m.total_views, 0) DESC,
+                s.series_id ASC
+       LIMIT 200`
+    )
+    .all()
+
+  const toEntry = (r) => ({
+    seriesId: r.series_id,
+    title: r.title,
+    thumbnailUrl: r.thumbnail_url,
+    totalViews: r.total_views,
+    hotScore: r.hot_score,
+  })
+
+  writeJson(outDir, 'ranking.json', {
+    lastUpdated,
+    hot: hotRows.map(toEntry),
+    popular: popularRows.map(toEntry),
+  })
+}
+
+/**
+ * tags.json（正規化タグ辞書 + top チップ）
+ */
+function exportTags(db, outDir, lastUpdated) {
+  const tagRows = db
+    .prepare(
+      `SELECT t.name, t.is_curated, COUNT(st.series_id) as series_count
+       FROM tags t
+       JOIN series_tags st ON t.tag_id = st.tag_id
+       JOIN series s ON st.series_id = s.series_id
+       WHERE s.is_available = 1
+       GROUP BY t.tag_id
+       ORDER BY series_count DESC`
+    )
+    .all()
+
+  // Hot 上位 20 作品の頻出タグ
+  const hotTagRows = db
+    .prepare(
+      `SELECT t.name, COUNT(*) as c
+       FROM (SELECT series_id FROM series_metrics WHERE series_id IN (
+             SELECT series_id FROM series WHERE is_available=1)
+             ORDER BY hot_score DESC LIMIT 20) top
+       JOIN series_tags st ON top.series_id = st.series_id
+       JOIN tags t ON st.tag_id = t.tag_id
+       GROUP BY t.tag_id ORDER BY c DESC LIMIT 10`
+    )
+    .all()
+
+  // 人気 TOP 20 の頻出タグ
+  const popularTagRows = db
+    .prepare(
+      `SELECT t.name, COUNT(*) as c
+       FROM (SELECT series_id FROM series_metrics WHERE series_id IN (
+             SELECT series_id FROM series WHERE is_available=1)
+             ORDER BY total_views DESC LIMIT 20) top
+       JOIN series_tags st ON top.series_id = st.series_id
+       JOIN tags t ON st.tag_id = t.tag_id
+       GROUP BY t.tag_id ORDER BY c DESC LIMIT 10`
+    )
+    .all()
+
+  writeJson(outDir, 'tags.json', {
+    lastUpdated,
+    tags: tagRows.map((r) => ({
+      name: r.name,
+      isCurated: r.is_curated === 1,
+      seriesCount: r.series_count,
+    })),
+    topHotTags: hotTagRows.map((r) => r.name),
+    topPopularTags: popularTagRows.map((r) => r.name),
+  })
+}
+
+/**
+ * cours.json（クール別シリーズ）
+ */
+function exportCours(db, outDir, lastUpdated) {
+  const rows = db
+    .prepare(
+      `SELECT cours, series_id FROM series
+       WHERE cours IS NOT NULL AND is_available = 1
+       ORDER BY cours DESC, series_id`
+    )
+    .all()
+
+  const grouped = new Map()
+  for (const row of rows) {
+    if (!grouped.has(row.cours)) grouped.set(row.cours, [])
+    grouped.get(row.cours).push(row.series_id)
+  }
+
+  writeJson(outDir, 'cours.json', {
+    lastUpdated,
+    cours: [...grouped.entries()].map(([cours, seriesIds]) => ({ cours, seriesIds })),
+  })
+}
+
+/**
+ * kana.json（五十音別シリーズ）
+ */
+function exportKana(db, outDir, lastUpdated) {
+  const rows = db
+    .prepare(
+      `SELECT col_key, series_id FROM series
+       WHERE col_key IS NOT NULL AND is_available = 1
+       ORDER BY col_key, title`
+    )
+    .all()
+
+  const grouped = new Map()
+  for (const row of rows) {
+    if (!grouped.has(row.col_key)) grouped.set(row.col_key, [])
+    grouped.get(row.col_key).push(row.series_id)
+  }
+
+  writeJson(outDir, 'kana.json', {
+    lastUpdated,
+    kana: [...grouped.entries()].map(([colKey, seriesIds]) => ({ colKey, seriesIds })),
+  })
+}
+
+/**
+ * new.json（最新 RSS 新着）
+ */
+function exportNew(db, outDir, lastUpdated) {
+  const rows = db
+    .prepare(
+      `SELECT watch_id, title, pub_date, resolved_content_id, resolution_status
+       FROM rss_items
+       ORDER BY pub_date DESC
+       LIMIT 100`
+    )
+    .all()
+
+  writeJson(outDir, 'new.json', {
+    lastUpdated,
+    items: rows.map((r) => ({
+      watchId: r.watch_id,
+      title: r.title,
+      pubDate: r.pub_date,
+      resolvedContentId: r.resolved_content_id,
+      resolutionStatus: r.resolution_status,
+    })),
+  })
+}
+
+/**
+ * series.json（シリーズ詳細 + 各話一覧 + 関連シリーズ）
+ */
+function exportSeries(db, outDir, lastUpdated) {
+  const seriesList = db
+    .prepare(
+      `SELECT s.series_id, s.title, s.thumbnail_url, s.description_first,
+              s.col_key, s.cours
+       FROM series s WHERE s.is_available = 1 ORDER BY s.series_id`
+    )
+    .all()
+
+  const epBySeriesId = new Map()
+  const epRows = db
+    .prepare(
+      `SELECT series_id, content_id, episode_no, title, view_counter, start_time, thumbnail_url
+       FROM episodes WHERE series_id IS NOT NULL
+       ORDER BY series_id, COALESCE(episode_no, 9999), start_time`
+    )
+    .all()
+  for (const ep of epRows) {
+    if (!epBySeriesId.has(ep.series_id)) epBySeriesId.set(ep.series_id, [])
+    epBySeriesId.get(ep.series_id).push({
+      contentId: ep.content_id,
+      episodeNo: ep.episode_no,
+      title: ep.title,
+      viewCounter: ep.view_counter,
+      startTime: ep.start_time,
+      thumbnailUrl: ep.thumbnail_url,
+    })
+  }
+
+  const tagsBySeriesId = new Map()
+  const tagRows = db
+    .prepare(
+      `SELECT st.series_id, t.name FROM series_tags st
+       JOIN tags t ON st.tag_id = t.tag_id
+       JOIN series s ON st.series_id = s.series_id WHERE s.is_available = 1`
+    )
+    .all()
+  for (const row of tagRows) {
+    if (!tagsBySeriesId.has(row.series_id)) tagsBySeriesId.set(row.series_id, [])
+    tagsBySeriesId.get(row.series_id).push(row.name)
+  }
+
+  const relatedRows = db
+    .prepare(
+      `SELECT a.series_id AS target_id, b.series_id, b.title, b.thumbnail_url
+       FROM series a
+       JOIN series b ON a.franchise_key = b.franchise_key
+                     AND a.series_id != b.series_id AND b.is_available = 1
+       WHERE a.franchise_key IS NOT NULL AND a.is_available = 1`
+    )
+    .all()
+  const relatedBySeries = new Map()
+  for (const row of relatedRows) {
+    if (!relatedBySeries.has(row.target_id)) relatedBySeries.set(row.target_id, [])
+    relatedBySeries.get(row.target_id).push({
+      seriesId: row.series_id,
+      title: row.title,
+      thumbnailUrl: row.thumbnail_url,
+    })
+  }
+
+  const series = seriesList.map((s) => ({
+    seriesId: s.series_id,
+    title: s.title,
+    thumbnailUrl: s.thumbnail_url,
+    descriptionFirst: s.description_first,
+    tags: tagsBySeriesId.get(s.series_id) ?? [],
+    cours: s.cours,
+    colKey: s.col_key,
+    relatedSeries: relatedBySeries.get(s.series_id) ?? [],
+    episodes: epBySeriesId.get(s.series_id) ?? [],
+  }))
+
+  writeJson(outDir, 'series.json', { lastUpdated, series })
+}
+
+/**
+ * 全 JSON を出力する
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} outDir - data/ ディレクトリのパス
+ * @param {string} lastUpdated - ISO8601 タイムスタンプ
+ */
+export function exportAll(db, outDir, lastUpdated) {
+  exportWorks(db, outDir, lastUpdated)
+  exportRanking(db, outDir, lastUpdated)
+  exportTags(db, outDir, lastUpdated)
+  exportCours(db, outDir, lastUpdated)
+  exportKana(db, outDir, lastUpdated)
+  exportNew(db, outDir, lastUpdated)
+  exportSeries(db, outDir, lastUpdated)
+}

@@ -1,0 +1,112 @@
+// web/src/data/types.ts
+// 静的 JSON export のスキーマ型定義（データ契約の正本）
+// PH-0003 以降のローダはこれを import して消費する
+
+export interface RelatedSeries {
+  seriesId: number
+  title: string
+  thumbnailUrl: string | null
+}
+
+export interface Work {
+  seriesId: number
+  title: string
+  thumbnailUrl: string | null
+  descriptionFirst: string | null
+  tags: string[]
+  cours: string | null
+  franchiseKey: string | null
+  colKey: string | null
+  relatedSeries: RelatedSeries[]
+}
+
+export interface WorksJson {
+  lastUpdated: string
+  works: Work[]
+}
+
+export interface RankingEntry {
+  seriesId: number
+  title: string
+  thumbnailUrl: string | null
+  totalViews: number
+  hotScore: number | null
+}
+
+export interface RankingJson {
+  lastUpdated: string
+  hot: RankingEntry[]
+  popular: RankingEntry[]
+}
+
+export interface Tag {
+  name: string
+  isCurated: boolean
+  seriesCount: number
+}
+
+export interface TagsJson {
+  lastUpdated: string
+  tags: Tag[]
+  topHotTags: string[]
+  topPopularTags: string[]
+}
+
+export interface CoursGroup {
+  cours: string
+  seriesIds: number[]
+}
+
+export interface CoursJson {
+  lastUpdated: string
+  cours: CoursGroup[]
+}
+
+export interface KanaGroup {
+  colKey: string
+  seriesIds: number[]
+}
+
+export interface KanaJson {
+  lastUpdated: string
+  kana: KanaGroup[]
+}
+
+export interface NewItem {
+  watchId: string
+  title: string
+  pubDate: string
+  resolvedContentId: string | null
+  resolutionStatus: 'resolved' | 'rss_only' | 'unresolved'
+}
+
+export interface NewJson {
+  lastUpdated: string
+  items: NewItem[]
+}
+
+export interface SeriesEpisode {
+  contentId: string
+  episodeNo: number | null
+  title: string | null
+  viewCounter: number
+  startTime: string | null
+  thumbnailUrl: string | null
+}
+
+export interface SeriesDetail {
+  seriesId: number
+  title: string
+  thumbnailUrl: string | null
+  descriptionFirst: string | null
+  tags: string[]
+  cours: string | null
+  colKey: string | null
+  relatedSeries: RelatedSeries[]
+  episodes: SeriesEpisode[]
+}
+
+export interface SeriesJson {
+  lastUpdated: string
+  series: SeriesDetail[]
+}

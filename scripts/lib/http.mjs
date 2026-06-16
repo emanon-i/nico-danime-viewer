@@ -32,7 +32,7 @@ export async function fetchWithToS(url, options = {}) {
   const headers = { 'User-Agent': ua, ...options.headers }
 
   if (_lastResponseMs > 0) {
-    await _http.sleepFn(_lastResponseMs)
+    await _http.sleepFn(Math.max(_lastResponseMs, 500))
   }
 
   const t0 = _http.nowFn()

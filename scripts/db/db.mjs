@@ -1,5 +1,5 @@
 // scripts/db/db.mjs
-// SQLite ビルドDB: スキーマ作成・PRAGMA・一括UPSERT・delta管理
+// SQLite ビルドDB: スキーマ作成・PRAGMA・一括UPSERT・delta管理・ETL補助
 
 import Database from 'better-sqlite3'
 import { logger } from '../lib/logger.mjs'
@@ -14,6 +14,14 @@ function applyPragma(db) {
     PRAGMA mmap_size    = 268435456;
     PRAGMA foreign_keys = ON;
   `)
+}
+
+/** カスタム SQLite スカラー関数を登録（metrics 計算用） */
+export function registerCustomFunctions(db) {
+  if (db._customFunctionsRegistered) return
+  db.function('log1p', (x) => Math.log1p(x ?? 0))
+  db.function('exp_neg_div', (x, tau) => Math.exp(-(x ?? 0) / tau))
+  db._customFunctionsRegistered = true
 }
 
 /** テーブル作成（インデックスなし） */
@@ -46,6 +54,8 @@ export function createSchema(db) {
       length_seconds    INTEGER,
       start_time        TEXT,
       thumbnail_url     TEXT,
+      tags              TEXT,
+      description       TEXT,
       last_updated      TEXT
     );
 
@@ -165,12 +175,14 @@ export function bulkUpsertEpisodes(db, episodes, now = new Date().toISOString())
       content_id, series_id, episode_no, title,
       view_counter, prev_view_counter,
       comment_counter, like_counter, mylist_counter,
-      length_seconds, start_time, thumbnail_url, last_updated
+      length_seconds, start_time, thumbnail_url,
+      tags, description, last_updated
     ) VALUES (
       @contentId, @seriesId, @episodeNo, @title,
       @viewCounter, NULL,
       @commentCounter, @likeCounter, @mylistCounter,
-      @lengthSeconds, @startTime, @thumbnailUrl, @now
+      @lengthSeconds, @startTime, @thumbnailUrl,
+      @tags, @description, @now
     )
     ON CONFLICT(content_id) DO UPDATE SET
       prev_view_counter = view_counter,
@@ -180,6 +192,8 @@ export function bulkUpsertEpisodes(db, episodes, now = new Date().toISOString())
       mylist_counter    = excluded.mylist_counter,
       length_seconds    = excluded.length_seconds,
       thumbnail_url     = excluded.thumbnail_url,
+      tags              = excluded.tags,
+      description       = excluded.description,
       last_updated      = excluded.last_updated
   `)
 
@@ -197,6 +211,8 @@ export function bulkUpsertEpisodes(db, episodes, now = new Date().toISOString())
         lengthSeconds: ep.lengthSeconds ?? ep.length_seconds ?? null,
         startTime: ep.startTime ?? ep.start_time ?? null,
         thumbnailUrl: ep.thumbnailUrl ?? ep.thumbnail_url ?? null,
+        tags: ep.tags ?? null,
+        description: ep.description ?? null,
         now,
       })
     }
@@ -204,4 +220,139 @@ export function bulkUpsertEpisodes(db, episodes, now = new Date().toISOString())
 
   runBatch(episodes)
   logger.info('db', 'bulk upsert complete', { count: episodes.length })
+}
+
+/**
+ * シリーズを一括 UPSERT（重複は title/thumbnail_url を更新）
+ * @param {{ seriesId: number, title: string, thumbnailUrl?: string|null }[]} seriesList
+ */
+export function bulkUpsertSeries(db, seriesList, now = new Date().toISOString()) {
+  const stmt = db.prepare(`
+    INSERT INTO series(series_id, title, thumbnail_url, is_available, updated_at)
+    VALUES (@seriesId, @title, @thumbnailUrl, 1, @now)
+    ON CONFLICT(series_id) DO UPDATE SET
+      title         = excluded.title,
+      thumbnail_url = excluded.thumbnail_url,
+      is_available  = 1,
+      updated_at    = excluded.updated_at
+  `)
+  const run = db.transaction((items) => {
+    for (const s of items) {
+      stmt.run({
+        seriesId: s.seriesId,
+        title: s.title,
+        thumbnailUrl: s.thumbnailUrl ?? null,
+        now,
+      })
+    }
+  })
+  run(seriesList)
+  logger.info('db', 'series upsert complete', { count: seriesList.length })
+}
+
+/**
+ * episodes の series_id と episode_no を更新（nvapi 由来）
+ * @param {{ contentId: string, seriesId: number, episodeNo: number }[]} updates
+ */
+export function updateEpisodeOrderBatch(db, updates) {
+  const stmt = db.prepare(
+    'UPDATE episodes SET series_id = @seriesId, episode_no = @episodeNo WHERE content_id = @contentId'
+  )
+  const run = db.transaction((items) => {
+    for (const u of items) stmt.run(u)
+  })
+  run(updates)
+}
+
+/**
+ * series の任意フィールドを更新（ホワイトリスト制）
+ */
+const ALLOWED_SERIES_KEYS = new Set([
+  'col_key',
+  'description_first',
+  'first_seen',
+  'last_seen',
+  'cours',
+  'franchise_key',
+  'is_available',
+  'updated_at',
+])
+
+export function updateSeriesFields(db, seriesId, fields) {
+  const keys = Object.keys(fields)
+  for (const k of keys) {
+    if (!ALLOWED_SERIES_KEYS.has(k)) throw new Error(`updateSeriesFields: unknown key "${k}"`)
+  }
+  if (!keys.length) return
+  const sets = keys.map((k) => `${k} = @${k}`).join(', ')
+  db.prepare(`UPDATE series SET ${sets} WHERE series_id = @seriesId`).run({ ...fields, seriesId })
+}
+
+/**
+ * 全シリーズの first_seen / last_seen を episodes から set-based で同期
+ */
+export function syncSeriesTimestamps(db) {
+  db.exec(`
+    UPDATE series
+    SET
+      first_seen = (SELECT MIN(e.start_time) FROM episodes e WHERE e.series_id = series.series_id),
+      last_seen  = (SELECT MAX(e.start_time) FROM episodes e WHERE e.series_id = series.series_id)
+    WHERE EXISTS (SELECT 1 FROM episodes e WHERE e.series_id = series.series_id)
+  `)
+}
+
+/**
+ * タグを UPSERT して tag_id を返す
+ */
+export function upsertTag(db, name, isCurated = 0) {
+  db.prepare(
+    'INSERT INTO tags(name, is_curated) VALUES(@name, @isCurated) ON CONFLICT(name) DO NOTHING'
+  ).run({ name, isCurated })
+  return db.prepare('SELECT tag_id FROM tags WHERE name = ?').get(name).tag_id
+}
+
+/**
+ * シリーズの series_tags を全置換する
+ * @param {{ name: string, isCurated: boolean }[]} tags
+ */
+export function replaceSeriesTags(db, seriesId, tags) {
+  const del = db.prepare('DELETE FROM series_tags WHERE series_id = ?')
+  const insTag = db.prepare(
+    'INSERT INTO tags(name, is_curated) VALUES(@name, @isCurated) ON CONFLICT(name) DO UPDATE SET is_curated = MAX(is_curated, excluded.is_curated)'
+  )
+  const insRel = db.prepare(
+    'INSERT OR IGNORE INTO series_tags(series_id, tag_id) VALUES(@seriesId, (SELECT tag_id FROM tags WHERE name = @name))'
+  )
+  const run = db.transaction(() => {
+    del.run(seriesId)
+    for (const t of tags) {
+      insTag.run({ name: t.name, isCurated: t.isCurated ? 1 : 0 })
+      insRel.run({ seriesId, name: t.name })
+    }
+  })
+  run()
+}
+
+/**
+ * RSS items を UPSERT（watch_id で重複排除）
+ */
+export function bulkUpsertRssItems(db, items) {
+  const stmt = db.prepare(`
+    INSERT INTO rss_items(watch_id, guid, pub_date, title, title_norm, link, resolution_status)
+    VALUES(@watchId, @guid, @pubDate, @title, @titleNorm, @link, 'unresolved')
+    ON CONFLICT(watch_id) DO NOTHING
+  `)
+  const run = db.transaction((rows) => {
+    for (const r of rows) stmt.run(r)
+  })
+  run(items)
+}
+
+/**
+ * RSS item の解決状態を更新
+ */
+export function updateRssResolution(db, watchId, resolvedContentId, status) {
+  db.prepare(
+    'UPDATE rss_items SET resolved_content_id = ?, resolution_status = ? WHERE watch_id = ?'
+  ).run(resolvedContentId, status, watchId)
 }
