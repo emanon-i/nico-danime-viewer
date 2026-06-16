@@ -82,6 +82,28 @@ function createModal(options: SettingsModalOptions): HTMLElement {
     infoSection.appendChild(repoP)
   }
 
+  // データ出典（主要のみ・長文不可）
+  const sources = document.createElement('div')
+  sources.className = 'settings-sources'
+  const srcLabel = document.createElement('span')
+  srcLabel.className = 'settings-sources-label'
+  srcLabel.textContent = 'データ出典'
+  sources.appendChild(srcLabel)
+  const SOURCES: Array<[string, string]> = [
+    ['dアニメストア ニコニコ支店 公式', 'https://ch.nicovideo.jp/ch2632720'],
+    ['Snapshot 検索API v2 ガイド', 'https://site.nicovideo.jp/search-api-docs/snapshot'],
+  ]
+  for (const [text, href] of SOURCES) {
+    const a = document.createElement('a')
+    a.className = 'settings-source-link'
+    a.href = href
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.textContent = text
+    sources.appendChild(a)
+  }
+  infoSection.appendChild(sources)
+
   panel.appendChild(infoSection)
   overlay.appendChild(panel)
   return overlay

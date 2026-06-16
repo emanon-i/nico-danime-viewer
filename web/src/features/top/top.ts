@@ -80,15 +80,47 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   list.appendChild(epSec)
 }
 
+function coursButton(cg: CoursGroup): HTMLElement {
+  const a = document.createElement('a')
+  a.className = 'cours-btn'
+  a.href = `?cours=${encodeURIComponent(cg.cours)}&sort=hot`
+  a.textContent = cg.cours
+  return a
+}
+
 function populateCours(coursDiv: HTMLElement, cours: CoursGroup[]): void {
   coursDiv.innerHTML = ''
-  cours.forEach((cg) => {
-    const a = document.createElement('a')
-    a.className = 'cours-btn'
-    a.href = `?cours=${encodeURIComponent(cg.cours)}&sort=hot`
-    a.textContent = cg.cours
-    coursDiv.appendChild(a)
-  })
+  // 直近の季はインライン、それ以前は [過去季 ▾] の後ろに畳む（screens.md 準拠）
+  const INLINE = 4
+  cours.slice(0, INLINE).forEach((cg) => coursDiv.appendChild(coursButton(cg)))
+
+  const past = cours.slice(INLINE)
+  if (past.length > 0) {
+    const moreBtn = document.createElement('button')
+    moreBtn.className = 'cours-more-btn'
+    moreBtn.textContent = '過去季 ▾'
+    moreBtn.addEventListener('click', () => {
+      past.forEach((cg) => coursDiv.insertBefore(coursButton(cg), moreBtn))
+      moreBtn.remove()
+    })
+    coursDiv.appendChild(moreBtn)
+  }
+}
+
+/** ラベル付きチップ行に「ラベル＋チップ群」を描画する（Hot/人気/定番で共通）。 */
+function fillTagRow(row: HTMLElement, label: string, tags: string[]): void {
+  row.innerHTML = ''
+  const labelEl = document.createElement('span')
+  labelEl.className = 'tag-section-label'
+  labelEl.textContent = label
+  row.appendChild(labelEl)
+  tags.forEach((t) => row.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
+}
+
+/** タグ辞書として発見性のあるタグ（巨大な汎用タグ「アニメ」「第一話」を除外）。 */
+function discoveryTags(allTags: Tag[]): Tag[] {
+  const EXCLUDE = new Set(['アニメ', '第一話'])
+  return allTags.filter((t) => !EXCLUDE.has(t.name))
 }
 
 function populateTags(
@@ -100,35 +132,31 @@ function populateTags(
   const hotDiv = container.querySelector<HTMLElement>('.tag-hot')
   const popularDiv = container.querySelector<HTMLElement>('.tag-popular')
   const randomDiv = container.querySelector<HTMLElement>('.tag-random')
+  const curatedDiv = container.querySelector<HTMLElement>('.tag-curated')
   const shuffleBtn = randomDiv?.querySelector<HTMLElement>('.shuffle-btn')
 
-  if (hotDiv) {
-    hotDiv.innerHTML = ''
-    const label = document.createElement('span')
-    label.className = 'tag-section-label'
-    label.textContent = 'Hot'
-    hotDiv.appendChild(label)
-    hotTags.slice(0, 8).forEach((t) => hotDiv.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
-  }
+  // Hot のタグ＝Hot 上位作品の頻出タグ
+  if (hotDiv) fillTagRow(hotDiv, 'Hot', hotTags.slice(0, 8))
 
-  if (popularDiv) {
-    popularDiv.innerHTML = ''
-    const label = document.createElement('span')
-    label.className = 'tag-section-label'
-    label.textContent = '人気'
-    popularDiv.appendChild(label)
-    popularTags
-      .slice(0, 8)
-      .forEach((t) => popularDiv.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
-  }
+  // 人気のタグ＝人気TOP 上位作品の頻出タグ
+  if (popularDiv) fillTagRow(popularDiv, '人気', popularTags.slice(0, 8))
 
+  // ランダム＝タグ辞書からサンプル（[🔀] で引き直し）
   if (randomDiv && shuffleBtn) {
-    const allNames = allTags.map((t) => t.name)
+    const allNames = discoveryTags(allTags).map((t) => t.name)
     let currentSample = sampleTags(allNames, 5)
 
+    // ラベルを先頭に常設（チップ/シャッフルとは別に固定）
+    let labelEl = randomDiv.querySelector<HTMLElement>('.tag-section-label')
+    if (!labelEl) {
+      labelEl = document.createElement('span')
+      labelEl.className = 'tag-section-label'
+      labelEl.textContent = 'ランダム'
+      randomDiv.insertBefore(labelEl, randomDiv.firstChild)
+    }
+
     const renderRandom = () => {
-      const chips = randomDiv.querySelectorAll('.tag-chip')
-      chips.forEach((c) => c.remove())
+      randomDiv.querySelectorAll('.tag-chip').forEach((c) => c.remove())
       currentSample.forEach((t) =>
         randomDiv.insertBefore(chip(t, `?tag=${encodeURIComponent(t)}`), shuffleBtn)
       )
@@ -140,6 +168,31 @@ function populateTags(
     })
 
     renderRandom()
+  }
+
+  // 定番＝正規化済みタグ（dアニメキュレーション含む）。再生作品数の多い順。[もっと▾] で追加表示
+  if (curatedDiv) {
+    const staples = discoveryTags(allTags)
+      .filter((t) => t.isCurated)
+      .sort((a, b) => b.seriesCount - a.seriesCount)
+      .map((t) => t.name)
+    const INITIAL = 10
+    fillTagRow(curatedDiv, '定番', staples.slice(0, INITIAL))
+
+    if (staples.length > INITIAL) {
+      const moreBtn = document.createElement('button')
+      moreBtn.className = 'tag-more-btn'
+      moreBtn.textContent = 'もっと ▾'
+      moreBtn.addEventListener('click', () => {
+        staples
+          .slice(INITIAL)
+          .forEach((t) =>
+            curatedDiv.insertBefore(chip(t, `?tag=${encodeURIComponent(t)}`), moreBtn)
+          )
+        moreBtn.remove()
+      })
+      curatedDiv.appendChild(moreBtn)
+    }
   }
 }
 

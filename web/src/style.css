@@ -778,6 +778,19 @@
     }
   }
 
+  /* 定番タグの [もっと▾] */
+  .tag-more-btn {
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--text-l4);
+    font-weight: 500;
+    color: var(--text-muted);
+    border-radius: var(--r-full);
+
+    &:hover {
+      color: var(--accent);
+    }
+  }
+
   /* ── クールボタン ────────────────────────────────── */
   .cours-buttons {
     display: flex;
@@ -802,6 +815,24 @@
       background: var(--surface-2);
       border-color: var(--accent);
       color: var(--accent);
+    }
+  }
+
+  .cours-more-btn {
+    padding: var(--sp-2) var(--sp-4);
+    border: 1px dashed var(--border);
+    border-radius: var(--r-md);
+    font-size: var(--text-l4);
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    transition:
+      color 0.15s,
+      border-color 0.15s;
+
+    &:hover {
+      color: var(--accent);
+      border-color: var(--accent);
     }
   }
 
@@ -944,6 +975,48 @@
 
   .settings-import-input {
     display: none;
+  }
+
+  /* 情報セクションのリンク（リポジトリ・データ出典） */
+  .settings-repo-link,
+  .settings-source-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    font-size: var(--text-l3);
+    color: var(--accent);
+
+    &::after {
+      content: '→';
+    }
+    &:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+  }
+
+  .settings-repo-unavailable {
+    font-size: var(--text-l3);
+    color: var(--text-muted);
+  }
+
+  .settings-sources {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+  }
+
+  .settings-sources-label {
+    font-size: var(--text-l4);
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .settings-panel [data-part='last-updated'] {
+    font-size: var(--text-l3);
+    color: var(--text-muted);
+    margin-bottom: var(--sp-2);
   }
 
   /* ── 一覧画面 ─────────────────────────────────────── */

@@ -16,7 +16,8 @@ import {
   getFavoriteIds,
   getWatchedIds,
 } from './features/shared/user-state'
-import { initTheme, toggleTheme } from './features/shared/theme'
+import { initTheme, toggleTheme, getTheme } from './features/shared/theme'
+import { icon } from './components/icon'
 import { initSettingsModal } from './features/shared/settings-modal'
 import {
   loadWorks,
@@ -126,6 +127,17 @@ function wireDetailMarks(container: HTMLElement, seriesId: number): void {
   }
 }
 
+/** ヘッダのテーマトグルを現在の実効テーマに合わせる（ダーク=🌙 / ライト=☀）。 */
+function setThemeIcon(btn: HTMLElement): void {
+  const stored = getTheme()
+  const isDark =
+    stored === 'dark' ||
+    (stored === null &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches)
+  btn.replaceChildren(icon(isDark ? 'moon' : 'sun'))
+}
+
 function navigate(url: string): void {
   history.pushState(null, '', url)
   void render()
@@ -153,7 +165,13 @@ async function render(): Promise<void> {
     if (headerBtn) initHeaderSearch(headerBtn, navigate)
 
     const themeBtn = app.querySelector<HTMLElement>('.theme-btn')
-    themeBtn?.addEventListener('click', () => toggleTheme())
+    if (themeBtn) {
+      setThemeIcon(themeBtn)
+      themeBtn.addEventListener('click', () => {
+        toggleTheme()
+        setThemeIcon(themeBtn)
+      })
+    }
 
     const settingsBtn = app.querySelector<HTMLElement>('.settings-btn')
     if (settingsBtn) {
