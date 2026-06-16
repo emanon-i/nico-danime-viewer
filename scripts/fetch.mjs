@@ -19,6 +19,7 @@ import {
   updateEpisodeOrderBatch,
   replaceSeriesTags,
   syncSeriesTimestamps,
+  syncSeriesThumbnails,
   getMetaState,
   updateMetaState,
 } from './db/db.mjs'
@@ -121,6 +122,8 @@ async function runExportOnly() {
   logger.info('fetch', 'E4 franchise keys done', { count: franchiseKeys.size })
 
   syncSeriesTimestamps(db)
+  syncSeriesThumbnails(db)
+  logger.info('fetch', 'E6 thumbnails synced')
 
   logger.info('fetch', 'phase F: metrics')
   recalcSeriesMetrics(db, now)
@@ -325,6 +328,10 @@ async function main() {
 
   // E5: Sync timestamps
   syncSeriesTimestamps(db)
+
+  // E6: Sync series thumbnails from episodes
+  syncSeriesThumbnails(db)
+  logger.info('fetch', 'E6 thumbnails synced')
 
   // ── Phase F: Metrics（Hot score 再計算）────────────────────────────────────
   logger.info('fetch', 'phase F: metrics')

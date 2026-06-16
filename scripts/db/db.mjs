@@ -232,7 +232,7 @@ export function bulkUpsertSeries(db, seriesList, now = new Date().toISOString())
     VALUES (@seriesId, @title, @thumbnailUrl, 1, @now)
     ON CONFLICT(series_id) DO UPDATE SET
       title         = excluded.title,
-      thumbnail_url = excluded.thumbnail_url,
+      thumbnail_url = COALESCE(excluded.thumbnail_url, thumbnail_url),
       is_available  = 1,
       updated_at    = excluded.updated_at
   `)
@@ -286,6 +286,24 @@ export function updateSeriesFields(db, seriesId, fields) {
   if (!keys.length) return
   const sets = keys.map((k) => `${k} = @${k}`).join(', ')
   db.prepare(`UPDATE series SET ${sets} WHERE series_id = @seriesId`).run({ ...fields, seriesId })
+}
+
+/**
+ * episodes.thumbnail_url → series.thumbnail_url を同期（NULL のシリーズのみ）
+ * 各シリーズの最古エピソードのサムネを使う
+ */
+export function syncSeriesThumbnails(db) {
+  db.exec(`
+    UPDATE series
+    SET thumbnail_url = (
+      SELECT e.thumbnail_url FROM episodes e
+      WHERE e.series_id = series.series_id
+        AND e.thumbnail_url IS NOT NULL
+      ORDER BY e.start_time ASC, e.content_id ASC
+      LIMIT 1
+    )
+    WHERE thumbnail_url IS NULL
+  `)
 }
 
 /**

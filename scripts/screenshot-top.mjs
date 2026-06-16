@@ -38,26 +38,71 @@ async function main() {
 
     const page = await ctx.newPage()
 
-    const dataReadyP = page.waitForResponse(
-      (r) => r.url().includes('works.json') || r.url().includes('ranking.json'),
-      { timeout: 30000 }
-    )
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
-    await dataReadyP.catch(() => {})
 
+    // データ取得 & カード描画を待つ
     await page
       .waitForFunction(() => document.querySelectorAll('.series-card').length > 0, {
-        timeout: 15000,
+        timeout: 20000,
       })
       .catch(() => {})
 
-    await page.waitForTimeout(500)
+    // lazy-load 解除: loading 属性を eager に変えてから src を再セット
+    await page.evaluate(() => {
+      document.querySelectorAll('img[loading="lazy"]').forEach((img) => {
+        img.loading = 'eager'
+        if (img.src) {
+          const src = img.src
+          img.src = ''
+          img.src = src
+        }
+      })
+    })
+
+    // カードレールをスクロールして lazy img をトリガー
+    const rail = page.locator('.top10-rail').first()
+    if (await rail.isVisible().catch(() => false)) {
+      await rail.evaluate((el) => {
+        el.scrollLeft = el.scrollWidth
+      })
+      await page.waitForTimeout(200)
+      await rail.evaluate((el) => {
+        el.scrollLeft = 0
+      })
+    }
+
+    // ネットワーク待機（画像読み込み完了）
+    await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {})
+
+    // img.complete を全件確認（最大 5 秒待機）
+    await page
+      .waitForFunction(
+        () => {
+          const imgs = Array.from(document.querySelectorAll('.series-card img'))
+          return imgs.length > 0 && imgs.every((img) => img.complete)
+        },
+        { timeout: 8000 }
+      )
+      .catch(() => {})
+
+    await page.waitForTimeout(300)
 
     const out = join(OUT_DIR, `${s.name}.png`)
     await page.screenshot({ path: out, fullPage: false })
     console.log(`  saved: ${out}`)
-    saved.push(out)
 
+    // サムネ表示件数を確認
+    const thumbOk = await page.evaluate(() => {
+      const imgs = Array.from(document.querySelectorAll('.series-card img'))
+      return {
+        total: imgs.length,
+        loaded: imgs.filter((i) => i.complete && i.naturalWidth > 0).length,
+        broken: imgs.filter((i) => i.complete && i.naturalWidth === 0 && i.src).length,
+      }
+    })
+    console.log(`  thumbnails: ${thumbOk.loaded}/${thumbOk.total} loaded, ${thumbOk.broken} broken`)
+
+    saved.push(out)
     await ctx.close()
   }
 
