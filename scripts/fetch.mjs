@@ -23,7 +23,7 @@ import {
   updateMetaState,
 } from './db/db.mjs'
 
-import { fetchAllBranchEpisodes } from './nico/snapshot.mjs'
+import { fetchAllBranchEpisodes, fetchSnapshotVersion } from './nico/snapshot.mjs'
 import { assertSnapshotOk } from './nico/assert.mjs'
 import { fetchListJson, fetchProgramlist } from './nico/list.mjs'
 import { seedAllSeries, mapNvapiItems } from './nico/nvapi.mjs'
@@ -52,6 +52,11 @@ import { logger } from './lib/logger.mjs'
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '../data')
 const DB_PATH = join(DATA_DIR, 'build.sqlite')
 
+// CLI 引数解析
+const CLI_ARGS = process.argv.slice(2)
+const CLI_MODE = CLI_ARGS.find((a) => a.startsWith('--mode='))?.split('=')[1] ?? 'full'
+const CLI_CHECK_VERSION = CLI_ARGS.includes('--check-version')
+
 /** 現在の日付から季節を返す */
 function currentSeason(date) {
   const m = new Date(date).getMonth() + 1
@@ -59,6 +64,70 @@ function currentSeason(date) {
   if (m <= 6) return 'spring'
   if (m <= 9) return 'summer'
   return 'autumn'
+}
+
+/** --check-version: snapshot/version の last_modified を取得して終了 */
+async function checkVersion() {
+  mkdirSync(DATA_DIR, { recursive: true })
+  const db = openDatabase(DB_PATH)
+  createSchema(db)
+  const meta = getMetaState(db)
+  const remoteVersion = await fetchSnapshotVersion()
+  logger.info('check-version', 'snapshot version', {
+    stored: meta.snapshot_version_last_modified ?? null,
+    remote: remoteVersion,
+  })
+}
+
+/** --mode=hourly: Phase D (RSS) + export のみ */
+async function runHourly() {
+  mkdirSync(DATA_DIR, { recursive: true })
+  const db = openDatabase(DB_PATH)
+  createSchema(db)
+  const meta = getMetaState(db)
+  const now = new Date().toISOString()
+
+  // ── Phase D: RSS 新着 ────────────────────────────────────────────────────
+  logger.info('fetch', 'phase D: RSS (hourly)')
+  const rssResult = await fetchRss()
+
+  if (rssResult.status === 200 && rssResult.body) {
+    const { channelTitle, items } = parseRssXml(rssResult.body)
+    assertRssOk(items, channelTitle)
+
+    const newItems = filterNewRssItems(items, meta.rss_last_guid ?? null)
+    const rssRows = newItems
+      .map((item) => {
+        const watchId = extractWatchId(item.link)
+        if (!watchId) return null
+        return {
+          watchId,
+          guid: item.guid ?? null,
+          pubDate: item.pubDate ?? null,
+          title: item.title ?? null,
+          titleNorm: null,
+          link: item.link ?? null,
+        }
+      })
+      .filter(Boolean)
+
+    if (rssRows.length > 0) {
+      bulkUpsertRssItems(db, rssRows)
+      resolveRssItems(db)
+      logger.info('fetch', 'RSS new items inserted', { count: rssRows.length })
+    }
+
+    const newLastGuid = items[0]?.guid ?? meta.rss_last_guid
+    if (newLastGuid) updateMetaState(db, { rss_last_guid: newLastGuid })
+  } else if (rssResult.status === 304) {
+    logger.info('fetch', 'RSS 304 not modified, skipping')
+  }
+
+  // ── Phase G: Export（new.json のみ） ─────────────────────────────────────
+  createIndexes(db)
+  logger.info('fetch', 'phase G: export (hourly)')
+  exportAll(db, DATA_DIR, now)
+  logger.info('fetch', 'hourly done', { now })
 }
 
 async function main() {
@@ -217,7 +286,8 @@ async function main() {
   logger.info('fetch', 'all done', { now })
 }
 
-main().catch((err) => {
+const runner = CLI_CHECK_VERSION ? checkVersion() : CLI_MODE === 'hourly' ? runHourly() : main()
+runner.catch((err) => {
   logger.error('fetch', err.message, err.assertFields ?? {})
   process.exit(1)
 })

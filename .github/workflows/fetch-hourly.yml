@@ -1,0 +1,98 @@
+# F-0045: 毎時 RSS 取得ワークフロー
+# 実行タイミング: 毎時0分 / 手動起動
+# 起動条件: ユーザーの GO 後に有効化（このフェーズでは cron を有効にしない）
+#
+# Action SHA は pnpm/action-setup@v4, actions/setup-node@v4, actions/checkout@v4 の
+# 最新安定版を使用。デプロイ前に `gh api /repos/...` で最新 SHA を確認して更新すること。
+
+name: Hourly RSS Fetch
+
+on:
+  schedule:
+    # UTC 毎時0分（= JST 毎時9時を指すのではなく、毎時 0 分 UTC = JST 毎時 9 分）
+    # 初回全件取得完了後に uncomment して有効化する
+    # - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Fetch mode'
+        required: false
+        default: 'hourly'
+        type: choice
+        options:
+          - hourly
+
+# 最小権限: state ブランチへの書き込みのみ
+permissions:
+  contents: write
+
+# 単一 state-writer: 並列実行を防ぎ状態の整合性を保証する
+concurrency:
+  group: state-writer
+  cancel-in-progress: false
+
+jobs:
+  fetch-rss:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 状態復元 ────────────────────────────────────────────────
+      - name: Checkout state branch (fallback to main)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: state
+          path: state
+          fetch-depth: 1
+        continue-on-error: true
+
+      - name: Checkout main (source)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: src
+
+      - name: Restore state (DB / HWM)
+        run: |
+          mkdir -p src/data/state
+          if [ -d state ]; then
+            cp -r state/. src/data/ 2>/dev/null || true
+          fi
+
+      # ── Node / pnpm セットアップ ─────────────────────────────────
+      - uses: pnpm/action-setup@fe02b74e27ad3412e0dfa0929ad904ea7a6ccc40 # v4.0.0
+        with:
+          version: 9
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: src/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: src
+        run: pnpm install --frozen-lockfile
+
+      # ── RSS 取得（条件付き GET・HWM 更新・id 解決） ──────────────
+      - name: Fetch RSS (hourly mode)
+        working-directory: src
+        run: node scripts/fetch.mjs --mode=hourly
+        env:
+          NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
+
+      # ── 状態保存（state ブランチへコミット） ─────────────────────
+      - name: Save state to state branch
+        run: |
+          if [ ! -d state ]; then
+            mkdir state
+            cd state
+            git init
+            git remote add origin https://github.com/emanon-i/nico-danime-viewer.git
+            git checkout -b state
+          fi
+          rsync -av --exclude='build.sqlite' --exclude='*.sqlite' src/data/. state/
+          cd state
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --staged --quiet || git commit -m "chore: update state [hourly] [skip ci]"
+          git push origin state || (git pull --rebase origin state && git push origin state)

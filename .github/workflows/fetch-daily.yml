@@ -1,0 +1,154 @@
+# F-0046: 日次フルフェッチ＆Pages デプロイ ワークフロー
+# 実行タイミング: JST 05:00（UTC 20:00）/ 手動起動
+# 起動条件: ユーザーの GO 後に有効化（このフェーズでは cron を有効にしない）
+#
+# 状態の真実源: state ブランチ（DB / prev_view_counter / HWM を永続化）
+# actions/cache は高速化フォールバックとしてのみ使用（真実源ではない）
+# 状態書き込みは concurrency group "state-writer" で直列化
+
+name: Daily Full Fetch & Deploy
+
+on:
+  schedule:
+    # UTC 20:00 = JST 05:00（閑散帯）
+    # 初回全件取得完了後に uncomment して有効化する
+    # - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Fetch mode'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+
+# 最小権限
+permissions:
+  contents: write # state ブランチへの書き込み
+  pages: write # GitHub Pages へのデプロイ
+  id-token: write # OIDC トークン（Pages 認証）
+
+# 単一 state-writer: 日次と毎時を含む同一グループで排他制御
+concurrency:
+  group: state-writer
+  cancel-in-progress: false
+
+jobs:
+  fetch-and-deploy:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # ── 状態復元 ────────────────────────────────────────────────
+      - name: Checkout state branch (DB / prev / HWM)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: state
+          path: state
+          fetch-depth: 1
+        continue-on-error: true
+
+      - name: Checkout source (main)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: src
+
+      - name: Restore state (DB / prev / HWM)
+        run: |
+          mkdir -p src/data/state
+          if [ -d state ]; then
+            cp -r state/. src/data/ 2>/dev/null || true
+          fi
+
+      # ── キャッシュ（高速化フォールバック・真実源ではない） ───────
+      - uses: actions/cache@5a3ec84eff668545956fd18d0ef65f12c70e8e8d # v4.2.3
+        with:
+          path: src/data/build.sqlite
+          key: sqlite-${{ runner.os }}-${{ hashFiles('src/scripts/**/*.mjs') }}
+          restore-keys: sqlite-${{ runner.os }}-
+
+      # ── Node / pnpm セットアップ ─────────────────────────────────
+      - uses: pnpm/action-setup@fe02b74e27ad3412e0dfa0929ad904ea7a6ccc40 # v4.0.0
+        with:
+          version: 9
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: src/pnpm-lock.yaml
+
+      - name: Install dependencies (frozen lockfile)
+        working-directory: src
+        run: pnpm install --frozen-lockfile
+
+      # ── version ゲート: snapshot API バージョン確認 ──────────────
+      # バージョンが変わった場合は早期終了してアラートを発出
+      - name: Version gate
+        working-directory: src
+        run: node scripts/fetch.mjs --check-version
+        continue-on-error: false
+        env:
+          NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
+
+      # ── Snapshot フル取得（期間分割・逐次・レート遵守・503 バックオフ） ─
+      - name: Full snapshot fetch
+        working-directory: src
+        run: node scripts/fetch.mjs --mode=full
+        env:
+          NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
+
+      # ── ビルド（CSP meta 含む）・data/ を dist/ に配置 ──────────
+      - name: Build static site
+        working-directory: src
+        run: |
+          pnpm build
+          mkdir -p dist/data
+          cp -r data/*.json dist/data/
+        env:
+          CI: 'true'
+
+      # ── 変更検知アサート: JSON が正常に生成されていることを確認 ──
+      - name: Assert data files exist
+        working-directory: src
+        run: |
+          test -f dist/data/works.json   || (echo "::error::works.json not found – aborting deploy"   && exit 1)
+          test -f dist/data/ranking.json || (echo "::error::ranking.json not found – aborting deploy" && exit 1)
+          test -f dist/data/tags.json    || (echo "::error::tags.json not found – aborting deploy"    && exit 1)
+          test -f dist/data/cours.json   || (echo "::error::cours.json not found – aborting deploy"   && exit 1)
+          test -f dist/data/kana.json    || (echo "::error::kana.json not found – aborting deploy"    && exit 1)
+          test -f dist/data/new.json     || (echo "::error::new.json not found – aborting deploy"     && exit 1)
+
+      # ── Pages デプロイ ─────────────────────────────────────────
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: src/dist/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6773a0a5edd5a0bf4fcc293c0b8e0d8b43f5c26 # v4.0.5
+
+      # ── 状態保存（true: デプロイ成功後のみ保存） ─────────────────
+      - name: Save state to state branch
+        if: success()
+        run: |
+          if [ ! -d state ]; then
+            mkdir state
+            cd state
+            git init
+            git remote add origin https://github.com/emanon-i/nico-danime-viewer.git
+            git checkout -b state
+          fi
+          # build.sqlite は再生成可能なため state ブランチには含めない（git blob 肥大化防止）
+          rsync -av --exclude='build.sqlite' --exclude='*.sqlite' src/data/. state/
+          cd state
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --staged --quiet || git commit -m "chore: update state [daily] [skip ci]"
+          git push origin state || (git pull --rebase origin state && git push origin state)
