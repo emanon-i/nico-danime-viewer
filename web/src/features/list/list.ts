@@ -1,8 +1,13 @@
-import type { Work } from '../../data/types'
+import type { Work, Tag, CoursGroup } from '../../data/types'
 import type { ListState } from '../router'
 import { buildListUrl } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { createSeriesCard } from '../top/top'
+
+export interface ListData {
+  tags: Tag[]
+  cours: CoursGroup[]
+}
 
 type SortKey = ListState['sort']
 
@@ -29,9 +34,10 @@ export function renderList(
     works: Work[]
     totalCount: number
     totalPages: number
+    data?: ListData
   }
 ): void {
-  const { state, works, totalCount, totalPages } = options
+  const { state, works, totalCount, totalPages, data } = options
   container.innerHTML = ''
 
   // ── 検索バー ────────────────────────────────────────────────
@@ -52,11 +58,14 @@ export function renderList(
   kanaDiv.className = 'list-kana'
   kanaDiv.dataset.part = 'kana'
   KANA_ROWS.forEach((row) => {
-    const btn = document.createElement('button')
-    btn.className = 'kana-btn' + (state.row === (row === '全' ? '' : row) ? ' active' : '')
-    btn.textContent = row
-    btn.dataset.row = row
-    kanaDiv.appendChild(btn)
+    const a = document.createElement('a')
+    const isAll = row === '全'
+    const isActive = state.row === (isAll ? '' : row)
+    a.className = 'kana-btn' + (isActive ? ' active' : '')
+    a.textContent = row
+    a.dataset.row = row
+    a.href = buildListUrl({ ...state, row: isAll ? '' : row, page: 1 })
+    kanaDiv.appendChild(a)
   })
   container.appendChild(kanaDiv)
 
@@ -64,23 +73,92 @@ export function renderList(
   const filterDiv = document.createElement('div')
   filterDiv.className = 'list-filter'
   filterDiv.dataset.part = 'filter'
-  filterDiv.innerHTML = `
-    <div class="filter-sort">
-      <h3>並び替え <button class="info-btn" aria-label="並び替えについて">ⓘ</button></h3>
-      ${(['hot', 'views', 'new', 'kana'] as const)
-        .map(
-          (s) =>
-            `<label><input type="radio" name="sort" value="${s}" ${state.sort === s ? 'checked' : ''}> ${sortLabel(s)}</label>`
-        )
-        .join('')}
-    </div>
-    <div class="filter-tags"><h3>タグ</h3></div>
-    <div class="filter-cours"><h3>クール</h3></div>
-    <div class="filter-mark">
-      <label><input type="checkbox" name="fav"> ♥ お気に入りだけ</label>
-      <label><input type="checkbox" name="unwatched"> ✓ 未視聴だけ</label>
-    </div>
-  `
+
+  const sortSection = document.createElement('div')
+  sortSection.className = 'filter-sort'
+  const sortH3 = document.createElement('h3')
+  sortH3.textContent = '並び替え '
+  const sortInfo = document.createElement('button')
+  sortInfo.className = 'info-btn'
+  sortInfo.setAttribute('aria-label', '並び替えについて')
+  sortInfo.textContent = 'ⓘ'
+  sortH3.appendChild(sortInfo)
+  sortSection.appendChild(sortH3)
+  ;(['hot', 'views', 'new', 'kana'] as const).forEach((s) => {
+    const label = document.createElement('label')
+    const radio = document.createElement('input')
+    radio.type = 'radio'
+    radio.name = 'sort'
+    radio.value = s
+    if (state.sort === s) radio.checked = true
+    label.appendChild(radio)
+    label.appendChild(document.createTextNode(' ' + sortLabel(s)))
+    sortSection.appendChild(label)
+  })
+  filterDiv.appendChild(sortSection)
+
+  // タグフィルタ（フラット1系統・別 facet なし）
+  const tagsSection = document.createElement('div')
+  tagsSection.className = 'filter-tags'
+  const tagsH3 = document.createElement('h3')
+  tagsH3.textContent = 'タグ'
+  tagsSection.appendChild(tagsH3)
+  if (data?.tags && data.tags.length > 0) {
+    const tagList = document.createElement('ul')
+    tagList.className = 'filter-tag-list'
+    data.tags.slice(0, 30).forEach((tag) => {
+      const li = document.createElement('li')
+      const a = document.createElement('a')
+      a.className = 'filter-tag-item' + (state.tag === tag.name ? ' active' : '')
+      a.href = buildListUrl({ ...state, tag: state.tag === tag.name ? '' : tag.name, page: 1 })
+      a.textContent = tag.name
+      li.appendChild(a)
+      tagList.appendChild(li)
+    })
+    tagsSection.appendChild(tagList)
+  }
+  filterDiv.appendChild(tagsSection)
+
+  // クールフィルタ
+  const coursSection = document.createElement('div')
+  coursSection.className = 'filter-cours'
+  const coursH3 = document.createElement('h3')
+  coursH3.textContent = 'クール'
+  coursSection.appendChild(coursH3)
+  if (data?.cours && data.cours.length > 0) {
+    const coursList = document.createElement('ul')
+    coursList.className = 'filter-cours-list'
+    data.cours.forEach((cg) => {
+      const li = document.createElement('li')
+      const a = document.createElement('a')
+      a.className = 'filter-cours-item' + (state.cours === cg.cours ? ' active' : '')
+      a.href = buildListUrl({ ...state, cours: state.cours === cg.cours ? '' : cg.cours, page: 1 })
+      a.textContent = cg.cours
+      li.appendChild(a)
+      coursList.appendChild(li)
+    })
+    coursSection.appendChild(coursList)
+  }
+  filterDiv.appendChild(coursSection)
+
+  const markSection = document.createElement('div')
+  markSection.className = 'filter-mark'
+  const favLabel = document.createElement('label')
+  const favCb = document.createElement('input')
+  favCb.type = 'checkbox'
+  favCb.name = 'fav'
+  favLabel.appendChild(favCb)
+  favLabel.appendChild(document.createTextNode(' ♥ お気に入りだけ'))
+  const unwatchedLabel = document.createElement('label')
+  const unwatchedCb = document.createElement('input')
+  unwatchedCb.type = 'checkbox'
+  unwatchedCb.name = 'unwatched'
+  unwatchedLabel.appendChild(unwatchedCb)
+  unwatchedLabel.appendChild(document.createTextNode(' ✓ 未視聴だけ'))
+  markSection.appendChild(favLabel)
+  markSection.appendChild(unwatchedLabel)
+  filterDiv.appendChild(markSection)
+
   container.appendChild(filterDiv)
 
   // ── 作品グリッド ─────────────────────────────────────────────

@@ -1,0 +1,250 @@
+import { describe, it, expect } from 'vitest'
+import {
+  filterWorks,
+  sortWorks,
+  paginateWorks,
+  colKeyMatchesRow,
+  currentCoursLabel,
+  PAGE_SIZE,
+} from '../../web/src/features/list/filter'
+import type { Work, RankingJson } from '../../web/src/data/types'
+import type { ListState } from '../../web/src/features/router'
+
+const BASE_WORK: Work = {
+  seriesId: 0,
+  title: '',
+  thumbnailUrl: null,
+  descriptionFirst: null,
+  tags: [],
+  cours: null,
+  franchiseKey: null,
+  colKey: null,
+  relatedSeries: [],
+}
+
+const BASE_STATE: ListState = { q: '', row: '', tag: '', cours: '', sort: 'hot', page: 1 }
+
+const BASE_RANKING: RankingJson = {
+  lastUpdated: '2026-06-16T00:00:00Z',
+  hot: [],
+  popular: [],
+}
+
+describe('colKeyMatchesRow', () => {
+  it('null は常に false', () => {
+    expect(colKeyMatchesRow(null, 'さ')).toBe(false)
+  })
+
+  it('未知の行は false', () => {
+    expect(colKeyMatchesRow('sa', 'x')).toBe(false)
+  })
+
+  it('さ行: sa が一致する', () => {
+    expect(colKeyMatchesRow('sa', 'さ')).toBe(true)
+  })
+
+  it('さ行: shi が一致する', () => {
+    expect(colKeyMatchesRow('shi', 'さ')).toBe(true)
+  })
+
+  it('さ行: ya は不一致', () => {
+    expect(colKeyMatchesRow('ya', 'さ')).toBe(false)
+  })
+
+  it('や行: ya が一致する', () => {
+    expect(colKeyMatchesRow('ya', 'や')).toBe(true)
+  })
+
+  it('や行: yu が一致する', () => {
+    expect(colKeyMatchesRow('yu', 'や')).toBe(true)
+  })
+
+  it('大文字小文字を無視する', () => {
+    expect(colKeyMatchesRow('SA', 'さ')).toBe(true)
+  })
+
+  it('na はな行のみに一致し、わ行には混入しない（H-2 回帰）', () => {
+    expect(colKeyMatchesRow('na', 'な')).toBe(true)
+    expect(colKeyMatchesRow('na', 'わ')).toBe(false)
+  })
+
+  it('n はわ行（ん）に一致する', () => {
+    expect(colKeyMatchesRow('n', 'わ')).toBe(true)
+    expect(colKeyMatchesRow('n', 'な')).toBe(false)
+  })
+})
+
+describe('currentCoursLabel', () => {
+  it('YYYY-季 の形式を返す', () => {
+    expect(currentCoursLabel()).toMatch(/^\d{4}-(冬|春|夏|秋)$/)
+  })
+})
+
+describe('filterWorks (F-0028/0029/0030)', () => {
+  const WORKS: Work[] = [
+    { ...BASE_WORK, seriesId: 1, title: 'さくら', colKey: 'sa', tags: ['日常'], cours: '2026-春' },
+    {
+      ...BASE_WORK,
+      seriesId: 2,
+      title: 'やまと',
+      colKey: 'ya',
+      tags: ['アクション'],
+      cours: '2025-秋',
+    },
+    { ...BASE_WORK, seriesId: 3, title: 'はなこ', colKey: 'ha', tags: ['日常'], cours: null },
+  ]
+
+  it('test_kana_row_filter: さ行で絞ると colKey=sa のみ', () => {
+    const result = filterWorks(WORKS, { ...BASE_STATE, row: 'さ' })
+    expect(result).toHaveLength(1)
+    expect(result[0].seriesId).toBe(1)
+  })
+
+  it('test_tag_filter: タグ絞りが機能する', () => {
+    const result = filterWorks(WORKS, { ...BASE_STATE, tag: '日常' })
+    expect(result).toHaveLength(2)
+    expect(result.map((w) => w.seriesId).sort()).toEqual([1, 3])
+  })
+
+  it('test_cours_filter: クール絞りが機能する', () => {
+    const result = filterWorks(WORKS, { ...BASE_STATE, cours: '2026-春' })
+    expect(result).toHaveLength(1)
+    expect(result[0].seriesId).toBe(1)
+  })
+
+  it('test_current_cours_preset: cours=current が現行季に解決される', () => {
+    const label = currentCoursLabel()
+    const works: Work[] = [
+      { ...BASE_WORK, seriesId: 1, cours: label },
+      { ...BASE_WORK, seriesId: 2, cours: '2000-冬' },
+      { ...BASE_WORK, seriesId: 3, cours: null },
+    ]
+    const result = filterWorks(works, { ...BASE_STATE, cours: 'current' })
+    expect(result).toHaveLength(1)
+    expect(result[0].seriesId).toBe(1)
+  })
+
+  it('test_cours_unknown_handling: cours=null の作品は季絞りに混入しない', () => {
+    const result = filterWorks(WORKS, { ...BASE_STATE, cours: '2026-春' })
+    expect(result.every((w) => w.cours !== null)).toBe(true)
+  })
+
+  it('test_filter_sort_combination: 複数フィルタを組み合わせられる', () => {
+    const result = filterWorks(WORKS, { ...BASE_STATE, row: 'は', tag: '日常' })
+    expect(result).toHaveLength(1)
+    expect(result[0].seriesId).toBe(3)
+  })
+
+  it('q 検索: タイトルに部分一致する', () => {
+    const result = filterWorks(WORKS, { ...BASE_STATE, q: 'さく' })
+    expect(result).toHaveLength(1)
+    expect(result[0].seriesId).toBe(1)
+  })
+
+  it('q 検索: タグに部分一致する', () => {
+    const result = filterWorks(WORKS, { ...BASE_STATE, q: 'アクション' })
+    expect(result).toHaveLength(1)
+    expect(result[0].seriesId).toBe(2)
+  })
+
+  it('q が空なら全件返す', () => {
+    expect(filterWorks(WORKS, { ...BASE_STATE, q: '' })).toHaveLength(3)
+  })
+})
+
+describe('sortWorks (F-0031)', () => {
+  const WORKS: Work[] = [
+    { ...BASE_WORK, seriesId: 3, colKey: 'sa', title: 'A' },
+    { ...BASE_WORK, seriesId: 1, colKey: 'ya', title: 'Z' },
+    { ...BASE_WORK, seriesId: 2, colKey: 'sa', title: 'B' },
+  ]
+
+  it('test_sort_options_deterministic: hot ソートが決定的', () => {
+    const ranking: RankingJson = {
+      ...BASE_RANKING,
+      hot: [
+        { seriesId: 1, title: 'Z', thumbnailUrl: null, totalViews: 100, hotScore: 10 },
+        { seriesId: 2, title: 'B', thumbnailUrl: null, totalViews: 80, hotScore: 8 },
+        { seriesId: 3, title: 'A', thumbnailUrl: null, totalViews: 60, hotScore: 6 },
+      ],
+    }
+    const r1 = sortWorks(WORKS, 'hot', ranking).map((w) => w.seriesId)
+    const r2 = sortWorks(WORKS, 'hot', ranking).map((w) => w.seriesId)
+    expect(r1).toEqual(r2)
+    expect(r1).toEqual([1, 2, 3])
+  })
+
+  it('test_sort_options_deterministic: views ソートが決定的', () => {
+    const ranking: RankingJson = {
+      ...BASE_RANKING,
+      popular: [
+        { seriesId: 3, title: 'A', thumbnailUrl: null, totalViews: 300, hotScore: null },
+        { seriesId: 1, title: 'Z', thumbnailUrl: null, totalViews: 100, hotScore: null },
+        { seriesId: 2, title: 'B', thumbnailUrl: null, totalViews: 80, hotScore: null },
+      ],
+    }
+    const result = sortWorks(WORKS, 'views', ranking).map((w) => w.seriesId)
+    expect(result).toEqual([3, 1, 2])
+  })
+
+  it('test_sort_options_deterministic: new ソートは seriesId 降順', () => {
+    const result = sortWorks(WORKS, 'new', null).map((w) => w.seriesId)
+    expect(result).toEqual([3, 2, 1])
+  })
+
+  it('test_kana_sort_row_then_title: kana ソートが行順＋タイトル順', () => {
+    const result = sortWorks(WORKS, 'kana', null)
+    // さ行 (3=A, 2=B) → や行 (1=Z)
+    expect(result[0].colKey).toBe('sa')
+    expect(result[1].colKey).toBe('sa')
+    expect(result[2].colKey).toBe('ya')
+    // さ行内: title 'A' < 'B'
+    expect(result[0].title).toBe('A')
+    expect(result[1].title).toBe('B')
+  })
+
+  it('ranking なしで hot ソートを呼んでも例外を投げない', () => {
+    expect(() => sortWorks(WORKS, 'hot', null)).not.toThrow()
+  })
+
+  it('ランキング外の作品は末尾に積まれる', () => {
+    const ranking: RankingJson = {
+      ...BASE_RANKING,
+      hot: [{ seriesId: 1, title: '', thumbnailUrl: null, totalViews: 100, hotScore: 5 }],
+    }
+    const result = sortWorks(WORKS, 'hot', ranking).map((w) => w.seriesId)
+    expect(result[0]).toBe(1) // ランキングあり
+    // 残り2件はランキング外（末尾側）
+  })
+})
+
+describe('paginateWorks', () => {
+  const works: Work[] = Array.from({ length: 50 }, (_, i) => ({
+    ...BASE_WORK,
+    seriesId: i + 1,
+    title: `作品${i + 1}`,
+  }))
+
+  it('1ページ目は最初の PAGE_SIZE 件', () => {
+    const { items, totalCount, totalPages } = paginateWorks(works, 1)
+    expect(items).toHaveLength(PAGE_SIZE)
+    expect(items[0].seriesId).toBe(1)
+    expect(totalCount).toBe(50)
+    expect(totalPages).toBe(Math.ceil(50 / PAGE_SIZE))
+  })
+
+  it('2ページ目は PAGE_SIZE 番以降', () => {
+    const { items } = paginateWorks(works, 2)
+    expect(items[0].seriesId).toBe(PAGE_SIZE + 1)
+  })
+
+  it('空のリストでも totalPages が 1 になる', () => {
+    const { totalPages } = paginateWorks([], 1)
+    expect(totalPages).toBe(1)
+  })
+
+  it('page が範囲外でもクランプされる', () => {
+    const { items } = paginateWorks(works, 99)
+    expect(items.length).toBeGreaterThan(0) // 最後のページ
+  })
+})

@@ -56,10 +56,8 @@ describe('renderList (F-0024)', () => {
     renderList(container, { state: BASE_STATE, works: SAMPLE_WORKS, totalCount: 2, totalPages: 1 })
     const card = container.querySelector('.series-card')
     expect(card).not.toBeNull()
-    // 主: カード本体 → 詳細（?series=<id>）
     const primaryLink = card?.querySelector('.card-body')
     expect(primaryLink?.getAttribute('href')).toContain('series=')
-    // 副: [↗] → 公式 series
     const extLink = card?.querySelector('.card-external')
     expect(extLink?.getAttribute('href')).toContain('nicovideo.jp/series/')
   })
@@ -74,7 +72,6 @@ describe('renderList (F-0024)', () => {
     const pagination = container.querySelector('[data-part="pagination"]')
     expect(pagination?.querySelector('[data-nav="prev"]')).not.toBeNull()
     expect(pagination?.querySelector('[data-nav="next"]')).not.toBeNull()
-    // 無限スクロールセンチネルが存在しない
     expect(container.querySelector('[data-infinite-scroll]')).toBeNull()
     expect(container.querySelector('.infinite-scroll-trigger')).toBeNull()
   })
@@ -89,5 +86,100 @@ describe('renderList (F-0024)', () => {
     expect(() =>
       renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
     ).not.toThrow()
+  })
+})
+
+describe('renderList - フィルタ・ソートUI (F-0028/0029/0030/0031)', () => {
+  let container: HTMLDivElement
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+  })
+
+  afterEach(() => {
+    document.body.removeChild(container)
+  })
+
+  it('五十音ボタンが ?row=... の href を持つ（F-0028）', () => {
+    renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
+    const saBtn = Array.from(container.querySelectorAll('.kana-btn')).find(
+      (b) => b.textContent === 'さ'
+    )
+    expect(saBtn?.getAttribute('href')).toContain('row=%E3%81%95')
+  })
+
+  it('全ボタンは row なしのリスト URL を持つ（F-0028）', () => {
+    renderList(container, {
+      state: { ...BASE_STATE, row: 'さ' },
+      works: [],
+      totalCount: 0,
+      totalPages: 1,
+    })
+    const allBtn = Array.from(container.querySelectorAll('.kana-btn')).find(
+      (b) => b.textContent === '全'
+    )
+    const href = allBtn?.getAttribute('href') ?? ''
+    expect(href).not.toContain('row=')
+  })
+
+  it('選択中の五十音ボタンが active クラスを持つ（F-0028）', () => {
+    renderList(container, {
+      state: { ...BASE_STATE, row: 'さ' },
+      works: [],
+      totalCount: 0,
+      totalPages: 1,
+    })
+    const activeBtn = container.querySelector('.kana-btn.active')
+    expect(activeBtn?.textContent).toBe('さ')
+  })
+
+  it('test_tags_are_flat: タグフィルタに別 facet セクションがない（F-0029）', () => {
+    const data = {
+      tags: [
+        { name: '日常', isCurated: true, seriesCount: 10 },
+        { name: 'ほのぼの', isCurated: false, seriesCount: 5 },
+      ],
+      cours: [],
+    }
+    renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1, data })
+    const filterTags = container.querySelector('.filter-tags')
+    expect(filterTags?.querySelector('.filter-curated')).toBeNull()
+    expect(filterTags?.querySelector('[data-curated-only]')).toBeNull()
+    const items = filterTags?.querySelectorAll('.filter-tag-item')
+    expect(items?.length).toBe(2)
+  })
+
+  it('test_no_period_selector: 期間セレクタが存在しない（F-0031）', () => {
+    renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
+    expect(container.querySelector('.period-selector')).toBeNull()
+    expect(container.querySelector('[data-period]')).toBeNull()
+    expect(container.querySelector('select[name="period"]')).toBeNull()
+  })
+
+  it('sort ラジオボタンが4種あり選択状態が反映される（F-0031）', () => {
+    renderList(container, {
+      state: { ...BASE_STATE, sort: 'views' },
+      works: [],
+      totalCount: 0,
+      totalPages: 1,
+    })
+    const radios = container.querySelectorAll<HTMLInputElement>('input[name="sort"]')
+    expect(radios.length).toBe(4)
+    const checked = Array.from(radios).find((r) => r.checked)
+    expect(checked?.value).toBe('views')
+  })
+
+  it('クールフィルタが ListData から描画される（F-0030）', () => {
+    const data = {
+      tags: [],
+      cours: [
+        { cours: '2026-春', seriesIds: [1, 2] },
+        { cours: '2025-秋', seriesIds: [3] },
+      ],
+    }
+    renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1, data })
+    const coursItems = container.querySelectorAll('.filter-cours-item')
+    expect(coursItems.length).toBe(2)
   })
 })
