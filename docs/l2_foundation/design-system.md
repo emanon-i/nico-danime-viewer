@@ -247,20 +247,21 @@ export function hiResThumb(url: string | null): string {
 
 ### 6.5 その他コンポーネント（共通クラス）
 
-| クラス                                | 役割                                                                                                                                    | 状態                                      |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `.site-header`                        | sticky・半透明 `color-mix(bg 82%)`＋`backdrop-filter blur(12px)`。`.logo` 先頭に accent マーク                                          | スクロール追従                            |
-| `.header-search-btn`                  | ヘッダ🔍。**`[aria-hidden="true"]` で `display:none`**＝ヒーロー表示中は出さない（IntersectionObserver が hero を監視）                 | 出現/非出現                               |
-| `.hero` / `.hero-search`              | ヒーロー（L1見出し＋大型検索）。背景に accent 14% の radial。検索欄は左に search アイコン（`.hero-search-icon`・`pointer-events:none`） | `:focus` で accent ボーダー＋glow         |
-| `.quick-access` / `.quick-btn`        | クイックアクセス（今期/新着/Hot/人気TOP）。中央クラスタ・はみ出しは横スクロール（バー非表示）                                           | `:hover` で accent ベタ＋`--bg` 文字      |
-| `.section-head`                       | h2 ＋「すべて見る」を両端に置く見出し行                                                                                                 | —                                         |
-| `.see-all`                            | accent リンク＋ chevron                                                                                                                 | `:hover` underline                        |
-| `.cours-btn`                          | クールボタン（`--r-md`・surface 面）                                                                                                    | `:hover` accent 枠                        |
-| `.tag-section-label` / `.tag-chip`    | タグ行のラベル（固定幅3.5rem）／ピル型チップ                                                                                            | チップ `:hover` accent 枠                 |
-| `.recent-list` / `.recent-item`       | 2系統（新着シリーズ/最新の動画）の2カラム。小見出しは下線つき、項目は1行省略                                                            | `:hover` accent                           |
-| `.icon-btn`                           | 36×36 丸ボタン基底（SVG 18px）                                                                                                          | `:hover` surface-2／`:focus-visible` ring |
-| `.settings-overlay`/`.settings-panel` | モーダル（`place-items:center`・`max-height:85dvh`・`--shadow-md`）                                                                     | 背景/Esc/× で閉じる                       |
-| `.breadcrumb`                         | ヘッダ直下のパンくず（L4・accent リンク）                                                                                               | —                                         |
+| クラス                                 | 役割                                                                                                                                                                                                             | 状態                                      |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `.site-header`                         | sticky・半透明 `color-mix(bg 82%)`＋`backdrop-filter blur(12px)`。`.logo` 先頭に accent マーク                                                                                                                   | スクロール追従                            |
+| `.header-search-btn`                   | ヘッダ🔍。**`[aria-hidden="true"]` で `display:none`**＝ヒーロー表示中は出さない（IntersectionObserver が hero を監視）                                                                                          | 出現/非出現                               |
+| `.hero` / `.hero-search`               | ヒーロー（**見出しは置かず大型検索バーのみ**）。背景に accent 14% の radial。検索欄は左に search アイコン（`.hero-search-icon`・`pointer-events:none`）。**下に border を引かずクイックアクセスへ自然に繋ぐ**    | `:focus` で accent ボーダー＋glow         |
+| `.quick-access` / `.quick-btn`         | クイックアクセス（今期/新着/Hot/人気TOP）。中央クラスタ・はみ出しは横スクロール（バー非表示）                                                                                                                    | `:hover` で accent ベタ＋`--bg` 文字      |
+| `.section-head`                        | h2 ＋「すべて見る」を両端に置く見出し行                                                                                                                                                                          | —                                         |
+| `.see-all`                             | accent リンク＋ chevron                                                                                                                                                                                          | `:hover` underline                        |
+| `.cours-btn`                           | クールボタン（`--r-md`・surface 面）                                                                                                                                                                             | `:hover` accent 枠                        |
+| `.tag-section-label` / `.tag-chip`     | タグ行のラベル（固定幅3.5rem）／ピル型チップ                                                                                                                                                                     | チップ `:hover` accent 枠                 |
+| `.recent-list` / `.recent-item`        | 「最近追加・更新」2系統（新着シリーズ/最新の動画）の2カラム。小見出しは下線つき。各項目は `listRow()`                                                                                                            | —                                         |
+| `.list-row`（`components/listRow.ts`） | **サムネ左・タイトル/メタ右の行**（ポスター `card()` とは別物）。サムネは `.L`・4:3。サムネ欠損は無地（最新の動画は RSS 由来でサムネ無し→プレースホルダ）。`listRow({title,href,thumbnailUrl?,meta?,external?})` | `:hover` で surface-2＋タイトル accent    |
+| `.icon-btn`                            | 36×36 丸ボタン基底（SVG 18px）                                                                                                                                                                                   | `:hover` surface-2／`:focus-visible` ring |
+| `.settings-overlay`/`.settings-panel`  | モーダル（`place-items:center`・`max-height:85dvh`・`--shadow-md`）                                                                                                                                              | 背景/Esc/× で閉じる                       |
+| `.breadcrumb`                          | ヘッダ直下のパンくず（L4・accent リンク）                                                                                                                                                                        | —                                         |
 
 ### 6.6 アイコン（Lucide バンドル SVG）
 

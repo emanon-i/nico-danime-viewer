@@ -1,6 +1,7 @@
 import type { RankingEntry, Tag, CoursGroup, Work, NewItem } from '../../data/types'
 import { seriesLink } from '../../shared/deeplink'
 import { card } from '../../components/card'
+import { listRow } from '../../components/listRow'
 import { chip } from '../../components/chip'
 import { icon } from '../../components/icon'
 
@@ -42,22 +43,25 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   if (!list) return
   list.innerHTML = ''
 
+  // 新着シリーズ（シリーズ単位・サムネ左の list row）
   const seriesSec = document.createElement('li')
   seriesSec.dataset.subsection = 'new-series'
   const seriesLabel = document.createElement('strong')
   seriesLabel.textContent = '新着シリーズ'
   seriesSec.appendChild(seriesLabel)
   newSeries.slice(0, 5).forEach((w) => {
-    const item = document.createElement('div')
-    item.className = 'recent-item'
-    const a = document.createElement('a')
-    a.href = `?series=${w.seriesId}`
-    a.textContent = w.title
-    item.appendChild(a)
-    seriesSec.appendChild(item)
+    const row = listRow({
+      title: w.title,
+      href: `?series=${w.seriesId}`,
+      thumbnailUrl: w.thumbnailUrl,
+      meta: '新着シリーズ',
+    })
+    row.classList.add('recent-item')
+    seriesSec.appendChild(row)
   })
   list.appendChild(seriesSec)
 
+  // 最新の動画（話単位・公式 watch へ外部遷移。RSS 由来でサムネ無し→プレースホルダ）
   const epSec = document.createElement('li')
   epSec.dataset.subsection = 'new-episodes'
   const epLabel = document.createElement('strong')
@@ -67,15 +71,14 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
     .filter((ep) => ep.resolutionStatus === 'resolved' && ep.resolvedContentId)
     .slice(0, 5)
     .forEach((ep) => {
-      const item = document.createElement('div')
-      item.className = 'recent-item'
-      const a = document.createElement('a')
-      a.href = `https://www.nicovideo.jp/watch/${ep.resolvedContentId}`
-      a.target = '_blank'
-      a.rel = 'noopener noreferrer'
-      a.textContent = ep.title
-      item.appendChild(a)
-      epSec.appendChild(item)
+      const row = listRow({
+        title: ep.title,
+        href: `https://www.nicovideo.jp/watch/${ep.resolvedContentId}`,
+        meta: '最新の動画',
+        external: true,
+      })
+      row.classList.add('recent-item')
+      epSec.appendChild(row)
     })
   list.appendChild(epSec)
 }
@@ -207,7 +210,6 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       <button class="icon-btn theme-btn" aria-label="テーマ切替"></button>
     </header>
     <section class="hero" data-section="hero-search">
-      <h2>ニコニコ支店から、観たい作品を探す</h2>
       <div class="hero-search">
         <span class="hero-search-icon"></span>
         <input type="search" class="hero-search-input"

@@ -296,11 +296,10 @@
     }
   }
 
-  /* ── ヒーロー ────────────────────────────────────── */
+  /* ── ヒーロー（見出しは置かず検索バーのみ）────────── */
   .hero {
     position: relative;
-    padding: clamp(var(--sp-7), 9vw, calc(var(--sp-8) * 1.6)) var(--gutter)
-      clamp(var(--sp-6), 6vw, var(--sp-8));
+    padding: clamp(var(--sp-6), 7vw, var(--sp-8)) var(--gutter) clamp(var(--sp-5), 4vw, var(--sp-6));
     text-align: center;
     /* 無彩 UI 上の唯一の寒色アクセントを背景にごく淡く（color はサムネに任せる） */
     background: radial-gradient(
@@ -308,17 +307,7 @@
       color-mix(in oklch, var(--accent) 14%, transparent),
       transparent 60%
     );
-    border-bottom: 1px solid var(--border);
-
-    h2 {
-      font-size: var(--text-l1);
-      font-weight: 700;
-      color: var(--text);
-      margin: 0 auto var(--sp-5);
-      max-width: 22ch;
-      letter-spacing: -0.02em;
-      text-wrap: balance;
-    }
+    /* 検索→クイックアクセスは線で区切らず自然につなげる（border なし） */
   }
 
   .hero-search {
@@ -854,22 +843,67 @@
     }
   }
 
-  .recent-item {
-    a {
-      display: block;
-      padding: var(--sp-2) 0;
-      font-size: var(--text-l3);
-      line-height: 1.4;
-      color: var(--text);
-      border-bottom: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+  /* ── list row（サムネ左・タイトル/メタ右）──────────── */
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2);
+    border-radius: var(--r-md);
+    color: var(--text);
+    transition: background 0.15s;
 
-      &:hover {
-        color: var(--accent);
-      }
+    &:hover {
+      background: var(--surface-2);
     }
+  }
+
+  .list-row-thumb {
+    flex: 0 0 5.5rem;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--r-sm);
+    overflow: hidden;
+    background: var(--surface-2);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    &.list-row-thumb-empty::after {
+      content: '';
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: var(--surface-2);
+    }
+  }
+
+  .list-row-text {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .list-row-title {
+    font-size: var(--text-l3);
+    font-weight: 500;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .list-row-meta {
+    margin-top: 2px;
+    font-size: var(--text-l4);
+    color: var(--text-muted);
+  }
+
+  .list-row:hover .list-row-title {
+    color: var(--accent);
   }
 
   /* ── info ボタン (ⓘ) ────────────────────────────── */
