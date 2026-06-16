@@ -22,6 +22,9 @@ Thumbs.db
 !.vscode/settings.json
 .idea/
 
+# --- 確認用スクショ（一時生成物）---
+/preview-shots/
+
 # --- ログ ---
 *.log
 npm-debug.log*

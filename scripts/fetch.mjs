@@ -79,6 +79,58 @@ async function checkVersion() {
   })
 }
 
+/** --mode=export-only: Phase E/F/G のみ（スクショ確認・部分データ用） */
+async function runExportOnly() {
+  mkdirSync(DATA_DIR, { recursive: true })
+  const db = openDatabase(DB_PATH)
+  createSchema(db)
+  const now = new Date().toISOString()
+
+  logger.info('fetch', 'phase E: ETL derivation (export-only)')
+
+  const overviews = deriveSeriesOverviews(db)
+  for (const { seriesId, descriptionFirst } of overviews) {
+    if (descriptionFirst) {
+      updateSeriesFields(db, seriesId, { description_first: descriptionFirst, updated_at: now })
+    }
+  }
+  logger.info('fetch', 'E1 overviews done', { count: overviews.length })
+
+  const seriesTags = deriveSeriesTags(db)
+  for (const { seriesId, tags } of seriesTags) {
+    if (tags.length > 0) replaceSeriesTags(db, seriesId, tags)
+  }
+  logger.info('fetch', 'E2 tags done', { count: seriesTags.length })
+
+  const programlist = await fetchProgramlist()
+  const season = currentSeason(now)
+  const year = new Date(now).getFullYear()
+  const coursLabel = makeCoursLabel(year, season)
+  const coursMap = mapCurrentCours(programlist, coursLabel)
+  for (const [seriesId, cours] of coursMap) {
+    updateSeriesFields(db, seriesId, { cours, updated_at: now })
+  }
+  logger.info('fetch', 'E3 cours done', { label: coursLabel, count: coursMap.size })
+
+  const seriesTagsMap = getSeriesTagsMap(db)
+  const franchiseKeys = computeFranchiseKeys(seriesTagsMap)
+  for (const [seriesId, franchiseKey] of franchiseKeys) {
+    updateSeriesFields(db, seriesId, { franchise_key: franchiseKey, updated_at: now })
+  }
+  logger.info('fetch', 'E4 franchise keys done', { count: franchiseKeys.size })
+
+  syncSeriesTimestamps(db)
+
+  logger.info('fetch', 'phase F: metrics')
+  recalcSeriesMetrics(db, now)
+
+  createIndexes(db)
+  logger.info('fetch', 'phase G: export')
+  exportAll(db, DATA_DIR, now)
+
+  logger.info('fetch', 'export-only done', { now })
+}
+
 /** --mode=hourly: Phase D (RSS) + export のみ */
 async function runHourly() {
   mkdirSync(DATA_DIR, { recursive: true })
@@ -286,7 +338,13 @@ async function main() {
   logger.info('fetch', 'all done', { now })
 }
 
-const runner = CLI_CHECK_VERSION ? checkVersion() : CLI_MODE === 'hourly' ? runHourly() : main()
+const runner = CLI_CHECK_VERSION
+  ? checkVersion()
+  : CLI_MODE === 'hourly'
+    ? runHourly()
+    : CLI_MODE === 'export-only'
+      ? runExportOnly()
+      : main()
 runner.catch((err) => {
   logger.error('fetch', err.message, err.assertFields ?? {})
   process.exit(1)

@@ -18,7 +18,7 @@ import {
 } from './features/shared/user-state'
 import { initTheme, toggleTheme } from './features/shared/theme'
 import { initSettingsModal } from './features/shared/settings-modal'
-import { loadWorks, loadRanking, loadTags, loadCours, loadNew } from './data/loader'
+import { loadWorks, loadRanking, loadTags, loadCours, loadNew, loadSeries } from './data/loader'
 import type { WorksJson, RankingJson, TagsJson, CoursJson, NewJson } from './data/types'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -214,7 +214,14 @@ async function render(): Promise<void> {
     app.appendChild(bcContainer)
     renderBreadcrumb(bcContainer, screen)
 
-    renderDetail(app, null)
+    let seriesDetail = null
+    try {
+      const seriesData = await loadSeries()
+      seriesDetail = seriesData.series.find((s) => s.seriesId === screen.seriesId) ?? null
+    } catch {
+      // series.json 未生成 or ネットワークエラー
+    }
+    renderDetail(app, seriesDetail)
     wireDetailMarks(app, screen.seriesId)
   }
 }

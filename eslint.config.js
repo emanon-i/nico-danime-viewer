@@ -22,6 +22,16 @@ export default tseslint.config(
     },
   },
   {
+    // screenshot.mjs は Playwright でブラウザ関数を文字列化して渡す箇所があるため browser globals を許可
+    files: ['scripts/screenshot.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+      },
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**', 'data/**', '.claude/**'],
   }
 )

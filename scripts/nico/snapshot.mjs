@@ -48,18 +48,22 @@ export async function fetchWindow(gte, lte) {
   let offset = 0
 
   while (true) {
-    const params = new URLSearchParams({
+    // NOTE: `fields`（アンダースコアなし）が正しいパラメータ名。
+    // `filters[...]` は URLSearchParams が `[` を %5B にエンコードするためURL文字列に直接結合する。
+    const base = new URLSearchParams({
       q: QUERY,
       targets: TARGETS,
-      _fields: FIELDS,
       _sort: '-startTime',
       _limit: String(LIMIT),
       _offset: String(offset),
-      'filters[startTime][gte]': gte,
-      'filters[startTime][lte]': lte,
     })
+    const url =
+      `${SEARCH_BASE}?${base}` +
+      `&fields=${encodeURIComponent(FIELDS)}` +
+      `&filters[startTime][gte]=${encodeURIComponent(gte)}` +
+      `&filters[startTime][lte]=${encodeURIComponent(lte)}`
 
-    const resp = await fetchWithToS(`${SEARCH_BASE}?${params}`)
+    const resp = await fetchWithToS(url)
     if (resp.status !== 200) {
       throw new Error(`[snapshot] search API failed: HTTP ${resp.status} gte=${gte}`)
     }
