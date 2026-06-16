@@ -26,9 +26,14 @@ function sampleTags(pool: string[], count: number): string[] {
 
 function populateTop10(rail: HTMLElement, popular: RankingEntry[]): void {
   rail.innerHTML = ''
-  popular.slice(0, 10).forEach((entry) => {
+  popular.slice(0, 10).forEach((entry, i) => {
     const href = seriesLink(entry.seriesId) ?? ''
-    rail.appendChild(card(entry.seriesId, entry.title, entry.thumbnailUrl, href))
+    rail.appendChild(
+      card(entry.seriesId, entry.title, entry.thumbnailUrl, href, {
+        rank: i + 1,
+        views: entry.totalViews,
+      })
+    )
   })
 }
 
@@ -150,8 +155,11 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
     </header>
     <section class="hero" data-section="hero-search">
       <h2>ニコニコ支店から、観たい作品を探す</h2>
-      <input type="search" class="hero-search-input"
-             placeholder="作品・タグで検索…" aria-label="作品・タグで検索">
+      <div class="hero-search">
+        <span class="hero-search-icon"></span>
+        <input type="search" class="hero-search-input"
+               placeholder="作品・タグで検索…" aria-label="作品・タグで検索">
+      </div>
     </section>
     <section class="quick-access" data-section="quick-access">
       <a href="?cours=current&amp;sort=hot" class="quick-btn">今期</a>
@@ -160,16 +168,20 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       <a href="?sort=views" class="quick-btn">人気TOP</a>
     </section>
     <section class="top10" data-section="top10">
-      <h2>人気シリーズ TOP10
-        <button class="info-btn" aria-label="Hot と人気TOP の違いについて" title="Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／人気TOP＝全期間の累計再生数による定番ランキング">ⓘ</button>
-      </h2>
+      <div class="section-head">
+        <h2>人気シリーズ TOP10
+          <button class="info-btn" aria-label="Hot と人気TOP の違いについて" title="Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／人気TOP＝全期間の累計再生数による定番ランキング">ⓘ</button>
+        </h2>
+        <a href="?sort=views" class="see-all">すべて見る</a>
+      </div>
       <div class="card-rail top10-rail"></div>
-      <a href="?sort=views" class="see-all">すべて見る</a>
     </section>
     <section class="recent" data-section="recent">
-      <h2>最近追加・更新された作品</h2>
+      <div class="section-head">
+        <h2>最近追加・更新された作品</h2>
+        <a href="?sort=new" class="see-all">すべて見る</a>
+      </div>
       <ul class="recent-list"></ul>
-      <a href="?sort=new" class="see-all">すべて見る</a>
     </section>
     <section class="cours-browse" data-section="cours">
       <h2>クールから探す</h2>
@@ -188,6 +200,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
 
   // アイコンを DOM API で挿入（innerHTML テンプレート補間を使わない）
   container.querySelector('.header-search-btn')?.appendChild(icon('search'))
+  container.querySelector('.hero-search-icon')?.appendChild(icon('search', 18))
   container.querySelector('.settings-btn')?.appendChild(icon('settings'))
   container.querySelector('.theme-btn')?.appendChild(icon('sun'))
   container.querySelector('.shuffle-btn')?.appendChild(icon('shuffle'))
