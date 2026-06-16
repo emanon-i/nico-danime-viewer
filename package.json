@@ -9,9 +9,45 @@
   },
   "scripts": {
     "fetch": "node scripts/fetch.mjs",
-    "dev": "echo \"[TODO] web/ の開発サーバ未設定（Vite 等を導入予定）\" && exit 1",
-    "build": "echo \"[TODO] web/ のビルド未設定\" && exit 1",
-    "serve": "echo \"[TODO] ビルド済み dist/ の配信未設定\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "prepare": "simple-git-hooks"
   },
-  "license": "MIT"
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*.{ts,mjs,js}": [
+      "eslint --fix --no-warn-ignored",
+      "prettier --write"
+    ],
+    "*.{json,md,html,css}": [
+      "prettier --write"
+    ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "simple-git-hooks"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "lint-staged": "^15.0.0",
+    "prettier": "^3.0.0",
+    "simple-git-hooks": "^2.11.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
 }
