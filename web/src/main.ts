@@ -19,7 +19,10 @@ import {
 } from './features/shared/user-state'
 import { initTheme, toggleTheme, getTheme } from './features/shared/theme'
 import { icon } from './components/icon'
+import { formatViews, formatRelativeTime } from './components/meta'
+import type { MetaSpec } from './components/meta'
 import { initSettingsModal } from './features/shared/settings-modal'
+import { renderFooter } from './features/shared/footer'
 import {
   loadWorks,
   loadRanking,
@@ -35,6 +38,7 @@ import type {
   CoursJson,
   NewJson,
   SeriesDetailJson,
+  Work,
 } from './data/types'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -223,6 +227,28 @@ async function render(): Promise<void> {
     const sorted = sortWorks(filtered, screen.state.sort, cache.ranking ?? null)
     const { items, totalCount, totalPages } = paginateWorks(sorted, screen.state.page)
 
+    // カード下キャプション＝選択中の並び替えに応じた指標（§5）
+    const hotMap = new Map((cache.ranking?.hot ?? []).map((r) => [r.seriesId, r.hotScore]))
+    const viewMap = new Map((cache.ranking?.popular ?? []).map((r) => [r.seriesId, r.totalViews]))
+    const cardMetric = (w: Work): MetaSpec | null => {
+      if (screen.state.sort === 'hot') {
+        const s = hotMap.get(w.seriesId)
+        if (s == null || s <= 0) return null
+        const v = String(Math.round(s * 1000)) // 0〜1 のブレンド値を「それっぽい」整数に
+        return { icon: 'flame', value: v, label: `Hot ${v}` }
+      }
+      if (screen.state.sort === 'views') {
+        const v = viewMap.get(w.seriesId)
+        if (v == null) return null
+        return { icon: 'play', value: formatViews(v), label: `再生数 ${formatViews(v)}` }
+      }
+      if (screen.state.sort === 'new') {
+        const rel = w.latestAt ? formatRelativeTime(w.latestAt) : ''
+        return rel ? { icon: 'clock', value: rel, label: `投稿 ${rel}` } : null
+      }
+      return null
+    }
+
     renderList(main, {
       state: screen.state,
       works: items,
@@ -234,6 +260,7 @@ async function render(): Promise<void> {
       },
       favFilter,
       unwatchedFilter,
+      cardMetric,
     })
 
     const searchInput = app.querySelector<HTMLInputElement>('.list-search-input')
@@ -293,6 +320,9 @@ async function render(): Promise<void> {
     wireDetailMarks(main, screen.seriesId)
     wireHeaderControls()
   }
+
+  // 全ページ共通フッター（情報＝出典・更新・リポジトリ）を最後に置く（§10）
+  app.appendChild(renderFooter({ lastUpdated: cache.ranking?.lastUpdated ?? null }))
 
   focusMainIfNavigation()
 }

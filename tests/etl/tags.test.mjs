@@ -27,9 +27,9 @@ describe('normalizeTagName (F-0013)', () => {
 })
 
 describe('extractTagsFromRaw (F-0013)', () => {
-  it('test_normalize_suffix_curation_tag: 接尾型を除去して分割', () => {
+  it('test_normalize_suffix_curation_tag: 接尾型を除去（/ では分割しない）', () => {
     const { tags, isCurated } = extractTagsFromRaw('ドラマ/青春_dアニメ')
-    expect(tags).toEqual(['ドラマ', '青春'])
+    expect(tags).toEqual(['ドラマ/青春'])
     expect(isCurated).toBe(true)
   })
 
@@ -75,21 +75,30 @@ describe('processEpisodeTags (F-0013)', () => {
     expect(processEpisodeTags('')).toHaveLength(0)
   })
 
-  it('dアニメ キュレーション + 通常タグを混在処理', () => {
+  it('dアニメ キュレーション + 通常タグを混在処理（/ は結合タグのまま）', () => {
     const result = processEpisodeTags('アクション ドラマ/青春_dアニメ')
     const names = result.map((t) => t.name)
     expect(names).toContain('アクション')
-    expect(names).toContain('ドラマ')
-    expect(names).toContain('青春')
-    expect(result.find((t) => t.name === 'ドラマ')?.isCurated).toBe(true)
+    expect(names).toContain('ドラマ/青春')
+    expect(result.find((t) => t.name === 'ドラマ/青春')?.isCurated).toBe(true)
     expect(result.find((t) => t.name === 'アクション')?.isCurated).toBe(false)
+  })
+
+  it('作品名そのもののタグは除外される（§2(b)）', () => {
+    const result = processEpisodeTags(
+      'ぼっち・ざ・ろっく！ 日常/ほのぼの_dアニメ',
+      'ぼっち・ざ・ろっく！'
+    )
+    const names = result.map((t) => t.name)
+    expect(names).not.toContain('ぼっち・ざ・ろっく！')
+    expect(names).toContain('日常/ほのぼの')
   })
 })
 
 describe('キュレーション is_curated 識別 (F-0013)', () => {
   it('test_curated_is_flagged: is_curated=1 で識別できる', () => {
     const result = processEpisodeTags('ドラマ/青春_dアニメ 冒険')
-    const drama = result.find((t) => t.name === 'ドラマ')
+    const drama = result.find((t) => t.name === 'ドラマ/青春')
     const adventure = result.find((t) => t.name === '冒険')
     expect(drama?.isCurated).toBe(true)
     expect(adventure?.isCurated).toBe(false)

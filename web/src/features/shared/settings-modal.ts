@@ -7,12 +7,12 @@ export interface SettingsModalOptions {
   onRerender?: () => void
 }
 
-function createModal(options: SettingsModalOptions): HTMLElement {
+function createModal(): HTMLElement {
   const overlay = document.createElement('div')
   overlay.className = 'settings-overlay'
   overlay.setAttribute('role', 'dialog')
   overlay.setAttribute('aria-modal', 'true')
-  overlay.setAttribute('aria-label', '設定/情報')
+  overlay.setAttribute('aria-label', '設定')
 
   const panel = document.createElement('div')
   panel.className = 'settings-panel'
@@ -53,58 +53,9 @@ function createModal(options: SettingsModalOptions): HTMLElement {
 
   panel.appendChild(settingsSection)
 
-  // ── 情報セクション ────────────────────────────
-  const infoSection = document.createElement('section')
-  infoSection.dataset.section = 'info'
-  const infoH2 = document.createElement('h2')
-  infoH2.textContent = '情報'
-  infoSection.appendChild(infoH2)
+  // 情報（データ出典・最終更新・リポジトリ）は全ページ共通フッターへ移設（§10）。
+  // 設定モーダルは設定（export/import・キャッシュ削除）専用にする。
 
-  const updateP = document.createElement('p')
-  updateP.dataset.part = 'last-updated'
-  updateP.textContent = options.lastUpdated
-    ? `データ最終更新: ${options.lastUpdated}`
-    : 'データ最終更新: 不明'
-  infoSection.appendChild(updateP)
-
-  if (options.repoUrl) {
-    const repoA = document.createElement('a')
-    repoA.className = 'settings-repo-link'
-    repoA.href = options.repoUrl
-    repoA.target = '_blank'
-    repoA.rel = 'noopener noreferrer'
-    repoA.textContent = 'リポジトリ'
-    infoSection.appendChild(repoA)
-  } else {
-    const repoP = document.createElement('p')
-    repoP.className = 'settings-repo-unavailable'
-    repoP.textContent = 'リポジトリ: 準備中'
-    infoSection.appendChild(repoP)
-  }
-
-  // データ出典（主要のみ・長文不可）
-  const sources = document.createElement('div')
-  sources.className = 'settings-sources'
-  const srcLabel = document.createElement('span')
-  srcLabel.className = 'settings-sources-label'
-  srcLabel.textContent = 'データ出典'
-  sources.appendChild(srcLabel)
-  const SOURCES: Array<[string, string]> = [
-    ['dアニメストア ニコニコ支店 公式', 'https://ch.nicovideo.jp/ch2632720'],
-    ['Snapshot 検索API v2 ガイド', 'https://site.nicovideo.jp/search-api-docs/snapshot'],
-  ]
-  for (const [text, href] of SOURCES) {
-    const a = document.createElement('a')
-    a.className = 'settings-source-link'
-    a.href = href
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    a.textContent = text
-    sources.appendChild(a)
-  }
-  infoSection.appendChild(sources)
-
-  panel.appendChild(infoSection)
   overlay.appendChild(panel)
   return overlay
 }
@@ -140,7 +91,7 @@ export function initSettingsModal(
 
   function open(): void {
     if (modal) return
-    modal = createModal(options)
+    modal = createModal()
     container.appendChild(modal)
     const panel = modal.querySelector<HTMLElement>('.settings-panel')
 

@@ -33,6 +33,8 @@ export function normalizeTagName(raw) {
 
 /**
  * 生タグ文字列からキュレーションマーカーを除去し、正規化タグ配列を返す。
+ * **`/` では分割しない**（「SF/ファンタジー」を 1 タグとして残す＝分割すると "SF" 等が
+ * 大量の作品に付いてフィルタ候補が荒れるため）。
  * @param {string} rawTag
  * @returns {{ tags: string[], isCurated: boolean }}
  */
@@ -41,32 +43,46 @@ export function extractTagsFromRaw(rawTag) {
   if (!tag || EXCLUDED_TAGS.has(tag)) return { tags: [], isCurated: false }
 
   if (RE_SUFFIX_CURATION.test(tag)) {
-    const stripped = tag.replace(RE_SUFFIX_CURATION, '')
-    const tags = stripped
-      .split('/')
-      .map((s) => normalizeTagName(s))
-      .filter(Boolean)
-    return { tags, isCurated: true }
+    const name = normalizeTagName(tag.replace(RE_SUFFIX_CURATION, ''))
+    return { tags: name ? [name] : [], isCurated: true }
   }
 
   if (RE_PREFIX_CURATION.test(tag)) {
-    const stripped = tag.replace(RE_PREFIX_CURATION, '')
-    const tags = stripped
-      .split('/')
-      .map((s) => normalizeTagName(s))
-      .filter(Boolean)
-    return { tags, isCurated: true }
+    const name = normalizeTagName(tag.replace(RE_PREFIX_CURATION, ''))
+    return { tags: name ? [name] : [], isCurated: true }
   }
 
   return { tags: [normalizeTagName(tag)], isCurated: false }
 }
 
+/** タイトル/タグを照合用にコンパクト化（記号・空白除去・小文字化） */
+function normCompact(s) {
+  return (s ?? '')
+    .toLowerCase()
+    .replace(/[\s・:：!！?？|｜/／「」『』【】（）()。、,，.\-―~〜～'"`＿_]+/gu, '')
+}
+
+/**
+ * タグが「作品名そのもの」かを判定する（作品名タグはフィルタ候補に出さない＝§2）。
+ * 正規化後にタイトルと完全一致、またはタイトルがタグで始まる（タグ 4 文字以上）場合。
+ */
+export function isTitleTag(tagName, title) {
+  if (!title) return false
+  const t = normCompact(title)
+  const g = normCompact(tagName)
+  if (!t || !g) return false
+  if (g === t) return true
+  if (g.length >= 4 && t.startsWith(g)) return true
+  return false
+}
+
 /**
  * スペース区切りのタグ文字列を処理し、正規化タグセットを返す。
  * @param {string | null} tagsStr - snapshot の生タグ文字列（スペース区切り）
+ * @param {string | null} [title] - シリーズ作品名（作品名タグ除外用・任意）
  * @returns {{ name: string, isCurated: boolean }[]} 重複除去済み
  */
-export function processEpisodeTags(tagsStr) {
+export function processEpisodeTags(tagsStr, title = null) {
   if (!tagsStr) return []
   const rawTags = tagsStr
     .split(' ')
@@ -77,10 +93,11 @@ export function processEpisodeTags(tagsStr) {
   for (const raw of rawTags) {
     const { tags, isCurated } = extractTagsFromRaw(raw)
     for (const name of tags) {
-      if (name && !seen.has(name)) {
-        seen.add(name)
-        result.push({ name, isCurated })
-      }
+      if (!name || seen.has(name)) continue
+      // 作品名タグ（作品名そのもの）はフィルタ候補に出さない
+      if (isTitleTag(name, title)) continue
+      seen.add(name)
+      result.push({ name, isCurated })
     }
   }
   return result
@@ -88,14 +105,16 @@ export function processEpisodeTags(tagsStr) {
 
 /**
  * DB から各シリーズの第1話（最古話）タグを取得して正規化し、replaceSeriesTags に渡せる形で返す。
+ * 作品名タグ除外のため series.title も取得して照合する。
  * @param {import('better-sqlite3').Database} db
  * @returns {{ seriesId: number, tags: { name: string, isCurated: boolean }[] }[]}
  */
 export function deriveSeriesTags(db) {
   const rows = db
     .prepare(
-      `SELECT e.series_id, e.tags
+      `SELECT e.series_id, e.tags, s.title AS series_title
        FROM episodes e
+       JOIN series s ON s.series_id = e.series_id
        WHERE e.series_id IS NOT NULL
          AND e.content_id = (
            SELECT e2.content_id FROM episodes e2
@@ -108,6 +127,6 @@ export function deriveSeriesTags(db) {
 
   return rows.map((row) => ({
     seriesId: row.series_id,
-    tags: processEpisodeTags(row.tags),
+    tags: processEpisodeTags(row.tags, row.series_title),
   }))
 }

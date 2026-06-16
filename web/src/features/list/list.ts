@@ -4,6 +4,8 @@ import { buildListUrl } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { card as createCard } from '../../components/card'
 import { icon } from '../../components/icon'
+import { metaSpan } from '../../components/meta'
+import type { MetaSpec } from '../../components/meta'
 
 export interface ListData {
   tags: Tag[]
@@ -15,7 +17,7 @@ type SortKey = ListState['sort']
 function sortLabel(sort: SortKey): string {
   switch (sort) {
     case 'hot':
-      return '勢い順'
+      return 'Hot'
     case 'views':
       return '再生数(累計)'
     case 'new':
@@ -38,6 +40,8 @@ export function renderList(
     data?: ListData
     favFilter?: boolean
     unwatchedFilter?: boolean
+    /** 選択中の並び替えに応じたカード下キャプション指標（Hot＝[flame]数値・新着＝[clock]投稿時間 等・§5） */
+    cardMetric?: (work: Work) => MetaSpec | null
   }
 ): void {
   const {
@@ -48,6 +52,7 @@ export function renderList(
     data,
     favFilter = false,
     unwatchedFilter = false,
+    cardMetric,
   } = options
   container.innerHTML = ''
 
@@ -105,7 +110,7 @@ export function renderList(
   sortInfo.className = 'info-btn'
   sortInfo.setAttribute('aria-label', '並び替えについて')
   sortInfo.title =
-    '勢い順＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／累計再生数順＝全期間の定番'
+    'Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／累計再生数順＝全期間の定番'
   sortInfo.appendChild(icon('info', 14))
   sortH3.appendChild(sortInfo)
   sortSection.appendChild(sortH3)
@@ -174,14 +179,14 @@ export function renderList(
   favCb.name = 'fav'
   favCb.checked = favFilter
   favLabel.appendChild(favCb)
-  favLabel.appendChild(document.createTextNode(' ♥ お気に入りだけ'))
+  favLabel.appendChild(document.createTextNode(' ♥ お気に入り'))
   const unwatchedLabel = document.createElement('label')
   const unwatchedCb = document.createElement('input')
   unwatchedCb.type = 'checkbox'
   unwatchedCb.name = 'unwatched'
   unwatchedCb.checked = unwatchedFilter
   unwatchedLabel.appendChild(unwatchedCb)
-  unwatchedLabel.appendChild(document.createTextNode(' ✓ 未視聴だけ'))
+  unwatchedLabel.appendChild(document.createTextNode(' ✓ 未視聴'))
   markSection.appendChild(favLabel)
   markSection.appendChild(unwatchedLabel)
   filterDiv.appendChild(markSection)
@@ -224,8 +229,18 @@ export function renderList(
   } else {
     works.forEach((work) => {
       const officialHref = seriesLink(work.seriesId) ?? ''
-      const card = createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref)
-      grid.appendChild(card)
+      const cell = document.createElement('div')
+      cell.className = 'card-cell'
+      cell.appendChild(createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref))
+      // カード外枠下に、選択中の並び替えに応じた指標を表示（§5）
+      const metric = cardMetric?.(work)
+      if (metric) {
+        const cap = document.createElement('div')
+        cap.className = 'card-caption'
+        cap.appendChild(metaSpan(metric))
+        cell.appendChild(cap)
+      }
+      grid.appendChild(cell)
     })
   }
   results.appendChild(grid)

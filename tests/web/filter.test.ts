@@ -32,47 +32,36 @@ const BASE_RANKING: RankingJson = {
   popular: [],
 }
 
-describe('colKeyMatchesRow', () => {
+describe('colKeyMatchesRow（col_key は行 char そのもの）', () => {
   it('null は常に false', () => {
     expect(colKeyMatchesRow(null, 'さ')).toBe(false)
   })
 
   it('未知の行は false', () => {
-    expect(colKeyMatchesRow('sa', 'x')).toBe(false)
+    expect(colKeyMatchesRow('さ', 'x')).toBe(false)
   })
 
-  it('さ行: sa が一致する', () => {
-    expect(colKeyMatchesRow('sa', 'さ')).toBe(true)
+  it('さ行: col_key=さ が一致する', () => {
+    expect(colKeyMatchesRow('さ', 'さ')).toBe(true)
   })
 
-  it('さ行: shi が一致する', () => {
-    expect(colKeyMatchesRow('shi', 'さ')).toBe(true)
+  it('さ行: col_key=や は不一致', () => {
+    expect(colKeyMatchesRow('や', 'さ')).toBe(false)
   })
 
-  it('さ行: ya は不一致', () => {
-    expect(colKeyMatchesRow('ya', 'さ')).toBe(false)
+  it('や行: col_key=や が一致する', () => {
+    expect(colKeyMatchesRow('や', 'や')).toBe(true)
   })
 
-  it('や行: ya が一致する', () => {
-    expect(colKeyMatchesRow('ya', 'や')).toBe(true)
+  it('前後空白は無視する', () => {
+    expect(colKeyMatchesRow(' さ ', 'さ')).toBe(true)
   })
 
-  it('や行: yu が一致する', () => {
-    expect(colKeyMatchesRow('yu', 'や')).toBe(true)
-  })
-
-  it('大文字小文字を無視する', () => {
-    expect(colKeyMatchesRow('SA', 'さ')).toBe(true)
-  })
-
-  it('na はな行のみに一致し、わ行には混入しない（H-2 回帰）', () => {
-    expect(colKeyMatchesRow('na', 'な')).toBe(true)
-    expect(colKeyMatchesRow('na', 'わ')).toBe(false)
-  })
-
-  it('n はわ行（ん）に一致する', () => {
-    expect(colKeyMatchesRow('n', 'わ')).toBe(true)
-    expect(colKeyMatchesRow('n', 'な')).toBe(false)
+  it('な行とわ行は別行で混入しない（H-2 回帰）', () => {
+    expect(colKeyMatchesRow('な', 'な')).toBe(true)
+    expect(colKeyMatchesRow('な', 'わ')).toBe(false)
+    expect(colKeyMatchesRow('わ', 'わ')).toBe(true)
+    expect(colKeyMatchesRow('わ', 'な')).toBe(false)
   })
 })
 
@@ -84,16 +73,16 @@ describe('currentCoursLabel', () => {
 
 describe('filterWorks (F-0028/0029/0030)', () => {
   const WORKS: Work[] = [
-    { ...BASE_WORK, seriesId: 1, title: 'さくら', colKey: 'sa', tags: ['日常'], cours: '2026-春' },
+    { ...BASE_WORK, seriesId: 1, title: 'さくら', colKey: 'さ', tags: ['日常'], cours: '2026-春' },
     {
       ...BASE_WORK,
       seriesId: 2,
       title: 'やまと',
-      colKey: 'ya',
+      colKey: 'や',
       tags: ['アクション'],
       cours: '2025-秋',
     },
-    { ...BASE_WORK, seriesId: 3, title: 'はなこ', colKey: 'ha', tags: ['日常'], cours: null },
+    { ...BASE_WORK, seriesId: 3, title: 'はなこ', colKey: 'は', tags: ['日常'], cours: null },
   ]
 
   it('test_kana_row_filter: さ行で絞ると colKey=sa のみ', () => {
@@ -156,9 +145,9 @@ describe('filterWorks (F-0028/0029/0030)', () => {
 
 describe('sortWorks (F-0031)', () => {
   const WORKS: Work[] = [
-    { ...BASE_WORK, seriesId: 3, colKey: 'sa', title: 'A' },
-    { ...BASE_WORK, seriesId: 1, colKey: 'ya', title: 'Z' },
-    { ...BASE_WORK, seriesId: 2, colKey: 'sa', title: 'B' },
+    { ...BASE_WORK, seriesId: 3, colKey: 'さ', title: 'A' },
+    { ...BASE_WORK, seriesId: 1, colKey: 'や', title: 'Z' },
+    { ...BASE_WORK, seriesId: 2, colKey: 'さ', title: 'B' },
   ]
 
   it('test_sort_options_deterministic: hot ソートが決定的', () => {
@@ -197,9 +186,9 @@ describe('sortWorks (F-0031)', () => {
   it('test_kana_sort_row_then_title: kana ソートが行順＋タイトル順', () => {
     const result = sortWorks(WORKS, 'kana', null)
     // さ行 (3=A, 2=B) → や行 (1=Z)
-    expect(result[0].colKey).toBe('sa')
-    expect(result[1].colKey).toBe('sa')
-    expect(result[2].colKey).toBe('ya')
+    expect(result[0].colKey).toBe('さ')
+    expect(result[1].colKey).toBe('さ')
+    expect(result[2].colKey).toBe('や')
     // さ行内: title 'A' < 'B'
     expect(result[0].title).toBe('A')
     expect(result[1].title).toBe('B')

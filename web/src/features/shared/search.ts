@@ -5,8 +5,12 @@ export function initHeaderSearch(
   searchBtn: HTMLElement,
   navigate: (url: string) => void
 ): () => void {
+  // 再レンダリングで重複しないよう既存オーバーレイを除去（body 直下に残るため）
+  document.querySelectorAll('.header-search-overlay').forEach((e) => e.remove())
+
+  // ヘッダ直下に被さる固定オーバーレイ（他要素を押し出さない＝展開でレイアウトが崩れない）
   const searchBar = document.createElement('div')
-  searchBar.className = 'header-search-bar'
+  searchBar.className = 'header-search-overlay'
   searchBar.hidden = true
 
   const input = document.createElement('input')
@@ -17,13 +21,14 @@ export function initHeaderSearch(
 
   const closeBtn = document.createElement('button')
   closeBtn.type = 'button'
-  closeBtn.className = 'header-search-close'
+  closeBtn.className = 'header-search-close icon-btn'
   closeBtn.textContent = '×'
   closeBtn.setAttribute('aria-label', '検索を閉じる')
 
   searchBar.appendChild(input)
   searchBar.appendChild(closeBtn)
-  searchBtn.parentElement?.appendChild(searchBar)
+  // header の中ではなく body 直下に置く（fixed オーバーレイ・header のレイアウトに影響しない）
+  document.body.appendChild(searchBar)
 
   const expand = () => {
     searchBar.hidden = false

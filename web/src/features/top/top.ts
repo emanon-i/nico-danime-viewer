@@ -39,11 +39,19 @@ function populateTop10(
   popular.slice(0, 10).forEach((entry, i) => {
     const href = seriesLink(entry.seriesId) ?? ''
     rail.appendChild(
-      card(entry.seriesId, entry.title, entry.thumbnailUrl, href, {
-        rank: i + 1,
-        views: entry.totalViews,
-        episodeCount: episodeCounts?.[entry.seriesId],
-      })
+      // Top のカードは外部（公式）へ直行＝カード全体が外部リンク・別途の ↗ は出さない（§11）
+      card(
+        entry.seriesId,
+        entry.title,
+        entry.thumbnailUrl,
+        href,
+        {
+          rank: i + 1,
+          views: entry.totalViews,
+          episodeCount: episodeCounts?.[entry.seriesId],
+        },
+        { externalWhole: true }
+      )
     )
   })
 }
@@ -77,7 +85,7 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   // 横並び 2 列の整列のため、両列の件数を揃える（最大 5）
   const count = Math.min(5, newSeries.length, resolvedEps.length)
 
-  // 新着シリーズ（シリーズ型: layers バッジ＋「全N話」＋ ↗ 公式シリーズ）
+  // 新着シリーズ（シリーズ型: layers バッジ＋[film]N話）。Top は行全体が外部（公式シリーズ）＝§11
   const seriesSec = document.createElement('li')
   seriesSec.dataset.subsection = 'new-series'
   const seriesLabel = document.createElement('strong')
@@ -91,11 +99,11 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
     const row = listRow({
       kind: 'series',
       title: w.title,
-      href: `?series=${w.seriesId}`,
+      href: seriesLink(w.seriesId) ?? `https://www.nicovideo.jp/series/${w.seriesId}`,
       thumbnailUrl: w.thumbnailUrl,
+      external: true,
       badge: 'シリーズ',
       metas,
-      externalHref: seriesLink(w.seriesId) ?? undefined,
     })
     row.classList.add('recent-item')
     seriesSec.appendChild(row)
@@ -123,6 +131,7 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
       })
     }
     const ep_label = splitEpisodeLabel(ep.title, ep.episodeNo)
+    // Top の各話行は本体が外部（公式 watch）＝行全体が外部・別途の ↗ は出さない（§11）
     const row = listRow({
       kind: 'episode',
       title: ep_label.title,
@@ -131,7 +140,6 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
       external: true,
       badge: ep_label.badge ?? undefined,
       metas,
-      externalHref: watchHref,
     })
     row.classList.add('recent-item')
     epSec.appendChild(row)
@@ -229,26 +237,30 @@ function populateTags(
     renderRandom()
   }
 
-  // 定番＝正規化済みタグ（dアニメキュレーション含む）。再生作品数の多い順。[もっと▾] で追加表示
+  // タグ一覧＝全タグを出現（作品）数の多い順。[もっと▾] でバッチ追加表示（§7）
   if (curatedDiv) {
-    const staples = discoveryTags(allTags)
-      .filter((t) => t.isCurated)
+    const all = discoveryTags(allTags)
+      .slice()
       .sort((a, b) => b.seriesCount - a.seriesCount)
       .map((t) => t.name)
-    const INITIAL = 10
-    fillTagRow(curatedDiv, '定番', staples.slice(0, INITIAL))
+    const INITIAL = 20
+    const STEP = 30
+    let shown = Math.min(INITIAL, all.length)
+    fillTagRow(curatedDiv, 'タグ', all.slice(0, shown))
 
-    if (staples.length > INITIAL) {
+    if (all.length > shown) {
       const moreBtn = document.createElement('button')
       moreBtn.className = 'tag-more-btn'
       moreBtn.textContent = 'もっと ▾'
       moreBtn.addEventListener('click', () => {
-        staples
-          .slice(INITIAL)
+        const next = Math.min(shown + STEP, all.length)
+        all
+          .slice(shown, next)
           .forEach((t) =>
             curatedDiv.insertBefore(chip(t, `?tag=${encodeURIComponent(t)}`), moreBtn)
           )
-        moreBtn.remove()
+        shown = next
+        if (shown >= all.length) moreBtn.remove()
       })
       curatedDiv.appendChild(moreBtn)
     }

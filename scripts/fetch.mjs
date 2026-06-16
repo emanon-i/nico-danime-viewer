@@ -48,7 +48,7 @@ import {
   mapCurrentCours,
   makeCoursLabel,
   parsePeriodHtml,
-  matchSlugsToSeries,
+  matchPeriodEntriesToSeries,
 } from './etl/cours.mjs'
 import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
@@ -130,15 +130,22 @@ async function derivePastCours(db, now) {
     seasonsWithData++
 
     const coursLabel = makeCoursLabel(year, season)
-    const matches = matchSlugsToSeries(parsed.slugs, seriesMap)
+    // アンカーの日本語タイトルで突合（slug 突合より高精度・高 recall）
+    const matches = matchPeriodEntriesToSeries(parsed.entries, seriesMap)
+    let seasonAssigned = 0
     for (const m of matches) {
       if (m.seriesId == null || m.confidence < COURS_MATCH_MIN) continue
       if (assigned.has(m.seriesId)) continue
       updateSeriesFields(db, m.seriesId, { cours: coursLabel, updated_at: now })
       assigned.add(m.seriesId)
       assignedCount++
+      seasonAssigned++
     }
-    logger.info('fetch', 'period season done', { cours: coursLabel, slugs: parsed.slugs.length })
+    logger.info('fetch', 'period season done', {
+      cours: coursLabel,
+      entries: parsed.entries.length,
+      assigned: seasonAssigned,
+    })
   }
 
   return { seasons: seasonsWithData, assigned: assignedCount }

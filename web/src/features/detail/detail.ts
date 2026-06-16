@@ -1,8 +1,114 @@
-import type { SeriesDetail } from '../../data/types'
+import type { SeriesDetail, SeriesEpisode } from '../../data/types'
 import { watchLink, seriesLink } from '../../shared/deeplink'
 import { buildDetailUrl } from '../router'
 import { icon } from '../../components/icon'
-import { metaSpan, formatViews } from '../../components/meta'
+import { hiResThumb } from '../../components/card'
+import { metaSpan, formatViews, formatRelativeTime } from '../../components/meta'
+
+/**
+ * 各話行を生成する。
+ * - 主クリック（行本体ボタン）→ 各話詳細をインライン展開（アコーディオン・§13 項目13）
+ * - 副 ↗（external-link）→ 公式 watch（外部・別タブ・§12 で ▶ から ↗ へ変更）
+ */
+function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
+  const row = document.createElement('div')
+  row.className = 'episode-row'
+  row.dataset.part = 'episode'
+  row.dataset.episodeNo = ep.episodeNo != null ? String(ep.episodeNo) : ''
+
+  const head = document.createElement('div')
+  head.className = 'episode-head'
+
+  // 主アクション＝行本体（クリックで詳細を開閉）
+  const main = document.createElement('button')
+  main.type = 'button'
+  main.className = 'episode-main'
+  main.setAttribute('aria-expanded', 'false')
+
+  const noSpan = document.createElement('span')
+  noSpan.className = 'ep-no'
+  noSpan.textContent = ep.episodeNo != null ? `#${ep.episodeNo}` : ''
+  main.appendChild(noSpan)
+
+  const titleSpan = document.createElement('span')
+  titleSpan.className = 'ep-title'
+  titleSpan.textContent = ep.title ?? ''
+  main.appendChild(titleSpan)
+
+  const viewsSpan = metaSpan({
+    icon: 'play',
+    value: formatViews(ep.viewCounter),
+    label: `再生数 ${formatViews(ep.viewCounter)}`,
+  })
+  viewsSpan.classList.add('ep-views')
+  main.appendChild(viewsSpan)
+
+  const chevron = document.createElement('span')
+  chevron.className = 'ep-toggle'
+  chevron.appendChild(icon('chevron-right', 16))
+  main.appendChild(chevron)
+  head.appendChild(main)
+
+  // 副 ↗＝公式 watch（外部）
+  const href = watchLink(ep.contentId)
+  if (href) {
+    const watchAnchor = document.createElement('a')
+    watchAnchor.className = 'watch-link'
+    watchAnchor.dataset.action = 'watch'
+    watchAnchor.href = href
+    watchAnchor.target = '_blank'
+    watchAnchor.rel = 'noopener noreferrer'
+    watchAnchor.appendChild(icon('external-link', 14))
+    watchAnchor.appendChild(document.createTextNode('公式'))
+    head.appendChild(watchAnchor)
+  }
+  row.appendChild(head)
+
+  // アコーディオン詳細（サムネ＋メタ）
+  const detail = document.createElement('div')
+  detail.className = 'episode-detail'
+  detail.hidden = true
+
+  const thumbSrc = hiResThumb(ep.thumbnailUrl ?? null)
+  if (thumbSrc) {
+    const thumb = document.createElement('div')
+    thumb.className = 'episode-detail-thumb'
+    const img = document.createElement('img')
+    img.src = thumbSrc
+    img.alt = ''
+    img.loading = 'lazy'
+    img.decoding = 'async'
+    thumb.appendChild(img)
+    detail.appendChild(thumb)
+  }
+
+  const dmeta = document.createElement('div')
+  dmeta.className = 'episode-detail-meta'
+  dmeta.appendChild(
+    metaSpan({
+      icon: 'play',
+      value: formatViews(ep.viewCounter),
+      label: `再生数 ${formatViews(ep.viewCounter)}`,
+    })
+  )
+  if (ep.startTime) {
+    const rel = formatRelativeTime(ep.startTime)
+    if (rel) {
+      dmeta.appendChild(metaSpan({ icon: 'clock', value: rel, label: `投稿 ${rel}` }))
+    }
+  }
+  detail.appendChild(dmeta)
+  row.appendChild(detail)
+
+  main.addEventListener('click', () => {
+    const open = detail.hidden
+    detail.hidden = !open
+    main.setAttribute('aria-expanded', open ? 'true' : 'false')
+    row.classList.toggle('open', open)
+  })
+
+  return row
+}
 
 /** シリーズ詳細画面を描画する。series が null または episodes 空なら empty 表示 */
 export function renderDetail(container: HTMLElement, series: SeriesDetail | null): void {
@@ -122,43 +228,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     episodesSection.appendChild(heading)
 
     series.episodes.forEach((ep) => {
-      const row = document.createElement('div')
-      row.className = 'episode-row'
-      row.dataset.part = 'episode'
-      row.dataset.episodeNo = ep.episodeNo != null ? String(ep.episodeNo) : ''
-
-      const noSpan = document.createElement('span')
-      noSpan.className = 'ep-no'
-      noSpan.textContent = ep.episodeNo != null ? `#${ep.episodeNo}` : ''
-      row.appendChild(noSpan)
-
-      const titleSpan = document.createElement('span')
-      titleSpan.className = 'ep-title'
-      titleSpan.textContent = ep.title ?? ''
-      row.appendChild(titleSpan)
-
-      const viewsSpan = metaSpan({
-        icon: 'play',
-        value: formatViews(ep.viewCounter),
-        label: `再生数 ${formatViews(ep.viewCounter)}`,
-      })
-      viewsSpan.classList.add('ep-views')
-      row.appendChild(viewsSpan)
-
-      const href = watchLink(ep.contentId)
-      if (href) {
-        const watchAnchor = document.createElement('a')
-        watchAnchor.className = 'watch-link'
-        watchAnchor.dataset.action = 'watch'
-        watchAnchor.href = href
-        watchAnchor.target = '_blank'
-        watchAnchor.rel = 'noopener noreferrer'
-        watchAnchor.appendChild(icon('play', 14))
-        watchAnchor.appendChild(document.createTextNode('公式'))
-        row.appendChild(watchAnchor)
-      }
-
-      episodesSection.appendChild(row)
+      episodesSection.appendChild(buildEpisodeRow(ep))
     })
   }
   container.appendChild(episodesSection)

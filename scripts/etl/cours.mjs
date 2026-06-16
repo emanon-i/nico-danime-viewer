@@ -24,7 +24,82 @@ export function parsePeriodHtml(html, source = '') {
     }
   }
 
-  return { title: titleMatch[1].trim(), slugs }
+  // アンカーから (slug, 日本語タイトル) を抽出。period の作品リンクのアンカー文には
+  // 日本語タイトルが含まれる（例「新作 アークナイツ【…】 2022/10/28(金)～…」）ため、
+  // タイトル突合（日本語↔日本語）に使う＝romaji slug 突合より高精度・高 recall。
+  const entries = []
+  const seenSlug = new Set()
+  const aRe = /<a[^>]*href="[^"]*\/detail\/([^/"]+)\/?[^"]*"[^>]*>([\s\S]*?)<\/a>/g
+  let am
+  while ((am = aRe.exec(html)) !== null) {
+    if (seenSlug.has(am[1])) continue
+    seenSlug.add(am[1])
+    entries.push({ slug: am[1], title: cleanPeriodTitle(am[2]) })
+  }
+
+  return { title: titleMatch[1].trim(), slugs, entries }
+}
+
+/**
+ * period アンカー文から日本語の作品タイトルを抽出（状態ラベル・放送日時・媒体名を除去）。
+ * 例「新作 アークナイツ【黎明前奏/PRELUDE TO DAWN】 2022/10/28(金)～ テレビ」→「アークナイツ【黎明前奏/PRELUDE TO DAWN】」
+ * @param {string} raw - アンカー innerHTML
+ * @returns {string}
+ */
+export function cleanPeriodTitle(raw) {
+  let t = (raw ?? '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  // 放送日時・媒体・スケジュール表記の手前で切る
+  t = t.split(/\s\d{4}\/\d{1,2}\/\d{1,2}/u)[0]
+  t = t.split(/\s\d{1,2}月\d{1,2}日/u)[0]
+  t = t.split(/[（(][月火水木金土日][）)]/u)[0]
+  t = t.split(/\s(?:TOKYO|AT-X|BS|ニコ動|テレビ|スタート|毎週|配信中|放送|独占)/u)[0]
+  // 先頭の状態ラベル（新作/継続 等）を除去
+  t = t
+    .replace(/^(新作|継続|独占|最速|見放題|無料あり|無料|TVアニメ|TV|劇場版|特別編?|配信)\s*/u, '')
+    .trim()
+  // 末尾の「～…」以降を除去
+  t = t.replace(/[～〜~].*$/u, '').trim()
+  return t
+}
+
+/**
+ * period の (slug, 日本語タイトル) を series にタイトル正規化で結合する（slug 突合より優先）。
+ * 完全一致＝1.0、片方が他方の接頭（短い側 4 文字以上）＝0.8。
+ * @param {{ slug: string, title: string }[]} entries
+ * @param {Map<number, string>} seriesMap - series_id → title
+ * @param {Record<string, number>} overrides - slug → series_id（手動 override）
+ * @returns {{ seriesId: number|null, slug: string, confidence: number }[]}
+ */
+export function matchPeriodEntriesToSeries(entries, seriesMap, overrides = {}) {
+  // 正規化タイトル → series_id（最初の1件を採用）
+  const byNorm = new Map()
+  for (const [id, title] of seriesMap) {
+    const n = normalizeTitleForMatch(title)
+    if (n && !byNorm.has(n)) byNorm.set(n, id)
+  }
+
+  return entries.map(({ slug, title }) => {
+    if (overrides[slug] != null) {
+      return { seriesId: Number(overrides[slug]), slug, confidence: 1.0 }
+    }
+    const n = normalizeTitleForMatch(title)
+    if (!n) return { seriesId: null, slug, confidence: 0 }
+    if (byNorm.has(n)) return { seriesId: byNorm.get(n), slug, confidence: 1.0 }
+    // 接頭一致（短い側 4 文字以上）。「アークナイツ」⊂「アークナイツ【…】」等を拾う。
+    for (const [sn, id] of byNorm) {
+      if (
+        sn.length >= 4 &&
+        Math.min(sn.length, n.length) >= 4 &&
+        (n.startsWith(sn) || sn.startsWith(n))
+      ) {
+        return { seriesId: id, slug, confidence: 0.8 }
+      }
+    }
+    return { seriesId: null, slug, confidence: 0 }
+  })
 }
 
 /**

@@ -763,6 +763,28 @@
     }
   }
 
+  /* カード＋下キャプション（並び替え連動の指標＝§5）。カードは外枠、指標は枠の下。 */
+  .card-cell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    min-width: 0;
+
+    .series-card {
+      width: 100%;
+    }
+  }
+
+  .card-caption {
+    display: flex;
+    align-items: center;
+    padding-inline: var(--sp-1);
+
+    .meta {
+      color: var(--text-muted);
+    }
+  }
+
   @media (max-width: 479px) {
     .list-grid {
       grid-template-columns: repeat(2, 1fr);
@@ -1140,19 +1162,52 @@
   }
 
   /* ── 検索オーバーレイ (ヘッダ) ─────────────────── */
+  /* ヘッダ🔍 展開オーバーレイ（固定・他要素を押し出さない＝§6）。
+     header の中ではなく body 直下に固定配置し、開閉でレイアウトを崩さない。 */
   .header-search-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     z-index: var(--z-modal);
-    background: var(--bg);
+    background: color-mix(in oklch, var(--bg) 92%, transparent);
+    backdrop-filter: saturate(1.4) blur(12px);
     border-bottom: 1px solid var(--border);
-    padding: var(--sp-3) var(--sp-5);
+    padding: var(--sp-3) var(--gutter);
     display: flex;
     gap: var(--sp-3);
     align-items: center;
     box-shadow: var(--shadow-md);
+
+    /* hidden 属性で確実に隠す（display:flex が UA の [hidden] を上書きするため明示） */
+    &[hidden] {
+      display: none;
+    }
+
+    .header-search-input {
+      flex: 1;
+      min-width: 0;
+      padding: var(--sp-3) var(--sp-4);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-full);
+      color: var(--text);
+      font-size: var(--text-l3);
+
+      &::placeholder {
+        color: var(--text-muted);
+      }
+      &:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--focus-ring);
+      }
+    }
+
+    .header-search-close {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
   }
 
   /* ── 設定モーダル ────────────────────────────────── */
@@ -1418,10 +1473,33 @@
     }
   }
 
+  /* 並び替えラジオ＝1 項目 1 行・十分なスペーシング（§8） */
+  .filter-sort label {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) 0;
+    font-size: var(--text-l4);
+    color: var(--text-muted);
+    cursor: pointer;
+
+    input[type='radio'] {
+      accent-color: var(--accent);
+      margin: 0;
+    }
+
+    &:has(input:checked) {
+      color: var(--text);
+      font-weight: 500;
+    }
+  }
+
+  /* お気に入り/未視聴フィルタは横並び（§9） */
   .filter-mark {
     display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-4);
 
     label {
       display: flex;
@@ -1433,6 +1511,7 @@
 
       input {
         accent-color: var(--accent);
+        margin: 0;
       }
     }
   }
@@ -1668,15 +1747,38 @@
     font-size: var(--text-l2);
   }
 
+  /* 各話行＝主クリックでアコーディオン展開（§13）＋副 ↗ 公式（外部・§12） */
   .episode-row {
     display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    padding: var(--sp-3) 0;
+    flex-direction: column;
     border-bottom: 1px solid var(--border);
 
     &:last-child {
       border-bottom: none;
+    }
+
+    .episode-head {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-3) 0;
+    }
+
+    /* 主アクション＝行本体（開閉ボタン） */
+    .episode-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      text-align: left;
+      padding: 0;
+      color: var(--text);
+      border-radius: var(--r-sm);
+
+      &:hover .ep-title {
+        color: var(--accent);
+      }
     }
 
     .ep-no {
@@ -1695,10 +1797,25 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      transition: color 0.15s;
     }
 
     .ep-views {
       flex-shrink: 0;
+    }
+
+    .ep-toggle {
+      flex-shrink: 0;
+      display: inline-flex;
+      color: var(--text-muted);
+
+      svg {
+        transition: transform 0.2s ease;
+      }
+    }
+
+    &.open .ep-toggle svg {
+      transform: rotate(90deg);
     }
 
     .watch-link {
@@ -1721,6 +1838,39 @@
         color: var(--accent);
         border-color: var(--accent);
       }
+    }
+
+    /* アコーディオン詳細（サムネ＋メタ） */
+    .episode-detail {
+      display: flex;
+      gap: var(--sp-4);
+      align-items: flex-start;
+      padding: 0 0 var(--sp-4) calc(2.5rem + var(--sp-3));
+
+      &[hidden] {
+        display: none;
+      }
+    }
+
+    .episode-detail-thumb {
+      flex: 0 0 9rem;
+      aspect-ratio: var(--card-aspect);
+      border-radius: var(--r-sm);
+      overflow: hidden;
+      background: var(--surface-2);
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    }
+
+    .episode-detail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-3);
+      padding-top: var(--sp-1);
     }
   }
 
@@ -1814,6 +1964,56 @@
       &:hover {
         color: var(--accent-hover);
       }
+    }
+  }
+
+  /* ── 全ページ共通フッター（情報＝出典・更新・リポジトリ＝§10）──── */
+  .site-footer {
+    border-top: 1px solid var(--border);
+    margin-top: var(--sp-7);
+    padding: var(--sp-5) var(--gutter);
+    background: var(--surface);
+  }
+
+  .site-footer-inner {
+    max-width: var(--content-max);
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .footer-note {
+    font-size: var(--text-l4);
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .footer-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2) var(--sp-5);
+    font-size: var(--text-l4);
+  }
+
+  .footer-updated {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    color: var(--accent);
+
+    &::after {
+      content: '→';
+    }
+    &:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
     }
   }
 }

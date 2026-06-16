@@ -19,6 +19,8 @@ export interface Work {
   colKey: string | null
   /** シリーズの各話数（episodes テーブルの件数）。「全N話」表示に使う */
   episodeCount: number
+  /** 最新話の投稿時刻（episodes.start_time の最大・ISO8601）。新着順・投稿時間メタに使う（旧 JSON では欠落） */
+  latestAt?: string | null
   relatedSeries: RelatedSeries[]
 }
 

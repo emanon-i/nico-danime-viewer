@@ -26,9 +26,19 @@ export function hiResThumb(url: string | null): string {
   return /\/thumbnails\/\d+\/\d+\.\d+$/.test(url) ? `${url}.L` : url
 }
 
+/** カード生成オプション */
+export interface CardOpts {
+  /**
+   * true のときカード本体クリックを**外部（公式）**へ飛ばし、右上 ↗ を出さない（§11・Top 用）。
+   * 既定 false ＝本体はうちの詳細 `?series=`・右上 ↗ で公式（一覧用）。
+   */
+  externalWhole?: boolean
+}
+
 /**
  * シリーズカード DOM を生成する。
  * - 主アクション: カード本体（`.card-body`）→ うちの作品詳細 `?series=<id>`
+ *   （`externalWhole` 時は公式へ外部遷移＝§11・右上 ↗ は出さない）
  * - 副アクション: 右上 `.card-external` → 公式シリーズ（外部・別タブ）
  * - 左上 `.card-favorite` / `.card-watched`（localStorage 同期は main.ts の wireCards）
  *
@@ -42,16 +52,26 @@ export function card(
   title: string,
   thumbnailUrl: string | null,
   officialHref?: string,
-  meta?: CardMeta
+  meta?: CardMeta,
+  opts?: CardOpts
 ): HTMLElement {
+  const externalHref = officialHref ?? seriesLink(seriesId) ?? ''
+  const externalWhole = opts?.externalWhole === true && externalHref !== ''
+
   const el = document.createElement('div')
-  el.className = 'series-card'
+  el.className = 'series-card' + (externalWhole ? ' card-external-whole' : '')
   el.dataset.seriesId = String(seriesId)
 
   // ── 主: カード本体（サムネ＋オーバーレイ文字）──────────────
   const bodyLink = document.createElement('a')
   bodyLink.className = 'card-body'
-  bodyLink.href = `?series=${seriesId}`
+  if (externalWhole) {
+    bodyLink.href = externalHref
+    bodyLink.target = '_blank'
+    bodyLink.rel = 'noopener noreferrer'
+  } else {
+    bodyLink.href = `?series=${seriesId}`
+  }
 
   const img = document.createElement('img')
   img.className = 'card-img'
@@ -133,11 +153,11 @@ export function card(
   el.appendChild(actions)
 
   // ── 右上: ↗ 公式シリーズ（外部）────────────────────────────
-  const href = officialHref ?? seriesLink(seriesId) ?? ''
-  if (href) {
+  // externalWhole（カード全体が外部）時は冗長なので出さない（§11）。
+  if (!externalWhole && externalHref) {
     const extLink = document.createElement('a')
     extLink.className = 'icon-btn card-external'
-    extLink.href = href
+    extLink.href = externalHref
     extLink.target = '_blank'
     extLink.rel = 'noopener noreferrer'
     extLink.setAttribute('aria-label', '公式シリーズページを開く')

@@ -3,38 +3,22 @@ import type { ListState } from '../router'
 
 export const PAGE_SIZE = 24
 
-const KANA_ROW_PREFIXES: Record<string, readonly string[]> = {
-  あ: ['a', 'i', 'u', 'e', 'o'],
-  か: ['ka', 'ki', 'ku', 'ke', 'ko', 'ga', 'gi', 'gu', 'ge', 'go'],
-  さ: ['sa', 'shi', 'su', 'se', 'so', 'za', 'ji', 'zu', 'ze', 'zo'],
-  た: ['ta', 'chi', 'tsu', 'te', 'to', 'da', 'de', 'do'],
-  な: ['na', 'ni', 'nu', 'ne', 'no'],
-  は: ['ha', 'hi', 'fu', 'he', 'ho', 'ba', 'bi', 'bu', 'be', 'bo', 'pa', 'pi', 'pu', 'pe', 'po'],
-  ま: ['ma', 'mi', 'mu', 'me', 'mo'],
-  や: ['ya', 'yu', 'yo'],
-  ら: ['ra', 'ri', 'ru', 're', 'ro'],
-  わ: ['wa', 'wi', 'we', 'wo', 'n'],
-}
-
+// list.json の col_key は読みベースの五十音「行」char（あ/か/さ/た/な/は/ま/や/ら/わ）。
+// ローマ字ではなく日本語の行 char がそのまま入る（実データで確認）。
 const KANA_ROW_ORDER = ['あ', 'か', 'さ', 'た', 'な', 'は', 'ま', 'や', 'ら', 'わ']
 
-/** colKey が属する行のインデックスを返す（最初にマッチした行を採用・曖昧性排除） */
+/** colKey（＝行 char）が属する行のインデックスを返す。未知/null は Infinity */
 function kanaRowIndex(colKey: string | null): number {
   if (!colKey) return Infinity
-  const ck = colKey.toLowerCase()
-  for (let i = 0; i < KANA_ROW_ORDER.length; i++) {
-    const prefixes = KANA_ROW_PREFIXES[KANA_ROW_ORDER[i]]
-    if (prefixes?.some((p) => ck.startsWith(p))) return i
-  }
-  return Infinity
+  const i = KANA_ROW_ORDER.indexOf(colKey.trim())
+  return i < 0 ? Infinity : i
 }
 
-/** colKey が指定した行（あ〜わ）に属するか判定する */
+/** colKey が指定した行（あ〜わ）に属するか判定する（col_key は行 char そのもの） */
 export function colKeyMatchesRow(colKey: string | null, row: string): boolean {
   if (!colKey) return false
-  const rowIdx = KANA_ROW_ORDER.indexOf(row)
-  if (rowIdx < 0) return false
-  return kanaRowIndex(colKey) === rowIdx
+  if (KANA_ROW_ORDER.indexOf(row) < 0) return false
+  return colKey.trim() === row
 }
 
 export function currentCoursLabel(): string {

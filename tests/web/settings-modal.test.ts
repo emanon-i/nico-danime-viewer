@@ -102,34 +102,11 @@ describe('F-0035: 設定/情報モーダル', () => {
     expect(isWatched(20)).toBe(false)
   })
 
-  it('test_last_updated_display: モーダルに data-part="last-updated" 要素がある', () => {
+  it('情報（出典・更新・リポジトリ）は設定モーダルに含めない（フッターへ移設＝§10）', () => {
     const { btn, container } = setup({ lastUpdated: '2026-06-16T00:00:00Z' })
     btn.click()
-    const el = container.querySelector('[data-part="last-updated"]')
-    expect(el).not.toBeNull()
-    expect(el?.textContent).toContain('2026-06-16')
-  })
-
-  it('test_last_updated_display: lastUpdated なしのとき "不明" と表示される', () => {
-    const { btn, container } = setup()
-    btn.click()
-    const el = container.querySelector('[data-part="last-updated"]')
-    expect(el?.textContent).toContain('不明')
-  })
-
-  it('test_repo_link_visibility: repoUrl ありのときリポジトリリンクが表示される', () => {
-    const { btn, container } = setup({ repoUrl: 'https://github.com/test/repo' })
-    btn.click()
-    const link = container.querySelector('.settings-repo-link')
-    expect(link).not.toBeNull()
-    expect(link?.getAttribute('href')).toBe('https://github.com/test/repo')
-  })
-
-  it('test_repo_link_visibility: repoUrl なしのとき「準備中」が表示される', () => {
-    const { btn, container } = setup({ repoUrl: null })
-    btn.click()
-    const unavailable = container.querySelector('.settings-repo-unavailable')
-    expect(unavailable).not.toBeNull()
+    expect(container.querySelector('[data-part="last-updated"]')).toBeNull()
+    expect(container.querySelector('.settings-source-link')).toBeNull()
     expect(container.querySelector('.settings-repo-link')).toBeNull()
   })
 
@@ -139,14 +116,5 @@ describe('F-0035: 設定/情報モーダル', () => {
     const overlay = container.querySelector('.settings-overlay')
     expect(overlay?.getAttribute('role')).toBe('dialog')
     expect(overlay?.getAttribute('aria-modal')).toBe('true')
-  })
-
-  it('外部リンク（リポジトリリンク）に noopener noreferrer がある', () => {
-    const { btn, container } = setup({ repoUrl: 'https://github.com/test/repo' })
-    btn.click()
-    const link = container.querySelector('.settings-repo-link')
-    expect(link?.getAttribute('rel')).toContain('noopener')
-    expect(link?.getAttribute('rel')).toContain('noreferrer')
-    expect(link?.getAttribute('target')).toBe('_blank')
   })
 })

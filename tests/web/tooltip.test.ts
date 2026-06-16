@@ -107,7 +107,7 @@ describe('F-0037: ⓘ ツールチップ（各画面1か所集約）', () => {
     renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
     const infoBtn = container.querySelector('.info-btn')
     const title = infoBtn?.getAttribute('title') ?? ''
-    expect(title).toContain('勢い順')
+    expect(title).toContain('Hot')
     expect(title).toContain('目安')
   })
 

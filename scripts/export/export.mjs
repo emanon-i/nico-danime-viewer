@@ -18,7 +18,8 @@ export function exportWorks(db, outDir, lastUpdated) {
     .prepare(
       `SELECT s.series_id, s.title, s.thumbnail_url, s.description_first,
               s.col_key, s.cours, s.franchise_key,
-              (SELECT COUNT(*) FROM episodes e WHERE e.series_id = s.series_id) AS episode_count
+              (SELECT COUNT(*) FROM episodes e WHERE e.series_id = s.series_id) AS episode_count,
+              (SELECT MAX(e.start_time) FROM episodes e WHERE e.series_id = s.series_id) AS latest_at
        FROM series s
        WHERE s.is_available = 1
        ORDER BY s.series_id`
@@ -69,6 +70,7 @@ export function exportWorks(db, outDir, lastUpdated) {
     franchiseKey: s.franchise_key,
     colKey: s.col_key,
     episodeCount: s.episode_count ?? 0,
+    latestAt: s.latest_at ?? null,
     relatedSeries: relatedBySeries.get(s.series_id) ?? [],
   }))
 

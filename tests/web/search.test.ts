@@ -25,16 +25,17 @@ describe('initHeaderSearch (F-0027)', () => {
 
   afterEach(() => {
     document.body.removeChild(wrapper)
+    document.querySelectorAll('.header-search-overlay').forEach((e) => e.remove())
   })
 
   it('test_search_expand_collapse: 初期状態で検索バーは非表示', () => {
-    const bar = wrapper.querySelector('.header-search-bar')
+    const bar = document.querySelector('.header-search-overlay')
     expect(bar?.getAttribute('hidden') !== null || (bar as HTMLElement | null)?.hidden).toBe(true)
   })
 
   it('test_search_expand_collapse: 🔍クリックで検索バーが展開する', () => {
     searchBtn.click()
-    const bar = wrapper.querySelector<HTMLElement>('.header-search-bar')
+    const bar = document.querySelector<HTMLElement>('.header-search-overlay')
     expect(bar?.hidden).toBe(false)
     expect(searchBtn.getAttribute('aria-expanded')).toBe('true')
   })
@@ -42,30 +43,30 @@ describe('initHeaderSearch (F-0027)', () => {
   it('test_search_expand_collapse: 再クリックで折畳む', () => {
     searchBtn.click()
     searchBtn.click()
-    const bar = wrapper.querySelector<HTMLElement>('.header-search-bar')
+    const bar = document.querySelector<HTMLElement>('.header-search-overlay')
     expect(bar?.hidden).toBe(true)
     expect(searchBtn.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('test_search_expand_collapse: ×ボタンで閉じる', () => {
     searchBtn.click()
-    const closeBtn = wrapper.querySelector<HTMLElement>('.header-search-close')
+    const closeBtn = document.querySelector<HTMLElement>('.header-search-close')
     closeBtn?.click()
-    const bar = wrapper.querySelector<HTMLElement>('.header-search-bar')
+    const bar = document.querySelector<HTMLElement>('.header-search-overlay')
     expect(bar?.hidden).toBe(true)
   })
 
   it('test_search_expand_collapse: Esc キーで閉じる', () => {
     searchBtn.click()
-    const input = wrapper.querySelector<HTMLInputElement>('.header-search-input')
+    const input = document.querySelector<HTMLInputElement>('.header-search-input')
     input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    const bar = wrapper.querySelector<HTMLElement>('.header-search-bar')
+    const bar = document.querySelector<HTMLElement>('.header-search-overlay')
     expect(bar?.hidden).toBe(true)
   })
 
   it('test_search_routes_to_list: Enter でクエリ付き URL へ遷移する', () => {
     searchBtn.click()
-    const input = wrapper.querySelector<HTMLInputElement>('.header-search-input')!
+    const input = document.querySelector<HTMLInputElement>('.header-search-input')!
     input.value = 'ゆるキャン'
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     expect(navigated).toContain('q=')
@@ -74,7 +75,7 @@ describe('initHeaderSearch (F-0027)', () => {
 
   it('空クエリでは遷移しない', () => {
     searchBtn.click()
-    const input = wrapper.querySelector<HTMLInputElement>('.header-search-input')!
+    const input = document.querySelector<HTMLInputElement>('.header-search-input')!
     input.value = '  '
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     expect(navigated).toBe('')
