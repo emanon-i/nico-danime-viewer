@@ -101,16 +101,27 @@ describe('renderTop (F-0023)', () => {
     expect(heroInput).not.toBeNull()
   })
 
-  it('クイックアクセスに5つのボタンがある（今期/新着/Hot/人気TOP/五十音）', () => {
+  it('クイックアクセスは厳選3固定（今期/人気/Hot）＋ランダムタグ×2（データ時）', () => {
+    // データなし時は固定3ボタンのみ（ランダムタグはデータ供給時に追加）
     const btns = container.querySelectorAll('[data-section="quick-access"] .quick-btn')
-    expect(btns.length).toBe(5)
-    expect(Array.from(btns).map((b) => b.textContent)).toEqual([
-      '今期',
-      '新着',
-      'Hot',
-      '人気TOP',
-      '五十音',
-    ])
+    expect(btns.length).toBe(3)
+    expect(Array.from(btns).map((b) => b.textContent)).toEqual(['今期', '人気', 'Hot'])
+  })
+
+  it('クイックアクセスは nav（サイトナビゲーション・ランドマーク）である', () => {
+    const qa = container.querySelector('[data-section="quick-access"]')
+    expect(qa?.tagName.toLowerCase()).toBe('nav')
+  })
+
+  it('ヒーロー直下に「一覧で探す」独立プライマリボタン（?screen=list）がある', () => {
+    const browse = container.querySelector<HTMLAnchorElement>('.hero .btn-primary.hero-browse-btn')
+    expect(browse).not.toBeNull()
+    expect(browse?.getAttribute('href')).toBe('?screen=list')
+  })
+
+  it('共通ヘッダ（banner）と main#main-content ランドマークがある', () => {
+    expect(container.querySelector('header[role="banner"]')).not.toBeNull()
+    expect(container.querySelector('main#main-content')).not.toBeNull()
   })
 })
 
@@ -150,15 +161,29 @@ describe('renderTop with data (F-0032)', () => {
     document.body.removeChild(container)
   })
 
-  it('test_quick_access_presets: 5プリセットが所定URLを持つ', () => {
+  it('test_quick_access_presets: 厳選プリセットが所定URLを持つ（今期/人気/Hot）', () => {
     renderTop(container)
     const btns = container.querySelectorAll('[data-section="quick-access"] .quick-btn')
     const hrefs = Array.from(btns).map((b) => b.getAttribute('href'))
+    // 今期＝勢い順プリセット
     expect(hrefs.some((h) => h?.includes('cours=current') && h?.includes('sort=hot'))).toBe(true)
-    expect(hrefs).toContain('?sort=new')
-    expect(hrefs).toContain('?sort=hot')
+    // 人気＝累計再生数順
     expect(hrefs).toContain('?sort=views')
-    expect(hrefs).toContain('?sort=kana')
+    // Hot＝勢い順
+    expect(hrefs).toContain('?sort=hot')
+    // 新着・五十音はクイックアクセスに置かない（⑤セクション・一覧ナビで担保）
+    expect(hrefs).not.toContain('?sort=new')
+    expect(hrefs).not.toContain('?sort=kana')
+  })
+
+  it('データ供給時はランダムタグ×2（タグチップ型ピル）が追加される', () => {
+    renderTop(container, SAMPLE_DATA)
+    const quickTags = container.querySelectorAll('[data-section="quick-access"] .quick-tag')
+    expect(quickTags.length).toBe(2)
+    quickTags.forEach((t) => {
+      expect(t.getAttribute('href')).toContain('tag=')
+      expect(t.textContent?.startsWith('#')).toBe(true)
+    })
   })
 
   it('test_header_order: ヘッダ右側は 🔍 → テーマ → 設定 の順（慣例＝設定が右端）', () => {
@@ -214,7 +239,9 @@ describe('renderTop with data (F-0032)', () => {
     const row = container.querySelector('[data-subsection="new-series"] .recent-item.list-row')
     expect(row?.getAttribute('data-kind')).toBe('series')
     expect(row?.querySelector('.list-row-badge')?.textContent).toContain('シリーズ')
-    expect(row?.querySelector('.list-row-meta')?.textContent).toBe('全12話')
+    // メタはアイコン圧縮（[film]12話・「全」は省く＝§8.2）
+    expect(row?.querySelector('.list-row-meta')?.textContent).toBe('12話')
+    expect(row?.querySelector('.list-row-meta .meta svg')).not.toBeNull()
     const ext = row?.querySelector<HTMLAnchorElement>('.list-row-external')
     expect(ext?.getAttribute('href')).toBe('https://www.nicovideo.jp/series/100')
     expect(ext?.getAttribute('rel')).toContain('noopener')
@@ -225,7 +252,9 @@ describe('renderTop with data (F-0032)', () => {
     const row = container.querySelector('[data-subsection="new-episodes"] .recent-item.list-row')
     expect(row?.getAttribute('data-kind')).toBe('episode')
     expect(row?.querySelector('.list-row-badge')?.textContent).toBe('第11話')
-    expect(row?.querySelector('.list-row-meta')?.textContent).toContain('132 再生')
+    // メタは [clock]投稿時間（強調）＋[play]再生数（アイコン圧縮・「再生」語は省く＝§8.2）
+    expect(row?.querySelector('.list-row-meta')?.textContent).toContain('132')
+    expect(row?.querySelector('.list-row-meta .meta-emphasis')).not.toBeNull()
     const ext = row?.querySelector<HTMLAnchorElement>('.list-row-external')
     expect(ext?.getAttribute('href')).toBe('https://www.nicovideo.jp/watch/so123')
     expect(ext?.getAttribute('rel')).toContain('noopener')

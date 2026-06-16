@@ -26,7 +26,7 @@ function addDataMiddleware(middlewares: {
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     createReadStream(file)
       .on('error', () => next())
-      .pipe(res as NodeJS.WritableStream)
+      .pipe(res as unknown as NodeJS.WritableStream)
   })
 }
 

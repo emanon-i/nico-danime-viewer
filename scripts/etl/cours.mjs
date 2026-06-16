@@ -74,6 +74,15 @@ export function normalizeSlug(slug) {
 }
 
 /**
+ * b が a に「空白区切りの語境界」で含まれるか（部分文字列の偶発一致を避ける）。
+ * 例: "bleach anime" ⊃ "bleach"（true）／"utawarerumono" ⊃ "mono"（false）。
+ */
+function boundaryContains(a, b) {
+  if (a === b) return true
+  return a.startsWith(b + ' ') || a.endsWith(' ' + b) || a.includes(' ' + b + ' ')
+}
+
+/**
  * slug ↔ series をタイトル正規化＋信頼度スコアで結合する。
  * @param {string[]} slugs
  * @param {Map<number, string>} seriesMap - series_id → title
@@ -98,8 +107,12 @@ export function matchSlugsToSeries(slugs, seriesMap, overrides = {}) {
       let score = 0
       if (slugNorm === titleNorm) {
         score = 1.0
-      } else if (slugNorm.includes(titleNorm) || titleNorm.includes(slugNorm)) {
-        score = 0.7
+      } else if (boundaryContains(slugNorm, titleNorm) || boundaryContains(titleNorm, slugNorm)) {
+        // 語境界での部分一致のみ採用し、さらに「短い側が 4 文字以上」を要求する。
+        // 短い側が 1〜3 文字（例 title "K" / "A3"）や偶発的な部分文字列（utawarerumono⊃mono）
+        // による誤マッチ（arknights→K 等）を量産しないため。
+        const shorter = Math.min(slugNorm.length, titleNorm.length)
+        if (shorter >= 4) score = 0.7
       } else {
         // 先頭10文字で部分一致
         const prefix = titleNorm.slice(0, 10)

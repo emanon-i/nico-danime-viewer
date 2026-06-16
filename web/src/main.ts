@@ -6,6 +6,7 @@ import type { TopData } from './features/top/top'
 import { renderList } from './features/list/list'
 import { renderDetail } from './features/detail/detail'
 import { renderBreadcrumb } from './features/shared/breadcrumb'
+import { buildHeader } from './features/shared/header'
 import { initHeaderSearch } from './features/shared/search'
 import { filterWorks, sortWorks, paginateWorks } from './features/list/filter'
 import {
@@ -69,6 +70,9 @@ async function ensureData(): Promise<void> {
 function buildTopData(): TopData | undefined {
   if (!cache.works) return undefined
   const worksArr = cache.works.works
+  // seriesId → 各話数（TOP10 カードの [film] 話数表示用）
+  const episodeCounts: Record<number, number> = {}
+  for (const w of worksArr) episodeCounts[w.seriesId] = w.episodeCount
   return {
     popular: cache.ranking?.popular ?? [],
     hotTags: cache.tags?.topHotTags ?? [],
@@ -77,6 +81,7 @@ function buildTopData(): TopData | undefined {
     cours: cache.cours?.cours ?? [],
     newSeries: [...worksArr].sort((a, b) => b.seriesId - a.seriesId).slice(0, 10),
     newEpisodes: cache.newData?.items ?? [],
+    episodeCounts,
   }
 }
 
@@ -138,9 +143,44 @@ function setThemeIcon(btn: HTMLElement): void {
   btn.replaceChildren(icon(isDark ? 'moon' : 'sun'))
 }
 
+// 直近の render がユーザー操作（遷移）由来かどうか。初回ロード時は false。
+let isNavigation = false
+
 function navigate(url: string): void {
   history.pushState(null, '', url)
+  isNavigation = true
   void render()
+}
+
+/** ヘッダの🔍/テーマ/⚙ を配線する（全画面共通） */
+function wireHeaderControls(): void {
+  const headerBtn = app.querySelector<HTMLElement>('.header-search-btn')
+  if (headerBtn) initHeaderSearch(headerBtn, navigate)
+
+  const themeBtn = app.querySelector<HTMLElement>('.theme-btn')
+  if (themeBtn) {
+    setThemeIcon(themeBtn)
+    themeBtn.addEventListener('click', () => {
+      toggleTheme()
+      setThemeIcon(themeBtn)
+    })
+  }
+
+  const settingsBtn = app.querySelector<HTMLElement>('.settings-btn')
+  if (settingsBtn) {
+    initSettingsModal(settingsBtn, app, {
+      lastUpdated: cache.ranking?.lastUpdated ?? null,
+      onRerender: () => void render(),
+    })
+  }
+}
+
+/** SPA 遷移後、主要コンテンツ（#main-content）へフォーカスを移す（§17.1） */
+function focusMainIfNavigation(): void {
+  if (!isNavigation) return
+  isNavigation = false
+  const main = app.querySelector<HTMLElement>('#main-content')
+  main?.focus()
 }
 
 async function render(): Promise<void> {
@@ -161,28 +201,21 @@ async function render(): Promise<void> {
       }
     })
 
-    const headerBtn = app.querySelector<HTMLElement>('.header-search-btn')
-    if (headerBtn) initHeaderSearch(headerBtn, navigate)
-
-    const themeBtn = app.querySelector<HTMLElement>('.theme-btn')
-    if (themeBtn) {
-      setThemeIcon(themeBtn)
-      themeBtn.addEventListener('click', () => {
-        toggleTheme()
-        setThemeIcon(themeBtn)
-      })
-    }
-
-    const settingsBtn = app.querySelector<HTMLElement>('.settings-btn')
-    if (settingsBtn) {
-      initSettingsModal(settingsBtn, app, {
-        lastUpdated: cache.ranking?.lastUpdated ?? null,
-        onRerender: () => void render(),
-      })
-    }
-
+    wireHeaderControls()
     wireCards(app)
   } else if (screen.type === 'list') {
+    // 共通ヘッダ（banner）＋パンくず（nav）＋ main（content）
+    app.appendChild(buildHeader({ heroSearchToggle: false }))
+
+    const bcContainer = document.createElement('div')
+    app.appendChild(bcContainer)
+    renderBreadcrumb(bcContainer, screen)
+
+    const main = document.createElement('main')
+    main.id = 'main-content'
+    main.tabIndex = -1
+    app.appendChild(main)
+
     const allWorks = cache.works?.works ?? []
     const favIds = favFilter ? new Set(getFavoriteIds()) : undefined
     const watchedIds = unwatchedFilter ? new Set(getWatchedIds()) : undefined
@@ -190,11 +223,7 @@ async function render(): Promise<void> {
     const sorted = sortWorks(filtered, screen.state.sort, cache.ranking ?? null)
     const { items, totalCount, totalPages } = paginateWorks(sorted, screen.state.page)
 
-    const bcContainer = document.createElement('div')
-    app.appendChild(bcContainer)
-    renderBreadcrumb(bcContainer, screen)
-
-    renderList(app, {
+    renderList(main, {
       state: screen.state,
       works: items,
       totalCount,
@@ -240,11 +269,19 @@ async function render(): Promise<void> {
       })
     }
 
+    wireHeaderControls()
     wireCards(app)
   } else {
+    app.appendChild(buildHeader({ heroSearchToggle: false }))
+
     const bcContainer = document.createElement('div')
     app.appendChild(bcContainer)
     renderBreadcrumb(bcContainer, screen)
+
+    const main = document.createElement('main')
+    main.id = 'main-content'
+    main.tabIndex = -1
+    app.appendChild(main)
 
     let seriesDetail: SeriesDetailJson | null = null
     try {
@@ -252,15 +289,19 @@ async function render(): Promise<void> {
     } catch {
       // series/{id}.json 未生成 or ネットワークエラー
     }
-    renderDetail(app, seriesDetail)
-    wireDetailMarks(app, screen.seriesId)
+    renderDetail(main, seriesDetail)
+    wireDetailMarks(main, screen.seriesId)
+    wireHeaderControls()
   }
+
+  focusMainIfNavigation()
 }
 
 // テーマを最初に適用（FOUC を防ぐ）
 initTheme()
 
 window.addEventListener('popstate', () => {
+  isNavigation = true
   void render()
 })
 void render()

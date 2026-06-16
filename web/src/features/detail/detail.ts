@@ -1,6 +1,8 @@
 import type { SeriesDetail } from '../../data/types'
 import { watchLink, seriesLink } from '../../shared/deeplink'
 import { buildDetailUrl } from '../router'
+import { icon } from '../../components/icon'
+import { metaSpan, formatViews } from '../../components/meta'
 
 /** シリーズ詳細画面を描画する。series が null または episodes 空なら empty 表示 */
 export function renderDetail(container: HTMLElement, series: SeriesDetail | null): void {
@@ -48,7 +50,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   infoBtn.setAttribute('aria-label', '主要メタの要点について')
   infoBtn.title =
     '概要は第1話のあらすじを表示しています。タグ・再生数・各話・クールはニコニコの公開情報より'
-  infoBtn.textContent = 'ⓘ'
+  infoBtn.appendChild(icon('info', 14))
   h1.appendChild(infoBtn)
   infoDiv.appendChild(h1)
 
@@ -65,12 +67,13 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
 
   if (officialHref) {
     const offLink = document.createElement('a')
-    offLink.className = 'official-series-link'
+    offLink.className = 'btn-primary official-series-link'
     offLink.dataset.action = 'official-series'
     offLink.href = officialHref
     offLink.target = '_blank'
     offLink.rel = 'noopener noreferrer'
-    offLink.textContent = '▶ 公式シリーズページ →'
+    offLink.appendChild(icon('play', 16))
+    offLink.appendChild(document.createTextNode('公式シリーズページ →'))
     infoDiv.appendChild(offLink)
   }
 
@@ -134,9 +137,12 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
       titleSpan.textContent = ep.title ?? ''
       row.appendChild(titleSpan)
 
-      const viewsSpan = document.createElement('span')
-      viewsSpan.className = 'ep-views'
-      viewsSpan.textContent = `▶ ${ep.viewCounter.toLocaleString()}`
+      const viewsSpan = metaSpan({
+        icon: 'play',
+        value: formatViews(ep.viewCounter),
+        label: `再生数 ${formatViews(ep.viewCounter)}`,
+      })
+      viewsSpan.classList.add('ep-views')
       row.appendChild(viewsSpan)
 
       const href = watchLink(ep.contentId)
@@ -147,7 +153,8 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
         watchAnchor.href = href
         watchAnchor.target = '_blank'
         watchAnchor.rel = 'noopener noreferrer'
-        watchAnchor.textContent = '▶ 公式'
+        watchAnchor.appendChild(icon('play', 14))
+        watchAnchor.appendChild(document.createTextNode('公式'))
         row.appendChild(watchAnchor)
       }
 

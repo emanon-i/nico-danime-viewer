@@ -1,12 +1,19 @@
 import { icon } from './icon'
+import { metaSpan, formatViews } from './meta'
+import type { MetaSpec } from './meta'
 import { seriesLink } from '../shared/deeplink'
 
-/** カードのメタ情報（任意）。TOP10 のランク帯や再生数表示に使う。 */
+// 再生数整形は meta.ts に一元化（DRY）。後方互換のため再エクスポート。
+export { formatViews }
+
+/** カードのメタ情報（任意）。TOP10 のランク帯や再生数/話数表示に使う。 */
 export interface CardMeta {
   /** ランキング順位（1 始まり）。指定時のみランクバッジを出す */
   rank?: number
-  /** 累計再生数。指定時のみメタ行に「N 再生」を出す */
+  /** 累計再生数。指定時のみ [play] メタを出す */
   views?: number
+  /** 各話数。指定時のみ [film] メタを出す（人気TOP10 も話数を必ず出す＝§9.1） */
+  episodeCount?: number
 }
 
 /**
@@ -19,23 +26,16 @@ export function hiResThumb(url: string | null): string {
   return /\/thumbnails\/\d+\/\d+\.\d+$/.test(url) ? `${url}.L` : url
 }
 
-/** 再生数を日本語の概数（308万 / 9,876）に整形する。 */
-export function formatViews(n: number): string {
-  if (n >= 10000) {
-    const man = n / 10000
-    return `${man >= 100 ? Math.round(man) : man.toFixed(1)}万`
-  }
-  return n.toLocaleString('ja-JP')
-}
-
 /**
  * シリーズカード DOM を生成する。
  * - 主アクション: カード本体（`.card-body`）→ うちの作品詳細 `?series=<id>`
  * - 副アクション: 右上 `.card-external` → 公式シリーズ（外部・別タブ）
  * - 左上 `.card-favorite` / `.card-watched`（localStorage 同期は main.ts の wireCards）
  *
- * サムネはカード全面（aspect-ratio 4/3・object-fit cover）。タイトル/メタは
- * 下端 scrim にオーバーレイし、文字の裏だけを暗くする（画像本体は暗くしない）。
+ * サムネはカード全面（aspect-ratio 16:9＝--card-aspect・object-fit cover）。
+ * 素サムネは 4:3(360×270) だが中身は 16:9 をレターボックスした焼き込みのため、
+ * 16:9 cover で上下黒帯をトリミングする（§9.5）。タイトル/メタは下端 scrim に
+ * オーバーレイし、文字の裏だけを暗くする（画像本体は暗くしない）。
  */
 export function card(
   seriesId: number,
@@ -59,13 +59,15 @@ export function card(
   img.alt = ''
   img.loading = 'lazy'
   img.decoding = 'async'
-  // 4:3（実サムネ 360×270）。width/height でレイアウトシフトを防ぐ
+  // 実サムネ 360×270。width/height でレイアウトシフトを防ぐ（表示は 16:9 cover）
   img.width = 360
   img.height = 270
   bodyLink.appendChild(img)
 
   // サムネ欠損時のフォールバック面（alt 文字でなく無地で見せる）
   if (!img.src) el.classList.add('no-thumb')
+  // 404 / 読み込みエラーも .no-thumb に切替（§18 状態マトリクス）
+  img.addEventListener('error', () => el.classList.add('no-thumb'))
 
   const overlay = document.createElement('div')
   overlay.className = 'card-overlay'
@@ -85,10 +87,26 @@ export function card(
   titleEl.textContent = title
   textWrap.appendChild(titleEl)
 
+  // メタ＝[play] 再生数 ＋ [film] 話数（§8.2 / §9.1）。アイコン＋最小単位語に圧縮。
+  const metaSpecs: MetaSpec[] = []
   if (typeof meta?.views === 'number') {
+    metaSpecs.push({
+      icon: 'play',
+      value: formatViews(meta.views),
+      label: `再生数 ${formatViews(meta.views)}`,
+    })
+  }
+  if (typeof meta?.episodeCount === 'number' && meta.episodeCount > 0) {
+    metaSpecs.push({
+      icon: 'film',
+      value: `${meta.episodeCount}話`,
+      label: `全${meta.episodeCount}話`,
+    })
+  }
+  if (metaSpecs.length > 0) {
     const metaEl = document.createElement('div')
     metaEl.className = 'card-meta'
-    metaEl.textContent = `${formatViews(meta.views)} 再生`
+    metaSpecs.forEach((s) => metaEl.appendChild(metaSpan(s)))
     textWrap.appendChild(metaEl)
   }
 

@@ -34,6 +34,8 @@ export function initHeaderSearch(
   const collapse = () => {
     searchBar.hidden = true
     searchBtn.setAttribute('aria-expanded', 'false')
+    // 閉じたら検索ボタン（トリガー）へフォーカス復帰（§17.1）
+    searchBtn.focus()
   }
 
   searchBtn.addEventListener('click', () => {

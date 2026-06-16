@@ -84,6 +84,19 @@ describe('matchSlugsToSeries (F-0016)', () => {
     expect(results[0].seriesId).toBeNull()
     expect(results[0].confidence).toBe(0)
   })
+
+  it('短いタイトル（K / A3）は無関係 slug に偶然含まれても誤マッチしない', () => {
+    // "K"→"k", "A3"→"a3" は無関係 slug（arknights 等）に部分文字列として含まれるが、
+    // 短い側が 4 文字未満のため採用しない（長さガード）。
+    const shortMap = new Map([
+      [10, 'K'],
+      [11, 'A3'],
+      [12, 'Free!'],
+    ])
+    const results = matchSlugsToSeries(['arknights', 'idolish7-aninana3'], shortMap, {})
+    expect(results[0].seriesId).toBeNull()
+    expect(results[1].seriesId).toBeNull()
+  })
 })
 
 describe('mapCurrentCours (F-0016)', () => {

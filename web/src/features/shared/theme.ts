@@ -4,9 +4,18 @@ export type Theme = 'dark' | 'light'
 
 export const THEME_KEY_NAME = THEME_KEY
 
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
 function applyTheme(theme: Theme): void {
   const root = document.documentElement
-  if (typeof document.startViewTransition === 'function') {
+  // reduced-motion 時は View Transitions をスキップして即時切替（§6.3 / §17.6）
+  if (typeof document.startViewTransition === 'function' && !prefersReducedMotion()) {
     void document.startViewTransition(() => {
       root.dataset.theme = theme
     })

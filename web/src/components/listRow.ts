@@ -1,5 +1,7 @@
 import { hiResThumb } from './card'
 import { icon } from './icon'
+import { metaSpan } from './meta'
+import type { MetaSpec } from './meta'
 
 export interface ListRowOpts {
   /** 行の種別。シリーズ型と各話型で見た目を変える（紛らわしさ防止） */
@@ -13,8 +15,8 @@ export interface ListRowOpts {
   thumbnailUrl?: string | null
   /** タイトル先頭の小バッジ。series="シリーズ"(layers) / episode="第N話" */
   badge?: string
-  /** 副次メタ行。series="全N話" / episode="N 再生 ・ M/D" */
-  meta?: string
+  /** メタ（アイコン＋最小単位語＝§8.2）。series=[film]N話 / episode=[clock]投稿時間+[play]再生数 */
+  metas?: MetaSpec[]
   /** 右上 ↗ で開く公式ページ（series=/series/<id> / episode=/watch/<id>）。別タブ */
   externalHref?: string
 }
@@ -85,10 +87,10 @@ export function listRow(opts: ListRowOpts): HTMLElement {
   titleEl.appendChild(titleText)
   text.appendChild(titleEl)
 
-  if (opts.meta) {
+  if (opts.metas && opts.metas.length > 0) {
     const metaEl = document.createElement('div')
     metaEl.className = 'list-row-meta'
-    metaEl.textContent = opts.meta
+    opts.metas.forEach((s) => metaEl.appendChild(metaSpan(s)))
     text.appendChild(metaEl)
   }
 

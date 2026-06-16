@@ -3,6 +3,7 @@ import type { ListState } from '../router'
 import { buildListUrl } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { card as createCard } from '../../components/card'
+import { icon } from '../../components/icon'
 
 export interface ListData {
   tags: Tag[]
@@ -79,6 +80,18 @@ export function renderList(
   })
   container.appendChild(kanaDiv)
 
+  // ── モバイル用フィルタ開閉ボタン（ドロワー・screens 準拠）──────
+  const filterToggle = document.createElement('button')
+  filterToggle.type = 'button'
+  filterToggle.className = 'list-filter-toggle'
+  filterToggle.textContent = '絞り込み・並び'
+  filterToggle.setAttribute('aria-expanded', 'false')
+  container.appendChild(filterToggle)
+
+  // ── 本体（左フィルタ＋右グリッド）────────────────────────────
+  const body = document.createElement('div')
+  body.className = 'list-body'
+
   // ── 左フィルタ ───────────────────────────────────────────────
   const filterDiv = document.createElement('div')
   filterDiv.className = 'list-filter'
@@ -93,7 +106,7 @@ export function renderList(
   sortInfo.setAttribute('aria-label', '並び替えについて')
   sortInfo.title =
     '勢い順＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／累計再生数順＝全期間の定番'
-  sortInfo.textContent = 'ⓘ'
+  sortInfo.appendChild(icon('info', 14))
   sortH3.appendChild(sortInfo)
   sortSection.appendChild(sortH3)
   ;(['hot', 'views', 'new', 'kana'] as const).forEach((s) => {
@@ -173,24 +186,49 @@ export function renderList(
   markSection.appendChild(unwatchedLabel)
   filterDiv.appendChild(markSection)
 
-  container.appendChild(filterDiv)
+  body.appendChild(filterDiv)
+
+  // モバイル: トグルでフィルタ（ドロワー）を開閉
+  filterToggle.addEventListener('click', () => {
+    const open = filterDiv.classList.toggle('open')
+    filterToggle.setAttribute('aria-expanded', open ? 'true' : 'false')
+  })
+
+  // ── 右側: 件数＋グリッド＋ページング ─────────────────────────
+  const results = document.createElement('div')
+  results.className = 'list-results'
+
+  const countInfo = document.createElement('p')
+  countInfo.className = 'list-count'
+  countInfo.textContent = `${totalCount}件`
+  results.appendChild(countInfo)
 
   // ── 作品グリッド ─────────────────────────────────────────────
   const grid = document.createElement('div')
   grid.className = 'list-grid'
   grid.dataset.part = 'grid'
 
-  const countInfo = document.createElement('p')
-  countInfo.className = 'list-count'
-  countInfo.textContent = `${totalCount}件`
-  grid.appendChild(countInfo)
-
-  works.forEach((work) => {
-    const officialHref = seriesLink(work.seriesId) ?? ''
-    const card = createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref)
-    grid.appendChild(card)
-  })
-  container.appendChild(grid)
+  if (works.length === 0) {
+    // 0 件は空白を出さず、リセット誘導つきメッセージを出す（§18 状態マトリクス）
+    const empty = document.createElement('p')
+    empty.className = 'list-empty'
+    empty.dataset.part = 'empty'
+    const resetUrl = buildListUrl({ sort: state.sort })
+    empty.appendChild(document.createTextNode('条件に一致する作品が見つかりませんでした。'))
+    const resetLink = document.createElement('a')
+    resetLink.className = 'list-empty-reset'
+    resetLink.href = resetUrl
+    resetLink.textContent = 'フィルタをリセット'
+    empty.appendChild(resetLink)
+    grid.appendChild(empty)
+  } else {
+    works.forEach((work) => {
+      const officialHref = seriesLink(work.seriesId) ?? ''
+      const card = createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref)
+      grid.appendChild(card)
+    })
+  }
+  results.appendChild(grid)
 
   // ── ページング ───────────────────────────────────────────────
   const paginationDiv = document.createElement('div')
@@ -224,5 +262,8 @@ export function renderList(
   paginationDiv.appendChild(prevBtn)
   paginationDiv.appendChild(pageInfo)
   paginationDiv.appendChild(nextBtn)
-  container.appendChild(paginationDiv)
+  results.appendChild(paginationDiv)
+
+  body.appendChild(results)
+  container.appendChild(body)
 }

@@ -44,7 +44,13 @@ import {
   getSeriesTagsMap,
   computeFranchiseKeys,
 } from './etl/series.mjs'
-import { mapCurrentCours, makeCoursLabel } from './etl/cours.mjs'
+import {
+  mapCurrentCours,
+  makeCoursLabel,
+  parsePeriodHtml,
+  matchSlugsToSeries,
+} from './etl/cours.mjs'
+import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
 import { exportAll } from './export/export.mjs'
 
@@ -65,6 +71,77 @@ function currentSeason(date) {
   if (m <= 6) return 'spring'
   if (m <= 9) return 'summer'
   return 'autumn'
+}
+
+// 過去季クールを遡る下限の年（dアニメ支店の配信開始相当）。環境変数で調整可。
+const COURS_FROM_YEAR = Number(process.env.NICO_COURS_FROM_YEAR ?? 2016)
+// slug↔series 突合の採用しきい値（タイトル正規化マッチの信頼度）
+const COURS_MATCH_MIN = 0.7
+
+/**
+ * 過去季クールを period HTML から配線して series.cours を埋める（§10.3）。
+ * 現行季（programlist で設定済み）や既に cours を持つシリーズは上書きしない。
+ * 新しい季から処理し、ネットワーク/パースのエラーは季単位でスキップ（fail させない）。
+ * @returns {Promise<{ seasons: number, assigned: number }>}
+ */
+async function derivePastCours(db, now) {
+  // 既に cours を持つシリーズ（現行季 programlist 由来等）は対象外＝上書きしない
+  const assigned = new Set(
+    db
+      .prepare('SELECT series_id FROM series WHERE cours IS NOT NULL AND is_available = 1')
+      .all()
+      .map((r) => r.series_id)
+  )
+  // series_id → title（突合用）
+  const seriesMap = new Map(
+    db
+      .prepare('SELECT series_id, title FROM series WHERE is_available = 1')
+      .all()
+      .map((r) => [r.series_id, r.title])
+  )
+
+  const seasons = enumeratePastSeasons(new Date(now), COURS_FROM_YEAR)
+  let assignedCount = 0
+  let seasonsWithData = 0
+
+  for (const { year, season } of seasons) {
+    let html = null
+    try {
+      const res = await fetchPeriodHtml(year, season)
+      if (res.status !== 200 || !res.body) continue
+      html = res.body
+    } catch (err) {
+      logger.warn('fetch', 'period fetch failed (skip season)', {
+        year,
+        season,
+        error: err.message,
+      })
+      continue
+    }
+
+    let parsed
+    try {
+      parsed = parsePeriodHtml(html, `${year}-${season}`)
+    } catch {
+      continue
+    }
+    // 支店ページの妥当性（変更検知）。崩れていたらこの季はスキップ
+    if (!parsed.title.includes('dアニメストア') || parsed.slugs.length < 1) continue
+    seasonsWithData++
+
+    const coursLabel = makeCoursLabel(year, season)
+    const matches = matchSlugsToSeries(parsed.slugs, seriesMap)
+    for (const m of matches) {
+      if (m.seriesId == null || m.confidence < COURS_MATCH_MIN) continue
+      if (assigned.has(m.seriesId)) continue
+      updateSeriesFields(db, m.seriesId, { cours: coursLabel, updated_at: now })
+      assigned.add(m.seriesId)
+      assignedCount++
+    }
+    logger.info('fetch', 'period season done', { cours: coursLabel, slugs: parsed.slugs.length })
+  }
+
+  return { seasons: seasonsWithData, assigned: assignedCount }
 }
 
 /** --check-version: snapshot/version の last_modified を取得して終了 */
@@ -112,6 +189,10 @@ async function runExportOnly() {
     updateSeriesFields(db, seriesId, { cours, updated_at: now })
   }
   logger.info('fetch', 'E3 cours done', { label: coursLabel, count: coursMap.size })
+
+  // E3b: 過去季クールを period HTML から配線（§10.3）
+  const pastCours = await derivePastCours(db, now)
+  logger.info('fetch', 'E3b past cours done', pastCours)
 
   const seriesTagsMap = getSeriesTagsMap(db)
   const franchiseKeys = computeFranchiseKeys(seriesTagsMap)
@@ -316,6 +397,10 @@ async function main() {
     updateSeriesFields(db, seriesId, { cours, updated_at: now })
   }
   logger.info('fetch', 'E3 cours done', { label: coursLabel, count: coursMap.size })
+
+  // E3b: 過去季クールを period HTML から配線（§10.3）
+  const pastCours = await derivePastCours(db, now)
+  logger.info('fetch', 'E3b past cours done', pastCours)
 
   // E4: Franchise keys（共有タグ束ね）
   const seriesTagsMap = getSeriesTagsMap(db)

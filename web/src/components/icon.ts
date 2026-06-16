@@ -14,6 +14,8 @@ export type IconName =
   | 'chevron-right'
   | 'play'
   | 'layers'
+  | 'film'
+  | 'clock'
 
 const PATHS: Record<IconName, string> = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
@@ -34,6 +36,8 @@ const PATHS: Record<IconName, string> = {
   play: '<polygon points="6 3 20 12 6 21 6 3"/>',
   layers:
     '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84Z"/><path d="m6.08 9.5-3.49 1.59a1 1 0 0 0 0 1.83l8.59 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84L17.92 9.5"/><path d="m6.08 14.5-3.49 1.59a1 1 0 0 0 0 1.83l8.59 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84l-3.49-1.59"/>',
+  film: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
 }
 
 const SVG_ATTRS =

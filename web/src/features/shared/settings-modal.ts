@@ -117,6 +117,14 @@ export function initSettingsModal(
   let modal: HTMLElement | null = null
   let onKeydown: ((e: KeyboardEvent) => void) | null = null
 
+  function focusables(panel: HTMLElement): HTMLElement[] {
+    return Array.from(
+      panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => el.offsetParent !== null || el === document.activeElement)
+  }
+
   function close(): void {
     if (modal) {
       modal.remove()
@@ -126,24 +134,48 @@ export function initSettingsModal(
       document.removeEventListener('keydown', onKeydown)
       onKeydown = null
     }
+    // フォーカスを開いたトリガー（⚙）へ復帰（§17.1）
+    settingsBtn.focus()
   }
 
   function open(): void {
     if (modal) return
     modal = createModal(options)
     container.appendChild(modal)
+    const panel = modal.querySelector<HTMLElement>('.settings-panel')
 
     // 閉じるボタン
-    modal.querySelector('.settings-close')?.addEventListener('click', close)
+    const closeBtn = modal.querySelector<HTMLElement>('.settings-close')
+    closeBtn?.addEventListener('click', close)
 
     // 背景クリックで閉じる
     modal.addEventListener('click', (e) => {
       if (e.target === modal) close()
     })
 
-    // Esc で閉じる（リーク防止：参照を保持して close() で除去）
+    // 開いたら × ボタンへフォーカス（§17.1）
+    closeBtn?.focus()
+
+    // Esc で閉じる＋Tab フォーカストラップ（参照を保持して close() で除去）
     onKeydown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') {
+        close()
+        return
+      }
+      if (e.key === 'Tab' && panel) {
+        const items = focusables(panel)
+        if (items.length === 0) return
+        const first = items[0]
+        const last = items[items.length - 1]
+        const active = document.activeElement as HTMLElement | null
+        if (e.shiftKey && (active === first || !panel.contains(active))) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
     document.addEventListener('keydown', onKeydown)
 

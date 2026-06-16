@@ -1,9 +1,12 @@
 import type { RankingEntry, Tag, CoursGroup, Work, NewItem } from '../../data/types'
 import { seriesLink, watchLink } from '../../shared/deeplink'
-import { card, formatViews } from '../../components/card'
+import { card } from '../../components/card'
+import { formatViews, formatRelativeTime } from '../../components/meta'
+import type { MetaSpec } from '../../components/meta'
 import { listRow } from '../../components/listRow'
 import { chip } from '../../components/chip'
 import { icon } from '../../components/icon'
+import { buildHeader } from '../shared/header'
 
 export interface TopData {
   popular: RankingEntry[]
@@ -13,6 +16,8 @@ export interface TopData {
   cours: CoursGroup[]
   newSeries: Work[]
   newEpisodes: NewItem[]
+  /** seriesId → 各話数。TOP10 カードの [film] 話数表示に使う（works.json 由来） */
+  episodeCounts?: Record<number, number>
 }
 
 function sampleTags(pool: string[], count: number): string[] {
@@ -25,7 +30,11 @@ function sampleTags(pool: string[], count: number): string[] {
   return result
 }
 
-function populateTop10(rail: HTMLElement, popular: RankingEntry[]): void {
+function populateTop10(
+  rail: HTMLElement,
+  popular: RankingEntry[],
+  episodeCounts?: Record<number, number>
+): void {
   rail.innerHTML = ''
   popular.slice(0, 10).forEach((entry, i) => {
     const href = seriesLink(entry.seriesId) ?? ''
@@ -33,17 +42,10 @@ function populateTop10(rail: HTMLElement, popular: RankingEntry[]): void {
       card(entry.seriesId, entry.title, entry.thumbnailUrl, href, {
         rank: i + 1,
         views: entry.totalViews,
+        episodeCount: episodeCounts?.[entry.seriesId],
       })
     )
   })
-}
-
-/** RSS の pub_date（"Tue, 16 Jun 2026 00:30:00 +0900"）を "M/D" に整形。失敗時は空文字。 */
-function formatMonthDay(pubDate: string): string {
-  const t = Date.parse(pubDate)
-  if (Number.isNaN(t)) return ''
-  const d = new Date(t)
-  return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
 /**
@@ -82,13 +84,17 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   seriesLabel.textContent = '新着シリーズ'
   seriesSec.appendChild(seriesLabel)
   newSeries.slice(0, count).forEach((w) => {
+    // シリーズ型は「話数で語る」＝[film]N話（§9.3）
+    const metas: MetaSpec[] = [
+      { icon: 'film', value: `${w.episodeCount}話`, label: `全${w.episodeCount}話` },
+    ]
     const row = listRow({
       kind: 'series',
       title: w.title,
       href: `?series=${w.seriesId}`,
       thumbnailUrl: w.thumbnailUrl,
       badge: 'シリーズ',
-      meta: `全${w.episodeCount}話`,
+      metas,
       externalHref: seriesLink(w.seriesId) ?? undefined,
     })
     row.classList.add('recent-item')
@@ -105,10 +111,17 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   resolvedEps.slice(0, count).forEach((ep) => {
     const cid = ep.resolvedContentId as string
     const watchHref = watchLink(cid) ?? `https://www.nicovideo.jp/watch/${cid}`
-    const metaParts: string[] = []
-    if (typeof ep.viewCounter === 'number') metaParts.push(`${formatViews(ep.viewCounter)} 再生`)
-    const md = formatMonthDay(ep.pubDate)
-    if (md) metaParts.push(md)
+    // 各話型は「新しさ（投稿時間）で語る」＝[clock]投稿時間（強調）＋[play]再生数（§9.3）
+    const metas: MetaSpec[] = []
+    const rel = formatRelativeTime(ep.pubDate)
+    if (rel) metas.push({ icon: 'clock', value: rel, label: `投稿 ${rel}`, emphasize: true })
+    if (typeof ep.viewCounter === 'number') {
+      metas.push({
+        icon: 'play',
+        value: formatViews(ep.viewCounter),
+        label: `再生数 ${formatViews(ep.viewCounter)}`,
+      })
+    }
     const ep_label = splitEpisodeLabel(ep.title, ep.episodeNo)
     const row = listRow({
       kind: 'episode',
@@ -117,7 +130,7 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
       thumbnailUrl: ep.thumbnailUrl,
       external: true,
       badge: ep_label.badge ?? undefined,
-      meta: metaParts.join(' ・ '),
+      metas,
       externalHref: watchHref,
     })
     row.classList.add('recent-item')
@@ -246,30 +259,24 @@ function populateTags(
 export function renderTop(container: HTMLElement, data?: Partial<TopData>): void {
   // テンプレート補間なし（静的文字列のみ）→ アイコンは後から DOM API で挿入
   container.innerHTML = `
-    <header class="site-header" data-section="header">
-      <a href="?" class="logo">ニコニコ支店ビューア</a>
-      <button class="icon-btn header-search-btn" aria-hidden="true" aria-label="検索"></button>
-      <button class="icon-btn theme-btn" aria-label="テーマ切替"></button>
-      <button class="icon-btn settings-btn" aria-label="設定/情報"></button>
-    </header>
+    <main id="main-content" tabindex="-1">
     <section class="hero" data-section="hero-search">
       <div class="hero-search">
         <span class="hero-search-icon"></span>
         <input type="search" class="hero-search-input"
                placeholder="作品・タグで検索…" aria-label="作品・タグで検索">
       </div>
+      <a href="?screen=list" class="btn-primary hero-browse-btn">一覧で探す →</a>
     </section>
-    <section class="quick-access" data-section="quick-access">
+    <nav class="quick-access" data-section="quick-access" aria-label="クイックアクセス">
       <a href="?cours=current&amp;sort=hot" class="quick-btn">今期</a>
-      <a href="?sort=new" class="quick-btn">新着</a>
+      <a href="?sort=views" class="quick-btn">人気</a>
       <a href="?sort=hot" class="quick-btn">Hot</a>
-      <a href="?sort=views" class="quick-btn">人気TOP</a>
-      <a href="?sort=kana" class="quick-btn">五十音</a>
-    </section>
+    </nav>
     <section class="top10" data-section="top10">
       <div class="section-head">
         <h2>人気シリーズ TOP10
-          <button class="info-btn" aria-label="Hot と人気TOP の違いについて" title="Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／人気TOP＝全期間の累計再生数による定番ランキング">ⓘ</button>
+          <button class="info-btn" aria-label="Hot と人気TOP の違いについて" title="Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／人気TOP＝全期間の累計再生数による定番ランキング"></button>
         </h2>
         <a href="?sort=views" class="see-all">すべて見る</a>
       </div>
@@ -295,14 +302,17 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       </div>
       <div class="tag-curated"></div>
     </section>
+    </main>
   `
 
+  // 共通ヘッダ（banner）をコンテンツ（main）の前に差し込む（§17.5 ランドマーク）
+  container.insertBefore(buildHeader({ heroSearchToggle: true }), container.firstChild)
+
   // アイコンを DOM API で挿入（innerHTML テンプレート補間を使わない）
-  container.querySelector('.header-search-btn')?.appendChild(icon('search'))
   container.querySelector('.hero-search-icon')?.appendChild(icon('search', 18))
-  container.querySelector('.settings-btn')?.appendChild(icon('settings'))
-  container.querySelector('.theme-btn')?.appendChild(icon('sun'))
   container.querySelector('.shuffle-btn')?.appendChild(icon('shuffle'))
+  // ⓘ は emoji グリフを使わずバンドル SVG（中央/ベースライン揃え・§8.1 emoji 不使用）
+  container.querySelector('.info-btn')?.appendChild(icon('info', 14))
 
   // ヒーローが見えている間はヘッダ検索ボタンを非表示にする
   const hero = container.querySelector<HTMLElement>('.hero')
@@ -319,8 +329,19 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
 
   if (!data) return
 
+  // クイックアクセスのランダムタグ×2（厳選5 のうち 2 枠・タグチップ型ピル）
+  const quickAccess = container.querySelector<HTMLElement>('[data-section="quick-access"]')
+  if (quickAccess && data.allTags && data.allTags.length > 0) {
+    const names = discoveryTags(data.allTags).map((t) => t.name)
+    sampleTags(names, 2).forEach((t) => {
+      const c = chip(`#${t}`, `?tag=${encodeURIComponent(t)}`)
+      c.classList.add('quick-tag')
+      quickAccess.appendChild(c)
+    })
+  }
+
   const rail = container.querySelector<HTMLElement>('.top10-rail')
-  if (rail && data.popular) populateTop10(rail, data.popular)
+  if (rail && data.popular) populateTop10(rail, data.popular, data.episodeCounts)
 
   const recentSection = container.querySelector<HTMLElement>('[data-section="recent"]')
   if (recentSection) {
