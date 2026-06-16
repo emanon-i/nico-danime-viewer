@@ -79,19 +79,23 @@ jobs:
           NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
 
       # ── 状態保存（state ブランチへコミット） ─────────────────────
+      # GITHUB_TOKEN で認証。state ブランチを clone（無ければ orphan 初期化）し、
+      # data/（build.sqlite 除く）を反映して push。冪等・初回 bootstrap も成功する。
       - name: Save state to state branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ ! -d state ]; then
-            mkdir state
-            cd state
-            git init
-            git remote add origin https://github.com/emanon-i/nico-danime-viewer.git
-            git checkout -b state
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/emanon-i/nico-danime-viewer.git"
+          rm -rf state_pub
+          if git clone --depth 1 --branch state "$REMOTE" state_pub 2>/dev/null; then
+            echo "cloned existing state branch"
+          else
+            mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --exclude='build.sqlite' --exclude='*.sqlite' src/data/. state/
-          cd state
+          rsync -av --delete --exclude='.git' --exclude='build.sqlite' --exclude='*.sqlite' src/data/. state_pub/
+          cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add -A
           git diff --staged --quiet || git commit -m "chore: update state [hourly] [skip ci]"
-          git push origin state || (git pull --rebase origin state && git push origin state)
+          git push "$REMOTE" HEAD:state
