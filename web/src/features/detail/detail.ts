@@ -1,0 +1,182 @@
+import type { SeriesDetail } from '../../data/types'
+import { watchLink, seriesLink } from '../../shared/deeplink'
+import { buildDetailUrl } from '../router'
+
+/** シリーズ詳細画面を描画する。series が null または episodes 空なら empty 表示 */
+export function renderDetail(container: HTMLElement, series: SeriesDetail | null): void {
+  container.innerHTML = ''
+
+  if (!series) {
+    const empty = document.createElement('div')
+    empty.className = 'detail-unavailable'
+    empty.dataset.part = 'empty'
+    empty.textContent = '⚠ この作品の配信情報は取得できませんでした（配信終了の可能性）'
+    container.appendChild(empty)
+    return
+  }
+
+  const hasEpisodes = series.episodes.length > 0
+  const hasRelated = series.relatedSeries.length > 0
+  const officialHref = seriesLink(series.seriesId)
+
+  // ── メタ（バナー＋タイトル＋タグ＋ⓘ）────────────────────────
+  const metaSection = document.createElement('div')
+  metaSection.className = 'detail-meta'
+  metaSection.dataset.section = 'meta'
+
+  const bannerDiv = document.createElement('div')
+  bannerDiv.className = 'detail-banner'
+  if (series.thumbnailUrl) {
+    const img = document.createElement('img')
+    img.src = series.thumbnailUrl
+    img.alt = series.title
+    bannerDiv.appendChild(img)
+  } else {
+    const placeholder = document.createElement('div')
+    placeholder.className = 'no-thumbnail'
+    bannerDiv.appendChild(placeholder)
+  }
+  metaSection.appendChild(bannerDiv)
+
+  const infoDiv = document.createElement('div')
+  infoDiv.className = 'detail-info'
+
+  const h1 = document.createElement('h1')
+  h1.appendChild(document.createTextNode(series.title))
+  const infoBtn = document.createElement('button')
+  infoBtn.className = 'info-btn'
+  infoBtn.setAttribute('aria-label', '主要メタの要点について')
+  infoBtn.textContent = 'ⓘ'
+  h1.appendChild(infoBtn)
+  infoDiv.appendChild(h1)
+
+  const tagsDiv = document.createElement('div')
+  tagsDiv.className = 'detail-tags'
+  series.tags.forEach((tag) => {
+    const chip = document.createElement('a')
+    chip.className = 'tag-chip'
+    chip.href = '?tag=' + encodeURIComponent(tag)
+    chip.textContent = tag
+    tagsDiv.appendChild(chip)
+  })
+  infoDiv.appendChild(tagsDiv)
+
+  if (officialHref) {
+    const offLink = document.createElement('a')
+    offLink.className = 'official-series-link'
+    offLink.dataset.action = 'official-series'
+    offLink.href = officialHref
+    offLink.target = '_blank'
+    offLink.rel = 'noopener noreferrer'
+    offLink.textContent = '▶ 公式シリーズページ →'
+    infoDiv.appendChild(offLink)
+  }
+
+  const marksDiv = document.createElement('div')
+  marksDiv.className = 'detail-marks'
+  const favBtn = document.createElement('button')
+  favBtn.className = 'btn-favorite'
+  favBtn.setAttribute('aria-label', 'お気に入り')
+  favBtn.textContent = '♥ お気に入り'
+  marksDiv.appendChild(favBtn)
+  const watchedBtn = document.createElement('button')
+  watchedBtn.className = 'btn-watched'
+  watchedBtn.setAttribute('aria-label', '見た')
+  watchedBtn.textContent = '✓ 見た'
+  marksDiv.appendChild(watchedBtn)
+  infoDiv.appendChild(marksDiv)
+
+  if (series.descriptionFirst) {
+    const detailsEl = document.createElement('details')
+    detailsEl.className = 'detail-overview'
+    const summary = document.createElement('summary')
+    summary.textContent = '▸ 第1話のあらすじ'
+    detailsEl.appendChild(summary)
+    const p = document.createElement('p')
+    p.textContent = series.descriptionFirst
+    detailsEl.appendChild(p)
+    infoDiv.appendChild(detailsEl)
+  }
+
+  metaSection.appendChild(infoDiv)
+  container.appendChild(metaSection)
+
+  // ── 各話一覧 ────────────────────────────────────────────────
+  const episodesSection = document.createElement('section')
+  episodesSection.className = 'detail-episodes'
+  episodesSection.dataset.section = 'episodes'
+
+  if (!hasEpisodes) {
+    const emptyDiv = document.createElement('div')
+    emptyDiv.dataset.part = 'empty'
+    emptyDiv.textContent = '⚠ 各話一覧: 取得できませんでした'
+    episodesSection.appendChild(emptyDiv)
+  } else {
+    const heading = document.createElement('h2')
+    heading.textContent = `各話 (${series.episodes.length}話)`
+    episodesSection.appendChild(heading)
+
+    series.episodes.forEach((ep) => {
+      const row = document.createElement('div')
+      row.className = 'episode-row'
+      row.dataset.part = 'episode'
+      row.dataset.episodeNo = ep.episodeNo != null ? String(ep.episodeNo) : ''
+
+      const noSpan = document.createElement('span')
+      noSpan.className = 'ep-no'
+      noSpan.textContent = ep.episodeNo != null ? `#${ep.episodeNo}` : ''
+      row.appendChild(noSpan)
+
+      const titleSpan = document.createElement('span')
+      titleSpan.className = 'ep-title'
+      titleSpan.textContent = ep.title ?? ''
+      row.appendChild(titleSpan)
+
+      const viewsSpan = document.createElement('span')
+      viewsSpan.className = 'ep-views'
+      viewsSpan.textContent = `▶ ${ep.viewCounter.toLocaleString()}`
+      row.appendChild(viewsSpan)
+
+      const href = watchLink(ep.contentId)
+      if (href) {
+        const watchAnchor = document.createElement('a')
+        watchAnchor.className = 'watch-link'
+        watchAnchor.dataset.action = 'watch'
+        watchAnchor.href = href
+        watchAnchor.target = '_blank'
+        watchAnchor.rel = 'noopener noreferrer'
+        watchAnchor.textContent = '▶ 公式'
+        row.appendChild(watchAnchor)
+      }
+
+      episodesSection.appendChild(row)
+    })
+  }
+  container.appendChild(episodesSection)
+
+  // ── 関連シリーズ ────────────────────────────────────────────
+  const relatedSection = document.createElement('section')
+  relatedSection.className = 'detail-related'
+  relatedSection.dataset.section = 'related'
+
+  if (!hasRelated) {
+    relatedSection.setAttribute('hidden', '')
+  } else {
+    const heading = document.createElement('h2')
+    heading.textContent = '▸ 関連シリーズ/続編'
+    relatedSection.appendChild(heading)
+
+    const list = document.createElement('div')
+    list.className = 'related-list'
+    series.relatedSeries.forEach((r) => {
+      const link = document.createElement('a')
+      link.className = 'related-series-link'
+      link.dataset.action = 'related-series'
+      link.href = buildDetailUrl(r.seriesId)
+      link.textContent = `${r.title} →`
+      list.appendChild(link)
+    })
+    relatedSection.appendChild(list)
+  }
+  container.appendChild(relatedSection)
+}
