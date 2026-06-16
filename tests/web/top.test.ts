@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { renderTop, createSeriesCard } from '../../web/src/features/top/top'
+import { renderTop } from '../../web/src/features/top/top'
+import { card as createSeriesCard } from '../../web/src/components/card'
 import type { TopData } from '../../web/src/features/top/top'
 import type { RankingEntry, NewItem, Work } from '../../web/src/data/types'
 

@@ -5,16 +5,22 @@ export type Theme = 'dark' | 'light'
 export const THEME_KEY_NAME = THEME_KEY
 
 function applyTheme(theme: Theme): void {
-  document.documentElement.classList.toggle('dark', theme === 'dark')
-  document.documentElement.classList.toggle('light', theme === 'light')
+  const root = document.documentElement
+  if (typeof document.startViewTransition === 'function') {
+    void document.startViewTransition(() => {
+      root.dataset.theme = theme
+    })
+  } else {
+    root.dataset.theme = theme
+  }
 }
 
+/** theme-init.js が head で適用済みのため実質 no-op。互換のため残す。 */
 export function initTheme(): void {
   const stored = localStorage.getItem(THEME_KEY)
   if (stored === 'dark' || stored === 'light') {
-    applyTheme(stored)
+    document.documentElement.dataset.theme = stored
   }
-  // null → OS 追従（CSS prefers-color-scheme に委ねる）
 }
 
 export function getTheme(): Theme | null {

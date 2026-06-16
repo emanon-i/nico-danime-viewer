@@ -1,5 +1,8 @@
 import type { RankingEntry, Tag, CoursGroup, Work, NewItem } from '../../data/types'
 import { seriesLink } from '../../shared/deeplink'
+import { card } from '../../components/card'
+import { chip } from '../../components/chip'
+import { icon } from '../../components/icon'
 
 export interface TopData {
   popular: RankingEntry[]
@@ -9,66 +12,6 @@ export interface TopData {
   cours: CoursGroup[]
   newSeries: Work[]
   newEpisodes: NewItem[]
-}
-
-/** シリーズカードを生成する（♥/✓/[↗] のみ・ⓘ なし） */
-export function createSeriesCard(
-  seriesId: number,
-  title: string,
-  thumbnailUrl: string | null,
-  officialHref: string
-): HTMLElement {
-  const card = document.createElement('div')
-  card.className = 'series-card'
-  card.dataset.seriesId = String(seriesId)
-
-  const bodyLink = document.createElement('a')
-  bodyLink.className = 'card-body'
-  bodyLink.href = `?series=${seriesId}`
-
-  const img = document.createElement('img')
-  img.src = thumbnailUrl ?? ''
-  img.alt = title
-  img.loading = 'lazy'
-  bodyLink.appendChild(img)
-
-  const titleEl = document.createElement('div')
-  titleEl.className = 'card-title'
-  titleEl.textContent = title
-  bodyLink.appendChild(titleEl)
-
-  card.appendChild(bodyLink)
-
-  const favBtn = document.createElement('button')
-  favBtn.className = 'card-favorite'
-  favBtn.setAttribute('aria-label', 'お気に入り')
-  favBtn.textContent = '♥'
-  card.appendChild(favBtn)
-
-  const watchedBtn = document.createElement('button')
-  watchedBtn.className = 'card-watched'
-  watchedBtn.setAttribute('aria-label', '見た')
-  watchedBtn.textContent = '✓'
-  card.appendChild(watchedBtn)
-
-  const extLink = document.createElement('a')
-  extLink.className = 'card-external'
-  extLink.href = officialHref
-  extLink.target = '_blank'
-  extLink.rel = 'noopener noreferrer'
-  extLink.setAttribute('aria-label', '公式シリーズページ')
-  extLink.textContent = '↗'
-  card.appendChild(extLink)
-
-  return card
-}
-
-function createTagChip(tag: string): HTMLAnchorElement {
-  const a = document.createElement('a')
-  a.className = 'tag-chip'
-  a.href = `?tag=${encodeURIComponent(tag)}`
-  a.textContent = tag
-  return a
 }
 
 function sampleTags(pool: string[], count: number): string[] {
@@ -85,8 +28,7 @@ function populateTop10(rail: HTMLElement, popular: RankingEntry[]): void {
   rail.innerHTML = ''
   popular.slice(0, 10).forEach((entry) => {
     const href = seriesLink(entry.seriesId) ?? ''
-    const card = createSeriesCard(entry.seriesId, entry.title, entry.thumbnailUrl, href)
-    rail.appendChild(card)
+    rail.appendChild(card(entry.seriesId, entry.title, entry.thumbnailUrl, href))
   })
 }
 
@@ -161,7 +103,7 @@ function populateTags(
     label.className = 'tag-section-label'
     label.textContent = 'Hot'
     hotDiv.appendChild(label)
-    hotTags.slice(0, 8).forEach((t) => hotDiv.appendChild(createTagChip(t)))
+    hotTags.slice(0, 8).forEach((t) => hotDiv.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
   }
 
   if (popularDiv) {
@@ -170,7 +112,9 @@ function populateTags(
     label.className = 'tag-section-label'
     label.textContent = '人気'
     popularDiv.appendChild(label)
-    popularTags.slice(0, 8).forEach((t) => popularDiv.appendChild(createTagChip(t)))
+    popularTags
+      .slice(0, 8)
+      .forEach((t) => popularDiv.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
   }
 
   if (randomDiv && shuffleBtn) {
@@ -180,7 +124,9 @@ function populateTags(
     const renderRandom = () => {
       const chips = randomDiv.querySelectorAll('.tag-chip')
       chips.forEach((c) => c.remove())
-      currentSample.forEach((t) => randomDiv.insertBefore(createTagChip(t), shuffleBtn))
+      currentSample.forEach((t) =>
+        randomDiv.insertBefore(chip(t, `?tag=${encodeURIComponent(t)}`), shuffleBtn)
+      )
     }
 
     shuffleBtn.addEventListener('click', () => {
@@ -194,12 +140,13 @@ function populateTags(
 
 /** トップ画面の 7 セクションを container に描画する */
 export function renderTop(container: HTMLElement, data?: Partial<TopData>): void {
+  // テンプレート補間なし（静的文字列のみ）→ アイコンは後から DOM API で挿入
   container.innerHTML = `
     <header class="site-header" data-section="header">
       <a href="?" class="logo">ニコニコ支店ビューア</a>
-      <button class="header-search-btn" aria-hidden="true" aria-label="検索">🔍</button>
-      <button class="settings-btn" aria-label="設定/情報">⚙</button>
-      <button class="theme-btn" aria-label="テーマ切替">☀</button>
+      <button class="icon-btn header-search-btn" aria-hidden="true" aria-label="検索"></button>
+      <button class="icon-btn settings-btn" aria-label="設定/情報"></button>
+      <button class="icon-btn theme-btn" aria-label="テーマ切替"></button>
     </header>
     <section class="hero" data-section="hero-search">
       <h2>ニコニコ支店から、観たい作品を探す</h2>
@@ -217,12 +164,12 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
         <button class="info-btn" aria-label="Hot と人気TOP の違いについて" title="Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／人気TOP＝全期間の累計再生数による定番ランキング">ⓘ</button>
       </h2>
       <div class="card-rail top10-rail"></div>
-      <a href="?sort=views" class="see-all">すべて見る →</a>
+      <a href="?sort=views" class="see-all">すべて見る</a>
     </section>
     <section class="recent" data-section="recent">
       <h2>最近追加・更新された作品</h2>
       <ul class="recent-list"></ul>
-      <a href="?sort=new" class="see-all">すべて見る →</a>
+      <a href="?sort=new" class="see-all">すべて見る</a>
     </section>
     <section class="cours-browse" data-section="cours">
       <h2>クールから探す</h2>
@@ -233,13 +180,19 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       <div class="tag-hot"></div>
       <div class="tag-popular"></div>
       <div class="tag-random">
-        <button class="shuffle-btn" aria-label="タグを引き直す">🔀</button>
+        <button class="icon-btn shuffle-btn" aria-label="タグを引き直す"></button>
       </div>
       <div class="tag-curated"></div>
     </section>
   `
 
-  // ヒーローが見えている間はヘッダ🔍を非表示にする
+  // アイコンを DOM API で挿入（innerHTML テンプレート補間を使わない）
+  container.querySelector('.header-search-btn')?.appendChild(icon('search'))
+  container.querySelector('.settings-btn')?.appendChild(icon('settings'))
+  container.querySelector('.theme-btn')?.appendChild(icon('sun'))
+  container.querySelector('.shuffle-btn')?.appendChild(icon('shuffle'))
+
+  // ヒーローが見えている間はヘッダ検索ボタンを非表示にする
   const hero = container.querySelector<HTMLElement>('.hero')
   const headerSearchBtn = container.querySelector<HTMLElement>('.header-search-btn')
   if (hero && headerSearchBtn && 'IntersectionObserver' in window) {

@@ -4,7 +4,7 @@ import { renderTop } from '../../web/src/features/top/top'
 import { renderList } from '../../web/src/features/list/list'
 import { renderDetail } from '../../web/src/features/detail/detail'
 import type { ListState } from '../../web/src/features/router'
-import { createSeriesCard } from '../../web/src/features/top/top'
+import { card as createSeriesCard } from '../../web/src/components/card'
 import type { SeriesDetail } from '../../web/src/data/types'
 
 const BASE_STATE: ListState = { q: '', row: '', tag: '', cours: '', sort: 'hot', page: 1 }

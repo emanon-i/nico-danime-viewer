@@ -2,7 +2,7 @@ import type { Work, Tag, CoursGroup } from '../../data/types'
 import type { ListState } from '../router'
 import { buildListUrl } from '../router'
 import { seriesLink } from '../../shared/deeplink'
-import { createSeriesCard } from '../top/top'
+import { card as createCard } from '../../components/card'
 
 export interface ListData {
   tags: Tag[]
@@ -187,7 +187,7 @@ export function renderList(
 
   works.forEach((work) => {
     const officialHref = seriesLink(work.seriesId) ?? ''
-    const card = createSeriesCard(work.seriesId, work.title, work.thumbnailUrl, officialHref)
+    const card = createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref)
     grid.appendChild(card)
   })
   container.appendChild(grid)

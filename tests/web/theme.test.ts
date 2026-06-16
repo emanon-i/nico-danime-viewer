@@ -32,7 +32,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   store.clear()
-  document.documentElement.classList.remove('dark', 'light')
+  delete document.documentElement.dataset.theme
 })
 
 describe('F-0036: ダーク/ライトテーマ', () => {
@@ -40,10 +40,9 @@ describe('F-0036: ダーク/ライトテーマ', () => {
     expect(getTheme()).toBeNull()
   })
 
-  it('test_theme_follows_os_default: initTheme で localStorage なしのとき classList を変更しない', () => {
+  it('test_theme_follows_os_default: initTheme で localStorage なしのとき data-theme を設定しない', () => {
     initTheme()
-    expect(document.documentElement.classList.contains('dark')).toBe(false)
-    expect(document.documentElement.classList.contains('light')).toBe(false)
+    expect(document.documentElement.dataset.theme).toBeUndefined()
   })
 
   it('test_theme_toggle_persist: toggleTheme 後に localStorage にテーマが保存される', () => {
@@ -55,13 +54,13 @@ describe('F-0036: ダーク/ライトテーマ', () => {
   it('test_theme_toggle_persist: initTheme で dark を復元する', () => {
     mockLocalStorage.setItem(THEME_KEY_NAME, 'dark')
     initTheme()
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.documentElement.dataset.theme).toBe('dark')
   })
 
   it('test_theme_toggle_persist: initTheme で light を復元する', () => {
     mockLocalStorage.setItem(THEME_KEY_NAME, 'light')
     initTheme()
-    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(document.documentElement.dataset.theme).toBe('light')
   })
 
   it('test_theme_toggle_persist: toggleTheme を2回呼ぶと元のテーマに戻る', () => {
