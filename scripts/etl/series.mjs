@@ -93,10 +93,13 @@ export function computeFranchiseKeys(seriesTagsMap) {
     }
   }
 
-  // フランチャイズ候補タグ: 2作品以上で共有 OR `〜シリーズ` パターン
+  // フランチャイズ候補タグ:
+  // - `〜シリーズ` パターン（件数不問）
+  // - または 2〜50 シリーズで共有（「アニメ」等の汎用タグを除外）
+  const MAX_FRANCHISE_COUNT = 50
   const franchiseTags = new Set()
   for (const [tag, count] of tagCount) {
-    if (count >= 2 || /シリーズ$/u.test(tag)) {
+    if (/シリーズ$/u.test(tag) || (count >= 2 && count <= MAX_FRANCHISE_COUNT)) {
       franchiseTags.add(tag)
     }
   }
@@ -111,11 +114,11 @@ export function computeFranchiseKeys(seriesTagsMap) {
       continue
     }
 
-    // 共有タグの中で最も多くのシリーズで使われているものをキーに
+    // 共有タグの中で最も具体的（共有シリーズ数が少ない）ものをキーに
     const sharedTags = tags.filter((t) => franchiseTags.has(t))
     if (sharedTags.length > 0) {
       const best = sharedTags.reduce((a, b) =>
-        (tagCount.get(a) ?? 0) >= (tagCount.get(b) ?? 0) ? a : b
+        (tagCount.get(a) ?? Infinity) <= (tagCount.get(b) ?? Infinity) ? a : b
       )
       result.set(seriesId, best)
     }

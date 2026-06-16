@@ -4,10 +4,10 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-/** JSON ファイルに書き出す */
+/** JSON ファイルに書き出す（配信用のためインデントなし） */
 function writeJson(outDir, filename, data) {
   mkdirSync(outDir, { recursive: true })
-  writeFileSync(join(outDir, filename), JSON.stringify(data, null, 2), 'utf-8')
+  writeFileSync(join(outDir, filename), JSON.stringify(data), 'utf-8')
 }
 
 /**
@@ -249,51 +249,27 @@ function exportNew(db, outDir, lastUpdated) {
 }
 
 /**
- * series.json（シリーズ詳細 + 各話一覧 + 関連シリーズ）
+ * series/{seriesId}.json（シリーズ詳細 + 各話一覧 + 関連シリーズ）
+ * 全シリーズを 1 ファイルにまとめると JSON.stringify の V8 文字列長上限を超えるため
+ * シリーズ単位で個別ファイルに出力する
  */
 function exportSeries(db, outDir, lastUpdated) {
-  const seriesList = db
-    .prepare(
-      `SELECT s.series_id, s.title, s.thumbnail_url, s.description_first,
-              s.col_key, s.cours
-       FROM series s WHERE s.is_available = 1 ORDER BY s.series_id`
-    )
-    .all()
-
-  const epBySeriesId = new Map()
-  const epRows = db
-    .prepare(
-      `SELECT series_id, content_id, episode_no, title, view_counter, start_time, thumbnail_url
-       FROM episodes WHERE series_id IS NOT NULL
-       ORDER BY series_id, COALESCE(episode_no, 9999), start_time`
-    )
-    .all()
-  for (const ep of epRows) {
-    if (!epBySeriesId.has(ep.series_id)) epBySeriesId.set(ep.series_id, [])
-    epBySeriesId.get(ep.series_id).push({
-      contentId: ep.content_id,
-      episodeNo: ep.episode_no,
-      title: ep.title,
-      viewCounter: ep.view_counter,
-      startTime: ep.start_time,
-      thumbnailUrl: ep.thumbnail_url,
-    })
-  }
-
+  // タグを事前に全体マップ化（タグ行数は数万行程度でメモリに収まる）
   const tagsBySeriesId = new Map()
-  const tagRows = db
+  for (const row of db
     .prepare(
       `SELECT st.series_id, t.name FROM series_tags st
        JOIN tags t ON st.tag_id = t.tag_id
        JOIN series s ON st.series_id = s.series_id WHERE s.is_available = 1`
     )
-    .all()
-  for (const row of tagRows) {
+    .iterate()) {
     if (!tagsBySeriesId.has(row.series_id)) tagsBySeriesId.set(row.series_id, [])
     tagsBySeriesId.get(row.series_id).push(row.name)
   }
 
-  const relatedRows = db
+  // 関連シリーズをマップ化
+  const relatedBySeries = new Map()
+  for (const row of db
     .prepare(
       `SELECT a.series_id AS target_id, b.series_id, b.title, b.thumbnail_url
        FROM series a
@@ -301,9 +277,7 @@ function exportSeries(db, outDir, lastUpdated) {
                      AND a.series_id != b.series_id AND b.is_available = 1
        WHERE a.franchise_key IS NOT NULL AND a.is_available = 1`
     )
-    .all()
-  const relatedBySeries = new Map()
-  for (const row of relatedRows) {
+    .iterate()) {
     if (!relatedBySeries.has(row.target_id)) relatedBySeries.set(row.target_id, [])
     relatedBySeries.get(row.target_id).push({
       seriesId: row.series_id,
@@ -312,19 +286,43 @@ function exportSeries(db, outDir, lastUpdated) {
     })
   }
 
-  const series = seriesList.map((s) => ({
-    seriesId: s.series_id,
-    title: s.title,
-    thumbnailUrl: s.thumbnail_url,
-    descriptionFirst: s.description_first,
-    tags: tagsBySeriesId.get(s.series_id) ?? [],
-    cours: s.cours,
-    colKey: s.col_key,
-    relatedSeries: relatedBySeries.get(s.series_id) ?? [],
-    episodes: epBySeriesId.get(s.series_id) ?? [],
-  }))
+  // エピソードはシリーズ単位で取得（全件一括ロードを避ける）
+  const epStmt = db.prepare(
+    `SELECT content_id, episode_no, title, view_counter, start_time, thumbnail_url
+     FROM episodes WHERE series_id = ?
+     ORDER BY COALESCE(episode_no, 9999), start_time`
+  )
 
-  writeJson(outDir, 'series.json', { lastUpdated, series })
+  const seriesDir = join(outDir, 'series')
+  mkdirSync(seriesDir, { recursive: true })
+
+  for (const s of db
+    .prepare(
+      `SELECT s.series_id, s.title, s.thumbnail_url, s.description_first, s.col_key, s.cours
+       FROM series s WHERE s.is_available = 1 ORDER BY s.series_id`
+    )
+    .iterate()) {
+    const detail = {
+      lastUpdated,
+      seriesId: s.series_id,
+      title: s.title,
+      thumbnailUrl: s.thumbnail_url,
+      descriptionFirst: s.description_first,
+      tags: tagsBySeriesId.get(s.series_id) ?? [],
+      cours: s.cours,
+      colKey: s.col_key,
+      relatedSeries: relatedBySeries.get(s.series_id) ?? [],
+      episodes: epStmt.all(s.series_id).map((ep) => ({
+        contentId: ep.content_id,
+        episodeNo: ep.episode_no,
+        title: ep.title,
+        viewCounter: ep.view_counter,
+        startTime: ep.start_time,
+        thumbnailUrl: ep.thumbnail_url,
+      })),
+    }
+    writeFileSync(join(seriesDir, `${s.series_id}.json`), JSON.stringify(detail), 'utf-8')
+  }
 }
 
 /**

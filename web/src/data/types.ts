@@ -106,7 +106,15 @@ export interface SeriesDetail {
   episodes: SeriesEpisode[]
 }
 
-export interface SeriesJson {
+export interface SeriesDetailJson {
   lastUpdated: string
-  series: SeriesDetail[]
+  seriesId: number
+  title: string
+  thumbnailUrl: string | null
+  descriptionFirst: string | null
+  tags: string[]
+  cours: string | null
+  colKey: string | null
+  relatedSeries: RelatedSeries[]
+  episodes: SeriesEpisode[]
 }

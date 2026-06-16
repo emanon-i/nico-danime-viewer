@@ -1,5 +1,5 @@
 import { defineConfig, type Plugin } from 'vite'
-import { copyFileSync, createReadStream, mkdirSync, readdirSync } from 'node:fs'
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -43,6 +43,14 @@ const dataPlugin: Plugin = {
     mkdirSync(dest, { recursive: true })
     for (const f of readdirSync(DATA_DIR)) {
       if (f.endsWith('.json')) copyFileSync(join(DATA_DIR, f), join(dest, f))
+    }
+    const srcSeriesDir = join(DATA_DIR, 'series')
+    if (existsSync(srcSeriesDir)) {
+      const destSeriesDir = join(dest, 'series')
+      mkdirSync(destSeriesDir, { recursive: true })
+      for (const f of readdirSync(srcSeriesDir)) {
+        if (f.endsWith('.json')) copyFileSync(join(srcSeriesDir, f), join(destSeriesDir, f))
+      }
     }
   },
 }

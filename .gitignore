@@ -9,10 +9,13 @@ dist/
 .env.*
 !.env.example
 
-# --- fetch スクリプトの生成物（ビルド/CI で都度生成する想定） ---
-# 静的サイトが読む JSON はコミットせず、デプロイ前に `pnpm fetch` で生成する。
-# SQLite ビルドDB も中間生成物（再生成可能）なのでコミットしない。
-/data/
+# --- fetch スクリプトの生成物 ---
+# SQLite ビルド DB・内部状態は中間生成物（再生成可能）なのでコミットしない。
+# 静的配信 JSON は初回シードとして data/ をコミット対象とする。
+/data/*.sqlite
+/data/*.sqlite-shm
+/data/*.sqlite-wal
+/data/state/
 
 # --- OS / エディタ ---
 .DS_Store

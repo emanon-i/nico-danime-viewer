@@ -96,17 +96,18 @@ async function main() {
     await page.waitForTimeout(300)
     saved.push(await shot(page, `02_list_${vp.name}`))
 
-    // ── 作品詳細（series.json 36MB を待つ） ────────────────
+    // ── 作品詳細（series/{id}.json を待つ） ────────────────
     console.log(`[${vp.name}] 詳細画面 (series=${firstSeriesId})...`)
     const detailUrl = firstSeriesId
       ? `${BASE_URL}?screen=detail&series=${firstSeriesId}`
       : `${BASE_URL}?screen=detail&series=555661`
-    // series.json のロード完了を待ってからページへ遷移
-    const seriesResponseP = page.waitForResponse((r) => r.url().includes('series.json'), {
-      timeout: 60000,
-    })
+    // series/{id}.json のロード完了を待ってからページへ遷移
+    const seriesResponseP = page.waitForResponse(
+      (r) => r.url().includes('/data/series/') && r.url().endsWith('.json'),
+      { timeout: 30000 }
+    )
     await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
-    await seriesResponseP.catch((e) => console.warn('series.json タイムアウト:', e.message))
+    await seriesResponseP.catch((e) => console.warn('series/{id}.json タイムアウト:', e.message))
     // データ反映を待つ
     await page
       .waitForFunction(

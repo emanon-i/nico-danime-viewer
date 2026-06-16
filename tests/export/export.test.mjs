@@ -88,21 +88,14 @@ describe('exportAll (F-0020)', () => {
     ])
   })
 
-  it('test_export_all_json_files: 7つのJSONファイルが出力される', () => {
+  it('test_export_all_json_files: 6つのJSONファイルと series/ ディレクトリが出力される', () => {
     exportAll(db, outDir, NOW)
 
-    const files = [
-      'works.json',
-      'ranking.json',
-      'tags.json',
-      'cours.json',
-      'kana.json',
-      'new.json',
-      'series.json',
-    ]
+    const files = ['works.json', 'ranking.json', 'tags.json', 'cours.json', 'kana.json', 'new.json']
     for (const f of files) {
       expect(existsSync(join(outDir, f)), `${f} が存在しない`).toBe(true)
     }
+    expect(existsSync(join(outDir, 'series')), 'series/ ディレクトリが存在しない').toBe(true)
   })
 
   it('test_works_json_structure: works.json に lastUpdated と works 配列がある', () => {
@@ -184,18 +177,16 @@ describe('exportAll (F-0020)', () => {
     expect(item).toHaveProperty('pubDate')
   })
 
-  it('test_series_json_structure: series.json に series + episodes がある', () => {
+  it('test_series_json_structure: series/{id}.json にシリーズ詳細 + episodes がある', () => {
     exportAll(db, outDir, NOW)
-    const data = readJson(outDir, 'series.json')
+    const data = readJson(outDir, 'series/1.json')
 
     expect(data.lastUpdated).toBe(NOW)
-    expect(Array.isArray(data.series)).toBe(true)
-
-    const s1 = data.series.find((s) => s.seriesId === 1)
-    expect(s1).toBeTruthy()
-    expect(Array.isArray(s1.episodes)).toBe(true)
-    expect(s1.episodes.length).toBeGreaterThan(0)
-    expect(s1.episodes[0]).toHaveProperty('contentId')
-    expect(s1.episodes[0]).toHaveProperty('title')
+    expect(data.seriesId).toBe(1)
+    expect(data.title).toBe('ゆるキャン△')
+    expect(Array.isArray(data.episodes)).toBe(true)
+    expect(data.episodes.length).toBeGreaterThan(0)
+    expect(data.episodes[0]).toHaveProperty('contentId')
+    expect(data.episodes[0]).toHaveProperty('title')
   })
 })

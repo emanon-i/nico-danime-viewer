@@ -114,6 +114,7 @@ async function runExportOnly() {
 
   const seriesTagsMap = getSeriesTagsMap(db)
   const franchiseKeys = computeFranchiseKeys(seriesTagsMap)
+  db.prepare('UPDATE series SET franchise_key = NULL').run()
   for (const [seriesId, franchiseKey] of franchiseKeys) {
     updateSeriesFields(db, seriesId, { franchise_key: franchiseKey, updated_at: now })
   }
@@ -316,6 +317,7 @@ async function main() {
   // E4: Franchise keys（共有タグ束ね）
   const seriesTagsMap = getSeriesTagsMap(db)
   const franchiseKeys = computeFranchiseKeys(seriesTagsMap)
+  db.prepare('UPDATE series SET franchise_key = NULL').run()
   for (const [seriesId, franchiseKey] of franchiseKeys) {
     updateSeriesFields(db, seriesId, { franchise_key: franchiseKey, updated_at: now })
   }

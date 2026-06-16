@@ -5,7 +5,7 @@ import type {
   CoursJson,
   KanaJson,
   NewJson,
-  SeriesJson,
+  SeriesDetailJson,
 } from './types'
 
 const DATA_BASE = 'data/'
@@ -53,9 +53,13 @@ function isNewJson(d: unknown): d is NewJson {
   return typeof d['lastUpdated'] === 'string' && Array.isArray(d['items'])
 }
 
-function isSeriesJson(d: unknown): d is SeriesJson {
+function isSeriesDetailJson(d: unknown): d is SeriesDetailJson {
   if (!isObj(d)) return false
-  return typeof d['lastUpdated'] === 'string' && Array.isArray(d['series'])
+  return (
+    typeof d['lastUpdated'] === 'string' &&
+    typeof d['seriesId'] === 'number' &&
+    Array.isArray(d['episodes'])
+  )
 }
 
 async function loadJson<T>(filename: string, guard: (d: unknown) => d is T): Promise<T> {
@@ -72,4 +76,5 @@ export const loadTags = (): Promise<TagsJson> => loadJson('tags.json', isTagsJso
 export const loadCours = (): Promise<CoursJson> => loadJson('cours.json', isCoursJson)
 export const loadKana = (): Promise<KanaJson> => loadJson('kana.json', isKanaJson)
 export const loadNew = (): Promise<NewJson> => loadJson('new.json', isNewJson)
-export const loadSeries = (): Promise<SeriesJson> => loadJson('series.json', isSeriesJson)
+export const loadSeriesDetail = (seriesId: number): Promise<SeriesDetailJson> =>
+  loadJson(`series/${seriesId}.json`, isSeriesDetailJson)

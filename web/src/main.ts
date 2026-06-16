@@ -18,8 +18,22 @@ import {
 } from './features/shared/user-state'
 import { initTheme, toggleTheme } from './features/shared/theme'
 import { initSettingsModal } from './features/shared/settings-modal'
-import { loadWorks, loadRanking, loadTags, loadCours, loadNew, loadSeries } from './data/loader'
-import type { WorksJson, RankingJson, TagsJson, CoursJson, NewJson } from './data/types'
+import {
+  loadWorks,
+  loadRanking,
+  loadTags,
+  loadCours,
+  loadNew,
+  loadSeriesDetail,
+} from './data/loader'
+import type {
+  WorksJson,
+  RankingJson,
+  TagsJson,
+  CoursJson,
+  NewJson,
+  SeriesDetailJson,
+} from './data/types'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
@@ -214,12 +228,11 @@ async function render(): Promise<void> {
     app.appendChild(bcContainer)
     renderBreadcrumb(bcContainer, screen)
 
-    let seriesDetail = null
+    let seriesDetail: SeriesDetailJson | null = null
     try {
-      const seriesData = await loadSeries()
-      seriesDetail = seriesData.series.find((s) => s.seriesId === screen.seriesId) ?? null
+      seriesDetail = await loadSeriesDetail(screen.seriesId)
     } catch {
-      // series.json 未生成 or ネットワークエラー
+      // series/{id}.json 未生成 or ネットワークエラー
     }
     renderDetail(app, seriesDetail)
     wireDetailMarks(app, screen.seriesId)

@@ -6,7 +6,7 @@ import {
   loadCours,
   loadKana,
   loadNew,
-  loadSeries,
+  loadSeriesDetail,
 } from '../../web/src/data/loader'
 
 const VALID_WORKS = {
@@ -119,11 +119,23 @@ describe('loadNew (F-0021)', () => {
   })
 })
 
-describe('loadSeries (F-0021)', () => {
-  it('test_loader_typed_access: SeriesJson 型で返す', async () => {
-    const data = { lastUpdated: '2026-06-16T00:00:00Z', series: [] }
+describe('loadSeriesDetail (F-0021)', () => {
+  it('test_loader_typed_access: SeriesDetailJson 型で返す', async () => {
+    const data = {
+      lastUpdated: '2026-06-16T00:00:00Z',
+      seriesId: 1,
+      title: 'ゆるキャン△',
+      thumbnailUrl: null,
+      descriptionFirst: null,
+      tags: [],
+      cours: null,
+      colKey: null,
+      relatedSeries: [],
+      episodes: [],
+    }
     mockOk(data)
-    const result = await loadSeries()
-    expect(Array.isArray(result.series)).toBe(true)
+    const result = await loadSeriesDetail(1)
+    expect(result.seriesId).toBe(1)
+    expect(Array.isArray(result.episodes)).toBe(true)
   })
 })
