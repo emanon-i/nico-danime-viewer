@@ -206,8 +206,8 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
     <header class="site-header" data-section="header">
       <a href="?" class="logo">ニコニコ支店ビューア</a>
       <button class="icon-btn header-search-btn" aria-hidden="true" aria-label="検索"></button>
-      <button class="icon-btn settings-btn" aria-label="設定/情報"></button>
       <button class="icon-btn theme-btn" aria-label="テーマ切替"></button>
+      <button class="icon-btn settings-btn" aria-label="設定/情報"></button>
     </header>
     <section class="hero" data-section="hero-search">
       <div class="hero-search">
@@ -221,6 +221,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       <a href="?sort=new" class="quick-btn">新着</a>
       <a href="?sort=hot" class="quick-btn">Hot</a>
       <a href="?sort=views" class="quick-btn">人気TOP</a>
+      <a href="?sort=kana" class="quick-btn">五十音</a>
     </section>
     <section class="top10" data-section="top10">
       <div class="section-head">

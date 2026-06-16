@@ -65,7 +65,7 @@ for (const s of shots) {
     `[${s.name}] images ${stats.ok}/${stats.total} loaded; first=${stats.firstNatural} ${stats.firstSrc}`
   )
 
-  await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: false })
+  await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true })
   await ctx.close()
 }
 

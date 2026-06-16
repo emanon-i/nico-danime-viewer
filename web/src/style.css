@@ -161,6 +161,11 @@
     --r-md: 0.5rem;
     --r-lg: 0.75rem;
     --r-full: 9999px;
+
+    /* カード比率: 16:9。素サムネは 4:3(360×270) だが中身は 16:9 映像を
+       上下黒帯でレターボックスした焼き込み。16:9 cover で黒帯(上下各 1/8)を
+       正確にトリミングして実コンテンツだけを見せる。1トークンで全カード追従。 */
+    --card-aspect: 16 / 9;
   }
 
   /* ── z-index ─────────────────────────────────────── */
@@ -357,9 +362,14 @@
     flex-wrap: nowrap;
     gap: var(--sp-2);
     padding: 0 var(--gutter) clamp(var(--sp-5), 5vw, var(--sp-7));
-    justify-content: center;
+    /* spec: 検索直下・左寄せ・はみ出しは横スワイプ（可視スクロールバー非表示） */
+    justify-content: flex-start;
     overflow-x: auto;
     scrollbar-width: none;
+    /* 中身もコンテンツ幅で中央寄せ（ワイドで左に張り付かせない） */
+    max-width: calc(var(--content-max) + 2 * var(--gutter));
+    margin-inline: auto;
+    width: 100%;
 
     &::-webkit-scrollbar {
       display: none;
@@ -389,7 +399,9 @@
   }
 
   /* ── セクション共通 ──────────────────────────────── */
-  section[data-section] {
+  /* :not(.hero) … ヒーロー(検索)には下罫線を引かない。検索→クイックアクセスは
+     線で区切らず自然につなげる（spec: 検索バーとクイックアクセスの間に divider を出さない）。 */
+  section[data-section]:not(.hero) {
     padding: clamp(var(--sp-5), 4vw, var(--sp-7)) var(--gutter);
     border-bottom: 1px solid var(--border);
 
@@ -475,12 +487,14 @@
 
   /* ── シリーズカード（サムネ全面・文字裏 scrim）──────
      構造: .series-card > a.card-body(img + .card-overlay) + .card-actions(♥✓) + a.card-external(↗)
-     ・カード全面 = サムネ（aspect-ratio 4/3＝実サムネ 360×270・object-fit cover）
+     ・カード全面 = サムネ（aspect-ratio 16/9＝--card-aspect・object-fit cover）
+       素サムネは 4:3(360×270) だが中身は 16:9 をレターボックスした焼き込み黒帯付き。
+       16:9 cover で黒帯(上下各 1/8)を正確に切り、実コンテンツだけを全面表示する。
      ・文字（rank/title/meta）は下端 scrim にだけ重ねる（画像本体は暗くしない）
      ・♥✓=左上 / ↗=右上 をオーバーレイ（タップ領域は別位置で重ねない） */
   .series-card {
     position: relative;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: var(--card-aspect);
     border-radius: var(--r-md);
     background: var(--surface-2);
     box-shadow: var(--shadow-sm);
@@ -860,7 +874,8 @@
 
   .list-row-thumb {
     flex: 0 0 5.5rem;
-    aspect-ratio: 4 / 3;
+    /* カードと同じく 16:9 cover で焼き込み黒帯をトリミング */
+    aspect-ratio: var(--card-aspect);
     border-radius: var(--r-sm);
     overflow: hidden;
     background: var(--surface-2);

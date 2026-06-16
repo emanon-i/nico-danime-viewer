@@ -94,9 +94,16 @@ describe('renderTop (F-0023)', () => {
     expect(heroInput).not.toBeNull()
   })
 
-  it('クイックアクセスに4つのボタンがある', () => {
+  it('クイックアクセスに5つのボタンがある（今期/新着/Hot/人気TOP/五十音）', () => {
     const btns = container.querySelectorAll('[data-section="quick-access"] .quick-btn')
-    expect(btns.length).toBe(4)
+    expect(btns.length).toBe(5)
+    expect(Array.from(btns).map((b) => b.textContent)).toEqual([
+      '今期',
+      '新着',
+      'Hot',
+      '人気TOP',
+      '五十音',
+    ])
   })
 })
 
@@ -136,7 +143,7 @@ describe('renderTop with data (F-0032)', () => {
     document.body.removeChild(container)
   })
 
-  it('test_quick_access_presets: 4プリセットが所定URLを持つ', () => {
+  it('test_quick_access_presets: 5プリセットが所定URLを持つ', () => {
     renderTop(container)
     const btns = container.querySelectorAll('[data-section="quick-access"] .quick-btn')
     const hrefs = Array.from(btns).map((b) => b.getAttribute('href'))
@@ -144,6 +151,23 @@ describe('renderTop with data (F-0032)', () => {
     expect(hrefs).toContain('?sort=new')
     expect(hrefs).toContain('?sort=hot')
     expect(hrefs).toContain('?sort=views')
+    expect(hrefs).toContain('?sort=kana')
+  })
+
+  it('test_header_order: ヘッダ右側は 🔍 → テーマ → 設定 の順（慣例＝設定が右端）', () => {
+    renderTop(container)
+    const header = container.querySelector('[data-section="header"]')!
+    const iconBtns = Array.from(header.querySelectorAll('.icon-btn'))
+    const classOrder = iconBtns.map((b) =>
+      b.classList.contains('header-search-btn')
+        ? 'search'
+        : b.classList.contains('theme-btn')
+          ? 'theme'
+          : b.classList.contains('settings-btn')
+            ? 'settings'
+            : 'other'
+    )
+    expect(classOrder).toEqual(['search', 'theme', 'settings'])
   })
 
   it('test_top10_by_total_views: TOP10が popular の上位10件を表示する', () => {
