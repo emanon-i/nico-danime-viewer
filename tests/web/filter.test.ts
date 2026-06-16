@@ -20,6 +20,7 @@ const BASE_WORK: Work = {
   cours: null,
   franchiseKey: null,
   colKey: null,
+  episodeCount: 0,
   relatedSeries: [],
 }
 

@@ -13,11 +13,12 @@ function writeJson(outDir, filename, data) {
 /**
  * DB から works.json を生成（series 一覧 + tags + related）
  */
-function exportWorks(db, outDir, lastUpdated) {
+export function exportWorks(db, outDir, lastUpdated) {
   const seriesList = db
     .prepare(
       `SELECT s.series_id, s.title, s.thumbnail_url, s.description_first,
-              s.col_key, s.cours, s.franchise_key
+              s.col_key, s.cours, s.franchise_key,
+              (SELECT COUNT(*) FROM episodes e WHERE e.series_id = s.series_id) AS episode_count
        FROM series s
        WHERE s.is_available = 1
        ORDER BY s.series_id`
@@ -67,6 +68,7 @@ function exportWorks(db, outDir, lastUpdated) {
     cours: s.cours,
     franchiseKey: s.franchise_key,
     colKey: s.col_key,
+    episodeCount: s.episode_count ?? 0,
     relatedSeries: relatedBySeries.get(s.series_id) ?? [],
   }))
 
@@ -232,7 +234,7 @@ export function exportNew(db, outDir, lastUpdated) {
   const rows = db
     .prepare(
       `SELECT r.watch_id, r.title, r.pub_date, r.resolved_content_id, r.resolution_status,
-              e.thumbnail_url
+              e.thumbnail_url, e.episode_no, e.view_counter
        FROM rss_items r
        LEFT JOIN episodes e ON e.content_id = r.resolved_content_id
        ORDER BY r.pub_date DESC
@@ -249,6 +251,8 @@ export function exportNew(db, outDir, lastUpdated) {
       resolvedContentId: r.resolved_content_id,
       resolutionStatus: r.resolution_status,
       thumbnailUrl: r.thumbnail_url ?? null,
+      episodeNo: r.episode_no ?? null,
+      viewCounter: r.view_counter ?? null,
     })),
   })
 }

@@ -22,6 +22,7 @@ const NEW_SERIES: Work[] = Array.from({ length: 3 }, (_, i) => ({
   cours: null,
   franchiseKey: null,
   colKey: null,
+  episodeCount: 12 + i,
   relatedSeries: [],
 }))
 
@@ -33,6 +34,8 @@ const NEW_EPISODES: NewItem[] = [
     resolvedContentId: 'so123',
     resolutionStatus: 'resolved',
     thumbnailUrl: 'https://nicovideo.cdn.nimg.jp/thumbnails/123/123.456',
+    episodeNo: 11,
+    viewCounter: 132,
   },
   {
     watchId: 'w2',
@@ -41,6 +44,8 @@ const NEW_EPISODES: NewItem[] = [
     resolvedContentId: null,
     resolutionStatus: 'rss_only',
     thumbnailUrl: null,
+    episodeNo: null,
+    viewCounter: null,
   },
 ]
 
@@ -202,6 +207,55 @@ describe('renderTop with data (F-0032)', () => {
     expect(img).not.toBeNull()
     // 素サムネ URL は .L へ昇格される
     expect(img?.getAttribute('src')).toBe('https://nicovideo.cdn.nimg.jp/thumbnails/123/123.456.L')
+  })
+
+  it('新着シリーズ行はシリーズ型（kind=series・「全N話」・↗ /series/）', () => {
+    renderTop(container, SAMPLE_DATA)
+    const row = container.querySelector('[data-subsection="new-series"] .recent-item.list-row')
+    expect(row?.getAttribute('data-kind')).toBe('series')
+    expect(row?.querySelector('.list-row-badge')?.textContent).toContain('シリーズ')
+    expect(row?.querySelector('.list-row-meta')?.textContent).toBe('全12話')
+    const ext = row?.querySelector<HTMLAnchorElement>('.list-row-external')
+    expect(ext?.getAttribute('href')).toBe('https://www.nicovideo.jp/series/100')
+    expect(ext?.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('最新の動画行は各話型（kind=episode・「第N話」・再生数・↗ /watch/）', () => {
+    renderTop(container, SAMPLE_DATA)
+    const row = container.querySelector('[data-subsection="new-episodes"] .recent-item.list-row')
+    expect(row?.getAttribute('data-kind')).toBe('episode')
+    expect(row?.querySelector('.list-row-badge')?.textContent).toBe('第11話')
+    expect(row?.querySelector('.list-row-meta')?.textContent).toContain('132 再生')
+    const ext = row?.querySelector<HTMLAnchorElement>('.list-row-external')
+    expect(ext?.getAttribute('href')).toBe('https://www.nicovideo.jp/watch/so123')
+    expect(ext?.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('各話バッジはタイトルの「第N話」表記を優先（episode_no とズレても表示が一致）', () => {
+    const data: TopData = {
+      ...SAMPLE_DATA,
+      newSeries: NEW_SERIES.slice(0, 1),
+      newEpisodes: [
+        {
+          watchId: 'wx',
+          title: 'おそ松さん 第4期　第13話　「ザ・マツノテン」',
+          pubDate: '2026-06-16T00:00:00Z',
+          resolvedContentId: 'so999',
+          resolutionStatus: 'resolved',
+          thumbnailUrl: null,
+          episodeNo: 14, // nvapi はズレた番号
+          viewCounter: 31,
+        },
+      ],
+    }
+    renderTop(container, data)
+    const row = container.querySelector('[data-subsection="new-episodes"] .recent-item.list-row')
+    // バッジはタイトル表記の「第13話」（episode_no=14 ではない）
+    expect(row?.querySelector('.list-row-badge')?.textContent).toBe('第13話')
+    // 本文タイトルからは「第13話」が除去されている
+    const titleText = row?.querySelector('.list-row-title-text')?.textContent ?? ''
+    expect(titleText).not.toContain('第13話')
+    expect(titleText).toContain('おそ松さん')
   })
 
   it('test_top_tag_chip_navigates: タグチップが ?tag=... の一覧へリンクする', () => {

@@ -27,6 +27,7 @@ const FIXTURE_WORKS: Work[] = [
     colKey: 'yu',
     cours: '2018-冬',
     tags: ['日常', 'アウトドア'],
+    episodeCount: 0,
     relatedSeries: [],
   },
   {
@@ -38,6 +39,7 @@ const FIXTURE_WORKS: Work[] = [
     colKey: 'bo',
     cours: '2022-秋',
     tags: ['音楽', '部活'],
+    episodeCount: 0,
     relatedSeries: [],
   },
   {
@@ -49,6 +51,7 @@ const FIXTURE_WORKS: Work[] = [
     colKey: 'su',
     cours: '2022-春',
     tags: ['アクション', '家族'],
+    episodeCount: 0,
     relatedSeries: [],
   },
 ]

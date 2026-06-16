@@ -16,6 +16,7 @@ const SAMPLE_WORKS: Work[] = [
     cours: '2026春',
     franchiseKey: null,
     colKey: 'sa',
+    episodeCount: 0,
     relatedSeries: [],
   },
   {
@@ -27,6 +28,7 @@ const SAMPLE_WORKS: Work[] = [
     cours: null,
     franchiseKey: null,
     colKey: 'sa',
+    episodeCount: 0,
     relatedSeries: [],
   },
 ]

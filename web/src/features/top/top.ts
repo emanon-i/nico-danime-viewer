@@ -1,6 +1,6 @@
 import type { RankingEntry, Tag, CoursGroup, Work, NewItem } from '../../data/types'
-import { seriesLink } from '../../shared/deeplink'
-import { card } from '../../components/card'
+import { seriesLink, watchLink } from '../../shared/deeplink'
+import { card, formatViews } from '../../components/card'
 import { listRow } from '../../components/listRow'
 import { chip } from '../../components/chip'
 import { icon } from '../../components/icon'
@@ -38,49 +38,91 @@ function populateTop10(rail: HTMLElement, popular: RankingEntry[]): void {
   })
 }
 
+/** RSS の pub_date（"Tue, 16 Jun 2026 00:30:00 +0900"）を "M/D" に整形。失敗時は空文字。 */
+function formatMonthDay(pubDate: string): string {
+  const t = Date.parse(pubDate)
+  if (Number.isNaN(t)) return ''
+  const d = new Date(t)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+/**
+ * 話タイトルから「第N話」ラベルを取り出してバッジ化し、本文タイトルからは除去する。
+ * バッジはタイトル表記そのものを採用するため必ず一致する（nvapi の episode_no とは
+ * 番号がずれることがあるので、タイトル優先・episode_no はフォールバック）。
+ */
+function splitEpisodeLabel(
+  title: string,
+  episodeNo: number | null
+): { badge: string | null; title: string } {
+  const m = title.match(/第[0-9０-９]+話/)
+  if (m) {
+    const cleaned = title.replace(m[0], ' ').replace(/\s+/g, ' ').trim()
+    return { badge: m[0], title: cleaned }
+  }
+  if (episodeNo != null) return { badge: `第${episodeNo}話`, title }
+  return { badge: null, title }
+}
+
 function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: NewItem[]): void {
   const list = section.querySelector<HTMLElement>('.recent-list')
   if (!list) return
   list.innerHTML = ''
 
-  // 新着シリーズ（シリーズ単位・サムネ左の list row）
+  const resolvedEps = newEpisodes.filter(
+    (ep) => ep.resolutionStatus === 'resolved' && ep.resolvedContentId
+  )
+  // 横並び 2 列の整列のため、両列の件数を揃える（最大 5）
+  const count = Math.min(5, newSeries.length, resolvedEps.length)
+
+  // 新着シリーズ（シリーズ型: layers バッジ＋「全N話」＋ ↗ 公式シリーズ）
   const seriesSec = document.createElement('li')
   seriesSec.dataset.subsection = 'new-series'
   const seriesLabel = document.createElement('strong')
   seriesLabel.textContent = '新着シリーズ'
   seriesSec.appendChild(seriesLabel)
-  newSeries.slice(0, 5).forEach((w) => {
+  newSeries.slice(0, count).forEach((w) => {
     const row = listRow({
+      kind: 'series',
       title: w.title,
       href: `?series=${w.seriesId}`,
       thumbnailUrl: w.thumbnailUrl,
-      meta: '新着シリーズ',
+      badge: 'シリーズ',
+      meta: `全${w.episodeCount}話`,
+      externalHref: seriesLink(w.seriesId) ?? undefined,
     })
     row.classList.add('recent-item')
     seriesSec.appendChild(row)
   })
   list.appendChild(seriesSec)
 
-  // 最新の動画（話単位・公式 watch へ外部遷移。RSS 由来でサムネ無し→プレースホルダ）
+  // 最新の動画（各話型: 「第N話」バッジ＋話タイトル＋再生数/日付＋ ↗ 公式 watch）
   const epSec = document.createElement('li')
   epSec.dataset.subsection = 'new-episodes'
   const epLabel = document.createElement('strong')
   epLabel.textContent = '最新の動画'
   epSec.appendChild(epLabel)
-  newEpisodes
-    .filter((ep) => ep.resolutionStatus === 'resolved' && ep.resolvedContentId)
-    .slice(0, 5)
-    .forEach((ep) => {
-      const row = listRow({
-        title: ep.title,
-        href: `https://www.nicovideo.jp/watch/${ep.resolvedContentId}`,
-        thumbnailUrl: ep.thumbnailUrl,
-        meta: '最新の動画',
-        external: true,
-      })
-      row.classList.add('recent-item')
-      epSec.appendChild(row)
+  resolvedEps.slice(0, count).forEach((ep) => {
+    const cid = ep.resolvedContentId as string
+    const watchHref = watchLink(cid) ?? `https://www.nicovideo.jp/watch/${cid}`
+    const metaParts: string[] = []
+    if (typeof ep.viewCounter === 'number') metaParts.push(`${formatViews(ep.viewCounter)} 再生`)
+    const md = formatMonthDay(ep.pubDate)
+    if (md) metaParts.push(md)
+    const ep_label = splitEpisodeLabel(ep.title, ep.episodeNo)
+    const row = listRow({
+      kind: 'episode',
+      title: ep_label.title,
+      href: watchHref,
+      thumbnailUrl: ep.thumbnailUrl,
+      external: true,
+      badge: ep_label.badge ?? undefined,
+      meta: metaParts.join(' ・ '),
+      externalHref: watchHref,
     })
+    row.classList.add('recent-item')
+    epSec.appendChild(row)
+  })
   list.appendChild(epSec)
 }
 

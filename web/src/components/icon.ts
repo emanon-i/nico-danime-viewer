@@ -13,6 +13,7 @@ export type IconName =
   | 'x'
   | 'chevron-right'
   | 'play'
+  | 'layers'
 
 const PATHS: Record<IconName, string> = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
@@ -31,6 +32,8 @@ const PATHS: Record<IconName, string> = {
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
   play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  layers:
+    '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84Z"/><path d="m6.08 9.5-3.49 1.59a1 1 0 0 0 0 1.83l8.59 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84L17.92 9.5"/><path d="m6.08 14.5-3.49 1.59a1 1 0 0 0 0 1.83l8.59 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84l-3.49-1.59"/>',
 }
 
 const SVG_ATTRS =

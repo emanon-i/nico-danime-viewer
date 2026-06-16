@@ -20,7 +20,7 @@ export function hiResThumb(url: string | null): string {
 }
 
 /** 再生数を日本語の概数（308万 / 9,876）に整形する。 */
-function formatViews(n: number): string {
+export function formatViews(n: number): string {
   if (n >= 10000) {
     const man = n / 10000
     return `${man >= 100 ? Math.round(man) : man.toFixed(1)}万`
