@@ -7,6 +7,7 @@ import {
   currentCoursLabel,
   PAGE_SIZE,
 } from '../../web/src/features/list/filter'
+import type { FilterOpts } from '../../web/src/features/list/filter'
 import type { Work, RankingJson } from '../../web/src/data/types'
 import type { ListState } from '../../web/src/features/router'
 
@@ -215,6 +216,37 @@ describe('sortWorks (F-0031)', () => {
     const result = sortWorks(WORKS, 'hot', ranking).map((w) => w.seriesId)
     expect(result[0]).toBe(1) // ランキングあり
     // 残り2件はランキング外（末尾側）
+  })
+})
+
+describe('filterWorks - favIds/watchedIds (F-0034)', () => {
+  const WORKS: Work[] = [
+    { ...BASE_WORK, seriesId: 1, title: 'A' },
+    { ...BASE_WORK, seriesId: 2, title: 'B' },
+    { ...BASE_WORK, seriesId: 3, title: 'C' },
+  ]
+
+  it('favIds が指定されると お気に入りのみに絞れる', () => {
+    const opts: FilterOpts = { favIds: new Set([1, 3]) }
+    const result = filterWorks(WORKS, BASE_STATE, opts)
+    expect(result.map((w) => w.seriesId)).toEqual([1, 3])
+  })
+
+  it('watchedIds が指定されると 見た作品が除外される（未視聴だけ）', () => {
+    const opts: FilterOpts = { watchedIds: new Set([2]) }
+    const result = filterWorks(WORKS, BASE_STATE, opts)
+    expect(result.map((w) => w.seriesId)).toEqual([1, 3])
+  })
+
+  it('favIds + watchedIds を組み合わせられる', () => {
+    const opts: FilterOpts = { favIds: new Set([1, 2, 3]), watchedIds: new Set([2]) }
+    const result = filterWorks(WORKS, BASE_STATE, opts)
+    expect(result.map((w) => w.seriesId)).toEqual([1, 3])
+  })
+
+  it('opts なしは既存動作を維持する', () => {
+    const result = filterWorks(WORKS, BASE_STATE)
+    expect(result).toHaveLength(3)
   })
 })
 

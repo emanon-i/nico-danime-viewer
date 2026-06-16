@@ -46,6 +46,8 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   const infoBtn = document.createElement('button')
   infoBtn.className = 'info-btn'
   infoBtn.setAttribute('aria-label', '主要メタの要点について')
+  infoBtn.title =
+    '概要は第1話のあらすじを表示しています。タグ・再生数・各話・クールはニコニコの公開情報より'
   infoBtn.textContent = 'ⓘ'
   h1.appendChild(infoBtn)
   infoDiv.appendChild(h1)

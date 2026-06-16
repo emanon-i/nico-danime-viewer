@@ -35,9 +35,19 @@ export function renderList(
     totalCount: number
     totalPages: number
     data?: ListData
+    favFilter?: boolean
+    unwatchedFilter?: boolean
   }
 ): void {
-  const { state, works, totalCount, totalPages, data } = options
+  const {
+    state,
+    works,
+    totalCount,
+    totalPages,
+    data,
+    favFilter = false,
+    unwatchedFilter = false,
+  } = options
   container.innerHTML = ''
 
   // ── 検索バー ────────────────────────────────────────────────
@@ -81,6 +91,8 @@ export function renderList(
   const sortInfo = document.createElement('button')
   sortInfo.className = 'info-btn'
   sortInfo.setAttribute('aria-label', '並び替えについて')
+  sortInfo.title =
+    '勢い順＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／累計再生数順＝全期間の定番'
   sortInfo.textContent = 'ⓘ'
   sortH3.appendChild(sortInfo)
   sortSection.appendChild(sortH3)
@@ -147,12 +159,14 @@ export function renderList(
   const favCb = document.createElement('input')
   favCb.type = 'checkbox'
   favCb.name = 'fav'
+  favCb.checked = favFilter
   favLabel.appendChild(favCb)
   favLabel.appendChild(document.createTextNode(' ♥ お気に入りだけ'))
   const unwatchedLabel = document.createElement('label')
   const unwatchedCb = document.createElement('input')
   unwatchedCb.type = 'checkbox'
   unwatchedCb.name = 'unwatched'
+  unwatchedCb.checked = unwatchedFilter
   unwatchedLabel.appendChild(unwatchedCb)
   unwatchedLabel.appendChild(document.createTextNode(' ✓ 未視聴だけ'))
   markSection.appendChild(favLabel)

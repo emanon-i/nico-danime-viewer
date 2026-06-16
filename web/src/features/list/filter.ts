@@ -45,7 +45,12 @@ export function currentCoursLabel(): string {
   return `${year}-${season}`
 }
 
-export function filterWorks(works: Work[], state: ListState): Work[] {
+export interface FilterOpts {
+  favIds?: Set<number>
+  watchedIds?: Set<number>
+}
+
+export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts): Work[] {
   let result = works
 
   if (state.q) {
@@ -66,6 +71,14 @@ export function filterWorks(works: Work[], state: ListState): Work[] {
   if (state.cours) {
     const label = state.cours === 'current' ? currentCoursLabel() : state.cours
     result = result.filter((w) => w.cours === label)
+  }
+
+  if (opts?.favIds) {
+    result = result.filter((w) => opts.favIds!.has(w.seriesId))
+  }
+
+  if (opts?.watchedIds) {
+    result = result.filter((w) => !opts.watchedIds!.has(w.seriesId))
   }
 
   return result
