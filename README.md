@@ -2,8 +2,8 @@
 
 **dアニメストア ニコニコ支店**の配信作品を、見やすく探せる**非公式の発見ページ**です。
 
-🔗 **サイト（公開）**: https://emanon-i.github.io/nico-danime-viewer/
-※ 公開は準備中です（サイトの公開後、上記 URL でご利用いただけます）。
+🔗 **サイト（公開中）**: https://emanon-i.github.io/nico-danime-viewer/
+GitHub Pages で公開中です。データは GitHub Actions が定期取得して更新します（新着＝毎時 RSS／発見系＝日次フル）。
 
 > ⚠️ 個人が趣味で作っている**非公式・非営利**のツールです。ドワンゴ／dアニメストアとは一切関係ありません。
 
