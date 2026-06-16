@@ -226,12 +226,16 @@ function exportKana(db, outDir, lastUpdated) {
 /**
  * new.json（最新 RSS 新着）
  */
-function exportNew(db, outDir, lastUpdated) {
+export function exportNew(db, outDir, lastUpdated) {
+  // 解決済み話は episodes(content_id) を resolved_content_id で join してサムネを取得。
+  // 未解決(rss_only)はサムネ無し → thumbnail_url は NULL（クライアント側でプレースホルダ）。
   const rows = db
     .prepare(
-      `SELECT watch_id, title, pub_date, resolved_content_id, resolution_status
-       FROM rss_items
-       ORDER BY pub_date DESC
+      `SELECT r.watch_id, r.title, r.pub_date, r.resolved_content_id, r.resolution_status,
+              e.thumbnail_url
+       FROM rss_items r
+       LEFT JOIN episodes e ON e.content_id = r.resolved_content_id
+       ORDER BY r.pub_date DESC
        LIMIT 100`
     )
     .all()
@@ -244,6 +248,7 @@ function exportNew(db, outDir, lastUpdated) {
       pubDate: r.pub_date,
       resolvedContentId: r.resolved_content_id,
       resolutionStatus: r.resolution_status,
+      thumbnailUrl: r.thumbnail_url ?? null,
     })),
   })
 }

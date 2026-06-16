@@ -12,6 +12,7 @@ export type IconName =
   | 'info'
   | 'x'
   | 'chevron-right'
+  | 'play'
 
 const PATHS: Record<IconName, string> = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
@@ -29,6 +30,7 @@ const PATHS: Record<IconName, string> = {
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>',
 }
 
 const SVG_ATTRS =

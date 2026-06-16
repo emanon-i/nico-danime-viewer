@@ -30,8 +30,9 @@ const NEW_EPISODES: NewItem[] = [
     watchId: 'w1',
     title: '最新話A',
     pubDate: '2026-06-16T00:00:00Z',
-    resolvedContentId: 'lv123',
+    resolvedContentId: 'so123',
     resolutionStatus: 'resolved',
+    thumbnailUrl: 'https://nicovideo.cdn.nimg.jp/thumbnails/123/123.456',
   },
   {
     watchId: 'w2',
@@ -39,6 +40,7 @@ const NEW_EPISODES: NewItem[] = [
     pubDate: '2026-06-15T00:00:00Z',
     resolvedContentId: null,
     resolutionStatus: 'rss_only',
+    thumbnailUrl: null,
   },
 ]
 
@@ -191,6 +193,15 @@ describe('renderTop with data (F-0032)', () => {
     // 未解決(rss_only)は除外されるので 1件のみ
     const items = epSec?.querySelectorAll('.recent-item')
     expect(items?.length).toBe(1)
+  })
+
+  it('最新の動画のサムネが thumbnailUrl から描画される（.L 昇格込み）', () => {
+    renderTop(container, SAMPLE_DATA)
+    const epSec = container.querySelector('[data-subsection="new-episodes"]')
+    const img = epSec?.querySelector<HTMLImageElement>('.recent-item .list-row-thumb img')
+    expect(img).not.toBeNull()
+    // 素サムネ URL は .L へ昇格される
+    expect(img?.getAttribute('src')).toBe('https://nicovideo.cdn.nimg.jp/thumbnails/123/123.456.L')
   })
 
   it('test_top_tag_chip_navigates: タグチップが ?tag=... の一覧へリンクする', () => {

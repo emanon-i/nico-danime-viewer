@@ -78,6 +78,8 @@ export interface NewItem {
   pubDate: string
   resolvedContentId: string | null
   resolutionStatus: 'resolved' | 'rss_only' | 'unresolved'
+  /** 解決済み話のサムネ（episodes.thumbnail_url を resolved_content_id で join）。未解決はサムネ無し→null */
+  thumbnailUrl: string | null
 }
 
 export interface NewJson {

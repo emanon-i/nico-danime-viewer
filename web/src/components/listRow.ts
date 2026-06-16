@@ -1,4 +1,5 @@
 import { hiResThumb } from './card'
+import { icon } from './icon'
 
 export interface ListRowOpts {
   title: string
@@ -37,7 +38,9 @@ export function listRow(opts: ListRowOpts): HTMLElement {
     img.height = 72
     thumb.appendChild(img)
   } else {
+    // サムネ未取得（未解決の最新話など）は無地でなく統一プレースホルダ（▶ 動画）にする
     thumb.classList.add('list-row-thumb-empty')
+    thumb.appendChild(icon('play', 20))
   }
   a.appendChild(thumb)
 

@@ -1,4 +1,4 @@
-/* global document, localStorage */
+/* global document, localStorage, window */
 // page.evaluate / addInitScript のコールバックはブラウザ文脈で実行されるため
 // document / localStorage を参照する（Node 側では未定義で正しい）。
 import { chromium } from 'playwright'
@@ -64,6 +64,39 @@ for (const s of shots) {
   console.log(
     `[${s.name}] images ${stats.ok}/${stats.total} loaded; first=${stats.firstNatural} ${stats.firstSrc}`
   )
+
+  // ページ全体を段階スクロールして lazy 画像（最近追加・最新の動画のサムネ等）を起こす
+  await page.evaluate(async () => {
+    const step = Math.floor(window.innerHeight * 0.8)
+    for (let y = 0; y <= document.body.scrollHeight; y += step) {
+      window.scrollTo(0, y)
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    window.scrollTo(0, 0)
+    await new Promise((r) => setTimeout(r, 200))
+  })
+  // 最新の動画サムネのロード状況を報告（最大の検証点）
+  const recentStats = await page.evaluate(async () => {
+    const imgs = Array.from(
+      document.querySelectorAll('[data-subsection="new-episodes"] .list-row-thumb img')
+    )
+    await Promise.all(
+      imgs.map((im) =>
+        im.complete ? null : new Promise((r) => im.addEventListener('load', r, { once: true }))
+      )
+    )
+    return {
+      total: imgs.length,
+      ok: imgs.filter((im) => im.complete && im.naturalWidth > 0).length,
+      placeholders: document.querySelectorAll(
+        '[data-subsection="new-episodes"] .list-row-thumb-empty'
+      ).length,
+    }
+  })
+  console.log(
+    `[${s.name}] 最新の動画サムネ ${recentStats.ok}/${recentStats.total} loaded; placeholders=${recentStats.placeholders}`
+  )
+  await page.waitForTimeout(300)
 
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true })
   await ctx.close()

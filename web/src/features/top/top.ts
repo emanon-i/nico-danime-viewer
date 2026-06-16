@@ -74,6 +74,7 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
       const row = listRow({
         title: ep.title,
         href: `https://www.nicovideo.jp/watch/${ep.resolvedContentId}`,
+        thumbnailUrl: ep.thumbnailUrl,
         meta: '最新の動画',
         external: true,
       })
