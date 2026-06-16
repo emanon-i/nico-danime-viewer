@@ -1,0 +1,71 @@
+# GitHub Pages デプロイ: main の静的サイト（dist）を Pages に公開する。
+# - push to main（実装/データ更新が入った瞬間に反映）＋ 手動起動（workflow_dispatch）
+# - データは main にコミット済みの data/*.json を Vite ビルドが dist/ に同梱する
+#   （日次の鮮度更新は fetch-daily.yml が state ブランチ経由で別途デプロイする）
+# - Pages の source は「GitHub Actions」。最小権限・公式 action は SHA 固定。
+
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 最小権限（Pages デプロイに必要な分のみ）
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages デプロイは直列化（実行中のデプロイは止めない＝公開物を壊さない）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: pnpm/action-setup@fe02b74e27ad3412e0dfa0929ad904ea7a6ccc40 # v4.0.0
+        with:
+          version: 9
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # CI=true により vite.config の base が /nico-danime-viewer/ になる。
+      # vite の dataPlugin が data/*.json と data/series/*.json を dist/data へ同梱する。
+      - name: Build static site
+        run: pnpm build
+        env:
+          CI: 'true'
+
+      - name: Assert data bundled into dist
+        run: |
+          test -f dist/data/works.json   || (echo "::error::works.json missing in dist"   && exit 1)
+          test -f dist/data/ranking.json || (echo "::error::ranking.json missing in dist" && exit 1)
+          test -f dist/data/cours.json   || (echo "::error::cours.json missing in dist"   && exit 1)
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: dist/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6773a0a5edd5a0bf4fcc293c0b8e0d8b43f5c26 # v4.0.5

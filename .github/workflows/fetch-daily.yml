@@ -10,9 +10,8 @@ name: Daily Full Fetch & Deploy
 
 on:
   schedule:
-    # UTC 20:00 = JST 05:00（閑散帯）
-    # 初回全件取得完了後に uncomment して有効化する
-    # - cron: '0 20 * * *'
+    # UTC 20:00 = JST 05:00（閑散帯）。発見系＝日次フル（version ゲート・period 全季・503 バックオフ）。
+    - cron: '0 20 * * *'
   workflow_dispatch:
     inputs:
       mode:

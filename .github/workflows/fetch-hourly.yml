@@ -9,9 +9,8 @@ name: Hourly RSS Fetch
 
 on:
   schedule:
-    # UTC 毎時0分（= JST 毎時9時を指すのではなく、毎時 0 分 UTC = JST 毎時 9 分）
-    # 初回全件取得完了後に uncomment して有効化する
-    # - cron: '0 * * * *'
+    # 毎時 0 分（UTC）。新着＝チャンネル RSS を毎時取得（条件付き GET・HWM 増分）。
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       mode:
