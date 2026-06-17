@@ -460,9 +460,15 @@
   }
 
   /* マーキー（2 段目）: 枠でクリップし track を一定速度で流す。両端をフェード。 */
+  /* 横マーキー（§60）。手動スクロール/スワイプ可（overflow-x）＋JS で自動送り。
+     送りと一時停止/再開・reduced-motion は components/marquee.ts が担当。 */
   .quick-marquee {
-    overflow: hidden;
     width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x; /* 横スワイプを素直に効かせる */
     -webkit-mask-image: linear-gradient(
       to right,
       transparent,
@@ -477,6 +483,10 @@
       #000 calc(100% - 1.5rem),
       transparent
     );
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   .quick-marquee-track {
@@ -484,38 +494,6 @@
     align-items: center;
     gap: var(--sp-2);
     width: max-content;
-    /* 同じ並びを 2 回敷いているので -50% で 1 セットぶん流れてシームレスにループ */
-    animation: quick-marquee-scroll 64s linear infinite;
-  }
-
-  /* ホバー中は止めて読みやすく */
-  .quick-marquee:hover .quick-marquee-track {
-    animation-play-state: paused;
-  }
-
-  @keyframes quick-marquee-scroll {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
-    }
-  }
-
-  /* モーション抑制時は自動スクロールを止め、手動横スクロールに切替（§36） */
-  @media (prefers-reduced-motion: reduce) {
-    .quick-marquee {
-      overflow-x: auto;
-      scrollbar-width: none;
-      -webkit-mask-image: none;
-      mask-image: none;
-    }
-    .quick-marquee-track {
-      animation: none;
-    }
-    .quick-marquee::-webkit-scrollbar {
-      display: none;
-    }
   }
 
   .quick-btn {
@@ -2433,15 +2411,23 @@
     }
   }
 
-  /* 各話あらすじ概要（折りたたみ） */
+  /* あらすじ＝メタの下に全幅の独立ブロック（§61）。 */
+  .detail-synopsis {
+    max-width: var(--content-max);
+    margin-inline: auto;
+    padding: 0 var(--gutter) var(--sp-5);
+  }
+
+  /* あらすじ本文（折りたたみ。ラベル＝summary「あらすじ」） */
   .detail-overview {
-    margin-top: var(--sp-3);
+    margin-top: 0;
 
     summary {
       cursor: pointer;
-      font-size: var(--text-l4);
-      color: var(--text-muted);
-      font-weight: 500;
+      font-size: var(--text-l3);
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: var(--sp-2);
     }
 
     p {

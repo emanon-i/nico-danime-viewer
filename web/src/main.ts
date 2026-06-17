@@ -172,11 +172,12 @@ function wireDetailMarks(container: HTMLElement, seriesId: number): void {
     })
   }
   if (watchedBtn) {
-    // 詳細の「見た」ボタンはアイコン（eye/eye-off）＋テキスト。アイコンのみ差し替える。
+    // 詳細の「見た」ボタンはアイコン（circle-check）＋テキスト。アイコンのみ差し替える
+    // （on=塗り/off=アウトラインは CSS .btn-watched.active が担当＝§45/§58）。
     const setDetailWatched = (on: boolean) => {
       watchedBtn.classList.toggle('active', on)
       const svg = watchedBtn.querySelector('svg')
-      const next = icon(on ? 'eye' : 'eye-off', 16)
+      const next = icon('circle-check', 16)
       if (svg) svg.replaceWith(next)
       else watchedBtn.insertBefore(next, watchedBtn.firstChild)
     }

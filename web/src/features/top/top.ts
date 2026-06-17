@@ -7,6 +7,7 @@ import { listRow } from '../../components/listRow'
 import { chip } from '../../components/chip'
 import { icon } from '../../components/icon'
 import { progressiveReveal } from '../../components/reveal'
+import { initMarquee } from '../../components/marquee'
 import { buildHeader } from '../shared/header'
 
 export interface TopData {
@@ -359,11 +360,11 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
 
   if (!data) return
 
-  // クイックアクセス下段＝ランダムタグのマーキー（横自動スクロール・§36）。
-  // タグは内容幅にフィット。シームレスなループのため同じ並びを 2 回敷き、
-  // CSS で track を -50% まで流す。prefers-reduced-motion では停止（CSS 側）。
+  // クイックアクセス下段＝ランダムタグのマーキー（§36/§60）。同じ並びを 2 回敷いて
+  // シームレスにし、JS で自動送りしつつ手動スクロール/スワイプも可能にする（initMarquee）。
+  const viewport = container.querySelector<HTMLElement>('.quick-marquee')
   const track = container.querySelector<HTMLElement>('.quick-marquee-track')
-  if (track && data.allTags && data.allTags.length > 0) {
+  if (viewport && track && data.allTags && data.allTags.length > 0) {
     const names = discoveryTags(data.allTags).map((t) => t.name)
     const picked = sampleTags(names, 16)
     const build = (t: string, dup: boolean): HTMLElement => {
@@ -374,6 +375,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
     }
     for (const t of picked) track.appendChild(build(t, false))
     for (const t of picked) track.appendChild(build(t, true))
+    initMarquee(viewport, track)
   }
 
   const rail = container.querySelector<HTMLElement>('.top10-rail')

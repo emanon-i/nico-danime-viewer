@@ -258,20 +258,27 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   marksDiv.appendChild(watchedBtn)
   infoDiv.appendChild(marksDiv)
 
+  metaSection.appendChild(infoDiv)
+  container.appendChild(metaSection)
+
+  // あらすじはメタの横ではなく、メタの下に全幅の別ブロックで縦積み（§61）。
+  // ラベル「あらすじ」＋本文。既定展開はデスクトップ/モバイルで分岐（§55）、
+  // 改行保持＋文節折返し（§56/§57）は本文に適用。
   if (series.descriptionFirst) {
+    const synopsis = document.createElement('section')
+    synopsis.className = 'detail-synopsis'
+    synopsis.dataset.section = 'synopsis'
     const detailsEl = document.createElement('details')
     detailsEl.className = 'detail-overview'
     const summary = document.createElement('summary')
-    summary.textContent = '第1話のあらすじ'
+    summary.textContent = 'あらすじ'
     detailsEl.appendChild(summary)
     const p = document.createElement('p')
     p.textContent = series.descriptionFirst
     detailsEl.appendChild(p)
-    infoDiv.appendChild(detailsEl)
+    synopsis.appendChild(detailsEl)
+    container.appendChild(synopsis)
   }
-
-  metaSection.appendChild(infoDiv)
-  container.appendChild(metaSection)
 
   // ── 各話一覧 ────────────────────────────────────────────────
   const episodesSection = document.createElement('section')

@@ -785,3 +785,16 @@ export function hiResThumb(url: string | null): string {
 | 57  | 説明文に **`word-break: auto-phrase`**（日本語の文節折返し）＋ `overflow-wrap: anywhere` フォールバック                  | CSS（説明文要素）。Chrome/FF で有効・Safari は未対応で通常折返しに落ちる（Safari 専用対応はしない）                           |
 
 > **55** は `<details>` の open 属性を JS で操作せず、CSS のメディアクエリだけで既定の見え方を切替（デスクトップは summary を `pointer-events:none`＋マーカー非表示の静的見出しにし、`:not(summary)` を `display:block` で常時表示）。**56** の改行は **ETL 段階で `<br>`→`\n`** に正規化（生 HTML 挿入はせず `textContent`＋`white-space:pre-line` で安全に改行表示）。**57** は素の `word-break: auto-phrase`＋`overflow-wrap` のみ（凝った Safari 対応なし）。
+
+## 26. 公開後フィードバック反映（v1.7・視聴アイコン/空シェル除外/マーキー操作/あらすじ独立化）
+
+> **実装状況** 【実装済】。データ変更なし（`stripHtml` 強化は既存データに影響なし＝再生成不要）。
+
+| #   | 指摘 → 決定                                                                                                                         | 実装                                                                                                                                                                        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 58  | 詳細の「見た」ボタンが**旧 eye 系のまま**（circle-check 反映漏れ）→ 詳細も circle-check に統一。未使用 eye/eye-off 定義も削除       | `main.ts` `wireDetailMarks`（icon を circle-check に）／`icon.ts`（eye/eye-off 削除）。CSS `.btn-watched.active` で塗り                                                     |
+| 59  | 「新着・古い順」で並ぶ**空シェル**（episodeCount 0＝サムネ/最新話/初出すべて欠落）を一覧から除外。**6352→6256 件（96 件除外）**     | `filter.ts` `filterWorks` 先頭で `episodeCount>0` のみ採用。原因＝is_available だが各話未解決のシリーズ殻                                                                   |
+| 60  | Top タグ・マーキーを**手動スクロール/スワイプ可**に。自動送りは hover/touch/操作中は一時停止し離すと再開・reduced-motion で自動停止 | `components/marquee.ts`（overflow-x スクロール＋rAF で scrollLeft 自動送り・縦ホイール→横）／CSS `.quick-marquee{overflow-x:auto;touch-action:pan-x}`。CSS animation は廃止 |
+| 61  | シリーズ詳細の**あらすじをメタの横→下の独立ブロック**に。「あらすじ」ラベル＋本文を縦積み（全幅）。改行/auto-phrase も適用          | `detail.ts`（`.detail-synopsis` を `.detail-meta` の外＝後ろに配置）／CSS `.detail-synopsis`                                                                                |
+
+> **59** は ETL ではなくフロントの `filterWorks` で除外（一覧の全ソート/フィルタに即時反映・件数も除外後で正しい）。**60** は CSS の transform アニメをやめ、`overflow-x` のネイティブスクロール（タッチ=スワイプ）＋JS の `scrollLeft` 自動送りに置換（手動と自動が両立・再レンダリングで rAF を自動停止）。**56 防御**として `stripHtml` を実体参照デコード後にもう一度 `<br>`→`\n`＋タグ除去（`&lt;br&gt;` 等の将来データに備え）。

@@ -20,7 +20,7 @@ const BASE_WORK: Work = {
   cours: null,
   franchiseKey: null,
   colKey: null,
-  episodeCount: 0,
+  episodeCount: 12, // 既定は有効な作品（§59 の空シェル除外＝episodeCount 0 に該当しない）
   relatedSeries: [],
 }
 
@@ -246,6 +246,16 @@ describe('filterWorks - favIds/watchedIds (F-0034)', () => {
   it('opts なしは既存動作を維持する', () => {
     const result = filterWorks(WORKS, BASE_STATE)
     expect(result).toHaveLength(3)
+  })
+
+  it('§59: episodeCount 0 の空シェルは一覧から除外される', () => {
+    const works = [
+      { ...BASE_WORK, seriesId: 1, episodeCount: 12 },
+      { ...BASE_WORK, seriesId: 2, episodeCount: 0 }, // 空シェル
+      { ...BASE_WORK, seriesId: 3, episodeCount: 3 },
+    ]
+    const result = filterWorks(works, BASE_STATE)
+    expect(result.map((w) => w.seriesId)).toEqual([1, 3])
   })
 })
 

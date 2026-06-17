@@ -54,7 +54,9 @@ export interface FilterOpts {
 }
 
 export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts): Work[] {
-  let result = works
+  // 実体に解決できない空シェル（話数 0＝サムネ/最新話/初出すべて欠落）は一覧から除外（§59）。
+  // 「新着・古い順」で先頭に並んでいた壊れた項目はこれ。有効な作品だけを並べる。
+  let result = works.filter((w) => (w.episodeCount ?? 0) > 0)
 
   if (state.q) {
     const q = state.q.toLowerCase()
