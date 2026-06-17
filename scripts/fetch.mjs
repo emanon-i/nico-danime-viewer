@@ -4,7 +4,7 @@
 // 環境変数:
 //   NICO_USER_AGENT  問い合わせ先を含む UA 文字列（省略可・デフォルト値あり）
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -77,6 +77,27 @@ function currentSeason(date) {
 
 // 過去季クールを遡る下限の年（dアニメ支店の配信開始相当）。環境変数で調整可。
 const COURS_FROM_YEAR = Number(process.env.NICO_COURS_FROM_YEAR ?? 2016)
+
+/**
+ * 回帰ガード（§G）：export 前に「DB の各話あり series 数」が、既存 works.json（＝直近の
+ * 完全データ baseline）より大きく減っていないか検査する。部分的/不完全な build.sqlite
+ * （cache の取りこぼし・nvapi 未紐付けで各話が孤児化 等）から痩せた JSON を生成して
+ * deploy/state 上書きする回帰を防ぐ。閾値以上減るなら export/deploy を中止すべき＝true。
+ * @returns {{ dbEp0:number, baseline:number, shrink:boolean }}
+ */
+function detectShrink(db, dataDir, threshold = 0.9) {
+  const dbEp0 = db
+    .prepare('SELECT COUNT(DISTINCT series_id) AS c FROM episodes WHERE series_id IS NOT NULL')
+    .get().c
+  let baseline = 0
+  try {
+    const w = JSON.parse(readFileSync(join(dataDir, 'works.json'), 'utf-8'))
+    baseline = (w.works ?? []).filter((x) => (x.episodeCount ?? 0) > 0).length
+  } catch {
+    /* works.json が無ければ baseline 0＝比較しない（初回） */
+  }
+  return { dbEp0, baseline, shrink: baseline > 0 && dbEp0 < Math.floor(baseline * threshold) }
+}
 // slug↔series 突合の採用しきい値（タイトル正規化マッチの信頼度）
 const COURS_MATCH_MIN = 0.7
 
@@ -323,6 +344,20 @@ async function runHourly() {
     logger.info('fetch', 'phase D2 done', { ...stats })
   }
 
+  // ── 回帰ガード（§G）：痩せたDBから export して state/live を縮小しないよう検査 ──
+  // 既存 works.json（復元済みの完全データ）より各話あり series が大きく減るなら、export
+  // 自体を行わず（＝復元済み完全データを保全）deploy もしない。cache 不完全/孤児化時の保険。
+  const guard = detectShrink(db, DATA_DIR)
+  if (guard.shrink) {
+    logger.error(
+      'fetch',
+      'REGRESSION GUARD: hourly export would shrink → skip export/deploy',
+      guard
+    )
+    db.close()
+    return
+  }
+
   // ── Phase G: Export ──────────────────────────────────────────────────────
   createIndexes(db)
   logger.info('fetch', 'phase G: export (hourly)')
@@ -418,8 +453,10 @@ async function main() {
   const daysSinceRefresh = meta.last_full_refresh_at
     ? (Date.now() - new Date(meta.last_full_refresh_at).getTime()) / 86400000
     : Infinity
+  // NICO_FORCE_SEED=1 で 7日ガードを無視して seed を強制（部分 cache を即フル紐付けに戻す用・§G）
+  const forceSeed = process.env.NICO_FORCE_SEED === '1'
 
-  if (daysSinceRefresh >= 7) {
+  if (forceSeed || daysSinceRefresh >= 7) {
     logger.info('fetch', 'phase C: nvapi seed', { total: colKeyUpdates.length, daysSinceRefresh })
     const seriesIds = colKeyUpdates.map((u) => u.seriesId)
 
@@ -427,6 +464,10 @@ async function main() {
       const updates = mapNvapiItems(seriesId, data.items)
       if (updates.length > 0) updateEpisodeOrderBatch(db, updates)
     })
+    // seed が走ったときだけ最終実行時刻を更新する（§G 修正）。
+    // 以前は main 末尾で毎回更新していたため daysSinceRefresh が常に ~0 となり、
+    // seed が初回以降ずっと skip され各話が孤児化（→ep>0 series が痩せる）原因になっていた。
+    updateMetaState(db, { last_full_refresh_at: now })
   } else {
     logger.info('fetch', 'phase C: nvapi seed skipped', {
       daysSinceRefresh: Math.round(daysSinceRefresh),
@@ -527,6 +568,20 @@ async function main() {
     await selfHealEmptySeries(db, { limit })
   }
 
+  // ── 回帰ガード（§G）：痩せたDBから export して live/state を縮小しないか検査 ──
+  // nvapi 未紐付け（孤児化）等で各話あり series が既存 works.json より大きく減るなら、
+  // export せず復元済み完全データを保全（deploy も実質フルのまま）。安全側に倒す。
+  const guard = detectShrink(db, DATA_DIR)
+  if (guard.shrink) {
+    logger.error(
+      'fetch',
+      'REGRESSION GUARD: daily export would shrink → skip export (preserve full)',
+      guard
+    )
+    logger.info('fetch', 'all done (guarded)', { now })
+    return
+  }
+
   // ── Phase F: Metrics（Hot score 再計算）────────────────────────────────────
   logger.info('fetch', 'phase F: metrics')
   recalcSeriesMetrics(db, now)
@@ -535,9 +590,6 @@ async function main() {
   createIndexes(db)
   logger.info('fetch', 'phase G: export')
   exportAll(db, DATA_DIR, now)
-
-  // 最終状態を保存
-  updateMetaState(db, { last_full_refresh_at: now })
   logger.info('fetch', 'all done', { now })
 }
 
