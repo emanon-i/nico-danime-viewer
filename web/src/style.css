@@ -2189,12 +2189,29 @@
     }
   }
 
-  /* 詳細のシリーズメタ（話数・総コメント・総マイリス・§18） */
+  /* 詳細のシリーズメタ（話数・総再生数・総コメント数・総マイリス数・平均・§F） */
   .detail-series-meta {
     display: flex;
     flex-wrap: wrap;
     gap: var(--sp-3);
     margin-bottom: var(--sp-3);
+  }
+
+  /* 詳細用メタ（§F）：圧縮せず「文字ラベル＋実値」。一覧/Topの .meta（アイコン圧縮）と別物。 */
+  .detail-meta-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--sp-1);
+    font-size: var(--text-l4);
+
+    .detail-meta-label {
+      color: var(--text-muted);
+    }
+    .detail-meta-val {
+      color: var(--text);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
   }
 
   /* 0 件メッセージ（空白を出さない＝§18） */

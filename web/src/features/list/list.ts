@@ -819,7 +819,9 @@ export function renderList(
         if (rel) metas.push({ icon: 'clock', value: rel, label: `投稿 ${rel}` })
       }
       const metric = cardMetric?.(work)
-      if (metric) {
+      // 並び替え連動メタは、表示文字列(value)が常時メタのいずれかと一致する場合は描画しない
+      // （重複排除・§E）。例: created(初話)で firstAt===latestAt のとき投稿日と同一表示になる→抑制。
+      if (metric && !metas.some((m) => m.value === metric.value)) {
         metas.push({ ...metric, emphasize: true })
       }
       if (metas.length > 0) {

@@ -154,20 +154,23 @@ describe('renderDetail (F-0025)', () => {
     expect(container.querySelector('.episode-detail-tags')).toBeNull()
   })
 
-  it('シリーズメタに 1 話あたり平均（再生数・コメント）が表示される（§81）', () => {
+  it('シリーズメタが実値ラベル表示（総再生数カンマ区切り＋1話あたり平均・§81/§F）', () => {
     const withCounts: SeriesDetail = {
       ...SERIES,
       episodes: [
-        { ...SERIES.episodes[0], viewCounter: 1000, commentCounter: 40 },
-        { ...SERIES.episodes[1], viewCounter: 800, commentCounter: 20 },
+        { ...SERIES.episodes[0], viewCounter: 1000000, commentCounter: 40 },
+        { ...SERIES.episodes[1], viewCounter: 800000, commentCounter: 20 },
       ],
     }
     renderDetail(container, withCounts)
-    const labels = [...container.querySelectorAll('.detail-series-meta .meta')].map((e) =>
-      e.getAttribute('aria-label')
+    const labels = [...container.querySelectorAll('.detail-series-meta .detail-meta-item')].map(
+      (e) => e.getAttribute('aria-label')
     )
-    // 平均再生数 = round((1000+800)/2)=900、平均コメント = round((40+20)/2)=30
-    expect(labels.some((l) => l?.includes('平均再生数') && l?.includes('900'))).toBe(true)
+    // 総再生数は丸めずカンマ区切り実値（1,800,000）
+    expect(labels.some((l) => l?.includes('総再生数') && l?.includes('1,800,000'))).toBe(true)
+    // 平均再生数 = (1000000+800000)/2 = 900,000 を実値で
+    expect(labels.some((l) => l?.includes('平均再生数') && l?.includes('900,000'))).toBe(true)
+    // 平均コメント数 = (40+20)/2 = 30
     expect(labels.some((l) => l?.includes('平均コメント数') && l?.includes('30'))).toBe(true)
   })
 })

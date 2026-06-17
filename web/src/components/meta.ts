@@ -54,6 +54,47 @@ export function metaRow(specs: MetaSpec[], className: string): HTMLElement {
   return row
 }
 
+/**
+ * 詳細画面用メタ 1 単位（§F）。スペースに余裕がある詳細では圧縮（アイコン/丸め/相対時間）を
+ * やめ、**文字ラベル＋実値**で表示する。例「再生数 3,083,914」「投稿 2026/6/16 0:30」。
+ */
+export function detailMeta(label: string, value: string): HTMLElement {
+  const el = document.createElement('span')
+  el.className = 'detail-meta-item'
+  el.setAttribute('aria-label', `${label} ${value}`)
+  const l = document.createElement('span')
+  l.className = 'detail-meta-label'
+  l.textContent = label
+  const v = document.createElement('span')
+  v.className = 'detail-meta-val'
+  v.textContent = value
+  el.appendChild(l)
+  el.appendChild(v)
+  return el
+}
+
+/** 数値を丸めずカンマ区切り実数で表示する（詳細画面用・§F。例 3,083,914）。 */
+export function formatNumberFull(n: number): string {
+  return Math.round(n).toLocaleString('ja-JP')
+}
+
+/** ISO日時を正確な投稿日時（JST・`YYYY/M/D H:MM`）に整形する（詳細画面用・§F）。 */
+export function formatDateTime(input: string): string {
+  const t = Date.parse(input)
+  if (Number.isNaN(t)) return ''
+  const parts = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(t))
+  const p = Object.fromEntries(parts.map((x) => [x.type, x.value]))
+  return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}`
+}
+
 /** 秒を再生時間表記（`24分` / `1時間30分` / `45秒`）に整形する。 */
 export function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.round(seconds))

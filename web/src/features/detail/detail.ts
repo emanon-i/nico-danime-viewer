@@ -3,7 +3,7 @@ import { watchLink, seriesLink } from '../../shared/deeplink'
 import { buildDetailUrl } from '../router'
 import { icon } from '../../components/icon'
 import { hiResThumb } from '../../components/card'
-import { metaSpan, formatViews, formatRelativeTime, formatDuration } from '../../components/meta'
+import { detailMeta, formatNumberFull, formatDateTime, formatDuration } from '../../components/meta'
 import { buildDisclosure } from '../../components/disclosure'
 import { isHiddenTag } from '../../shared/tag-filter'
 
@@ -95,41 +95,20 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
 
   const dmeta = document.createElement('div')
   dmeta.className = 'episode-detail-meta'
-  // [play]再生数 ＋ [message]コメント ＋ [bookmark]マイリス ＋ [clock]投稿 ＋ [film]尺（§18）
-  dmeta.appendChild(
-    metaSpan({
-      icon: 'play',
-      value: formatViews(ep.viewCounter),
-      label: `再生数 ${formatViews(ep.viewCounter)}`,
-    })
-  )
+  // 詳細はスペースに余裕があるので圧縮しない（§F）＝文字ラベル＋実値（カンマ区切り）＋正確日時。
+  dmeta.appendChild(detailMeta('再生数', formatNumberFull(ep.viewCounter)))
   if (typeof ep.commentCounter === 'number') {
-    dmeta.appendChild(
-      metaSpan({
-        icon: 'message',
-        value: formatViews(ep.commentCounter),
-        label: `コメント ${formatViews(ep.commentCounter)}`,
-      })
-    )
+    dmeta.appendChild(detailMeta('コメント数', formatNumberFull(ep.commentCounter)))
   }
   if (typeof ep.mylistCounter === 'number') {
-    dmeta.appendChild(
-      metaSpan({
-        icon: 'bookmark',
-        value: formatViews(ep.mylistCounter),
-        label: `マイリスト ${formatViews(ep.mylistCounter)}`,
-      })
-    )
+    dmeta.appendChild(detailMeta('マイリス数', formatNumberFull(ep.mylistCounter)))
   }
   if (ep.startTime) {
-    const rel = formatRelativeTime(ep.startTime)
-    if (rel) {
-      dmeta.appendChild(metaSpan({ icon: 'clock', value: rel, label: `投稿 ${rel}` }))
-    }
+    const dt = formatDateTime(ep.startTime)
+    if (dt) dmeta.appendChild(detailMeta('投稿', dt))
   }
   if (typeof ep.lengthSeconds === 'number' && ep.lengthSeconds > 0) {
-    const dur = formatDuration(ep.lengthSeconds)
-    dmeta.appendChild(metaSpan({ icon: 'film', value: dur, label: `再生時間 ${dur}` }))
+    dmeta.appendChild(detailMeta('再生時間', formatDuration(ep.lengthSeconds)))
   }
   // 右カラム＝「メタ（上）→ 説明（下）」を縦スタック（§61・flex-wrap 依存をやめ決定論的に）。
   // サムネは左、この main がその右で縦並び＝desc は必ず meta の下に来る。
@@ -223,8 +202,8 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   series.tags.filter((tag) => !isHiddenTag(tag)).forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
   infoDiv.appendChild(tagsDiv)
 
-  // シリーズメタ＝[film]話数 ＋ [message]総コメント ＋ [bookmark]総マイリス（§18）。
-  // 総再生数は出さない（各話ドロワーで見られるため冗長＝§17）。
+  // シリーズメタ（§F）：詳細は圧縮しない＝文字ラベル＋実値（カンマ区切り）。
+  // 話数／総再生数／総コメント数／総マイリス数＋1話あたり平均（再生・コメント）。
   if (series.episodes.length > 0) {
     const epCount = series.episodes.length
     const sumViews = series.episodes.reduce((a, e) => a + (e.viewCounter ?? 0), 0)
@@ -232,48 +211,18 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     const sumMylist = series.episodes.reduce((a, e) => a + (e.mylistCounter ?? 0), 0)
     const metaRow = document.createElement('div')
     metaRow.className = 'detail-series-meta'
-    metaRow.appendChild(
-      metaSpan({
-        icon: 'film',
-        value: `${epCount}話`,
-        label: `全${epCount}話`,
-      })
-    )
+    metaRow.appendChild(detailMeta('話数', `全${epCount}話`))
+    if (sumViews > 0) metaRow.appendChild(detailMeta('総再生数', formatNumberFull(sumViews)))
     if (sumComment > 0)
-      metaRow.appendChild(
-        metaSpan({
-          icon: 'message',
-          value: formatViews(sumComment),
-          label: `総コメント ${formatViews(sumComment)}`,
-        })
-      )
-    if (sumMylist > 0)
-      metaRow.appendChild(
-        metaSpan({
-          icon: 'bookmark',
-          value: formatViews(sumMylist),
-          label: `総マイリスト ${formatViews(sumMylist)}`,
-        })
-      )
-    // ビューア独自メタ（§81）：1 話あたり平均。総数（上）と区別できるよう「平均 …/話」表記。
+      metaRow.appendChild(detailMeta('総コメント数', formatNumberFull(sumComment)))
+    if (sumMylist > 0) metaRow.appendChild(detailMeta('総マイリス数', formatNumberFull(sumMylist)))
+    // ビューア独自メタ（§81）：1 話あたり平均。実値（カンマ区切り）＋「/話」。
     if (sumViews > 0) {
-      const avgViews = Math.round(sumViews / epCount)
-      metaRow.appendChild(
-        metaSpan({
-          icon: 'play',
-          value: `平均 ${formatViews(avgViews)}/話`,
-          label: `1話あたり平均再生数 ${formatViews(avgViews)}`,
-        })
-      )
+      metaRow.appendChild(detailMeta('平均再生数', `${formatNumberFull(sumViews / epCount)}/話`))
     }
     if (sumComment > 0) {
-      const avgComment = Math.round(sumComment / epCount)
       metaRow.appendChild(
-        metaSpan({
-          icon: 'message',
-          value: `平均 ${formatViews(avgComment)}/話`,
-          label: `1話あたり平均コメント数 ${formatViews(avgComment)}`,
-        })
+        detailMeta('平均コメント数', `${formatNumberFull(sumComment / epCount)}/話`)
       )
     }
     infoDiv.appendChild(metaRow)
