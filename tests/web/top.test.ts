@@ -176,14 +176,21 @@ describe('renderTop with data (F-0032)', () => {
     expect(hrefs).not.toContain('?sort=kana')
   })
 
-  it('データ供給時はランダムタグ×2（タグチップ型ピル）が追加される', () => {
+  it('データ供給時は下段マーキーにランダムタグ（タグチップ型ピル）が流れる（§36）', () => {
     renderTop(container, SAMPLE_DATA)
-    const quickTags = container.querySelectorAll('[data-section="quick-access"] .quick-tag')
-    expect(quickTags.length).toBe(2)
+    const track = container.querySelector('.quick-marquee-track')
+    expect(track).not.toBeNull()
+    const quickTags = track!.querySelectorAll('.quick-tag')
+    // シームレスループのため同じ並びを 2 回敷く＝偶数・2 以上
+    expect(quickTags.length).toBeGreaterThanOrEqual(2)
+    expect(quickTags.length % 2).toBe(0)
     quickTags.forEach((t) => {
       expect(t.getAttribute('href')).toContain('tag=')
       expect(t.textContent?.startsWith('#')).toBe(true)
     })
+    // 複製分は読み上げ対象外（前半は可視・後半は aria-hidden）
+    const half = quickTags.length / 2
+    expect(quickTags[half].getAttribute('aria-hidden')).toBe('true')
   })
 
   it('test_header_order: ヘッダ右側は 🔍 → テーマ → 設定 の順（慣例＝設定が右端）', () => {

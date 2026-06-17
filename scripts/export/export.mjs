@@ -23,6 +23,9 @@ export function exportWorks(db, outDir, lastUpdated) {
               (SELECT MIN(e.start_time) FROM episodes e WHERE e.series_id = s.series_id) AS first_at,
               (SELECT COALESCE(SUM(e.comment_counter),0) FROM episodes e WHERE e.series_id = s.series_id) AS comment_total,
               (SELECT COALESCE(SUM(e.mylist_counter),0) FROM episodes e WHERE e.series_id = s.series_id) AS mylist_total,
+              (SELECT e.mylist_counter FROM episodes e WHERE e.series_id = s.series_id
+                 ORDER BY (e.episode_no IS NULL), e.episode_no ASC, e.start_time ASC, e.content_id ASC
+                 LIMIT 1) AS mylist_first,
               (SELECT COALESCE(SUM(e.length_seconds),0) FROM episodes e WHERE e.series_id = s.series_id) AS duration_total
        FROM series s
        WHERE s.is_available = 1
@@ -78,6 +81,7 @@ export function exportWorks(db, outDir, lastUpdated) {
     firstAt: s.first_at ?? null,
     commentTotal: s.comment_total ?? 0,
     mylistTotal: s.mylist_total ?? 0,
+    mylistFirst: s.mylist_first ?? 0,
     durationTotal: s.duration_total ?? 0,
     relatedSeries: relatedBySeries.get(s.series_id) ?? [],
   }))

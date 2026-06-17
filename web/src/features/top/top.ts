@@ -6,6 +6,7 @@ import type { MetaSpec } from '../../components/meta'
 import { listRow } from '../../components/listRow'
 import { chip } from '../../components/chip'
 import { icon } from '../../components/icon'
+import { progressiveReveal } from '../../components/reveal'
 import { buildHeader } from '../shared/header'
 
 export interface TopData {
@@ -203,45 +204,6 @@ function discoveryTags(allTags: Tag[]): Tag[] {
   return allTags.filter((t) => !EXCLUDE.has(t.name))
 }
 
-/**
- * 段階表示＋折りたたみトグル（§26）。`もっと見る ▾` で step ずつ増やし、
- * `閉じる ▴` で initial に戻す。item は `itemClass` を持つ要素を返すこと。
- */
-function progressiveReveal(
-  container: HTMLElement,
-  count: number,
-  makeItem: (i: number) => HTMLElement,
-  opts: { initial: number; step: number; itemClass: string; moreLabel?: string }
-): void {
-  const more = document.createElement('button')
-  more.className = 'reveal-more-btn'
-  more.textContent = `${opts.moreLabel ?? 'もっと見る'} ▾`
-  const less = document.createElement('button')
-  less.className = 'reveal-less-btn'
-  less.textContent = '閉じる ▴'
-  container.appendChild(more)
-  container.appendChild(less)
-
-  let shown = 0
-  const sync = () => {
-    more.hidden = shown >= count
-    less.hidden = shown <= opts.initial
-  }
-  const grow = (to: number) => {
-    for (let i = shown; i < to; i++) container.insertBefore(makeItem(i), more)
-    shown = to
-    sync()
-  }
-  more.addEventListener('click', () => grow(Math.min(count, shown + opts.step)))
-  less.addEventListener('click', () => {
-    const items = container.querySelectorAll('.' + opts.itemClass)
-    for (let i = items.length - 1; i >= opts.initial; i--) items[i].remove()
-    shown = opts.initial
-    sync()
-  })
-  grow(Math.min(opts.initial, count))
-}
-
 function populateTags(
   container: HTMLElement,
   hotTags: string[],
@@ -330,9 +292,14 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       <a href="?screen=list" class="btn-primary hero-browse-btn">一覧で探す</a>
     </section>
     <nav class="quick-access" data-section="quick-access" aria-label="クイックアクセス">
-      <a href="?cours=current&amp;sort=hot" class="quick-btn">今期</a>
-      <a href="?sort=views" class="quick-btn">人気</a>
-      <a href="?sort=hot" class="quick-btn">Hot</a>
+      <div class="quick-row quick-row-primary">
+        <a href="?cours=current&amp;sort=hot" class="quick-btn">今期</a>
+        <a href="?sort=views" class="quick-btn">人気</a>
+        <a href="?sort=hot" class="quick-btn">Hot</a>
+      </div>
+      <div class="quick-marquee" aria-label="タグから探す">
+        <div class="quick-marquee-track"></div>
+      </div>
     </nav>
     <section class="top10" data-section="top10">
       <div class="section-head">
@@ -390,15 +357,21 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
 
   if (!data) return
 
-  // クイックアクセスのランダムタグ×2（厳選5 のうち 2 枠・タグチップ型ピル）
-  const quickAccess = container.querySelector<HTMLElement>('[data-section="quick-access"]')
-  if (quickAccess && data.allTags && data.allTags.length > 0) {
+  // クイックアクセス下段＝ランダムタグのマーキー（横自動スクロール・§36）。
+  // タグは内容幅にフィット。シームレスなループのため同じ並びを 2 回敷き、
+  // CSS で track を -50% まで流す。prefers-reduced-motion では停止（CSS 側）。
+  const track = container.querySelector<HTMLElement>('.quick-marquee-track')
+  if (track && data.allTags && data.allTags.length > 0) {
     const names = discoveryTags(data.allTags).map((t) => t.name)
-    sampleTags(names, 2).forEach((t) => {
+    const picked = sampleTags(names, 16)
+    const build = (t: string, dup: boolean): HTMLElement => {
       const c = chip(`#${t}`, `?tag=${encodeURIComponent(t)}`)
       c.classList.add('quick-tag')
-      quickAccess.appendChild(c)
-    })
+      if (dup) c.setAttribute('aria-hidden', 'true') // 複製分は読み上げ対象外
+      return c
+    }
+    for (const t of picked) track.appendChild(build(t, false))
+    for (const t of picked) track.appendChild(build(t, true))
   }
 
   const rail = container.querySelector<HTMLElement>('.top10-rail')

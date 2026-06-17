@@ -4,8 +4,9 @@ import { buildListUrl } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { card as createCard } from '../../components/card'
 import { icon } from '../../components/icon'
-import { metaSpan } from '../../components/meta'
+import { metaSpan, formatViews } from '../../components/meta'
 import type { MetaSpec } from '../../components/meta'
+import { progressiveReveal } from '../../components/reveal'
 
 export interface ListData {
   tags: Tag[]
@@ -280,16 +281,25 @@ export function renderList(
   tagsH3.textContent = 'タグ'
   tagsSection.appendChild(tagsH3)
   if (data?.tags && data.tags.length > 0) {
+    // 頻度順で一定数だけ表示＋もっと見る/閉じる（クールと同一作法＝§33/§34）
     const tagList = document.createElement('ul')
     tagList.className = 'filter-tag-list'
-    data.tags.slice(0, 30).forEach((tag) => {
+    const tags = data.tags
+    const makeTagItem = (i: number): HTMLElement => {
+      const tag = tags[i]
       const li = document.createElement('li')
+      li.className = 'filter-tag-li'
       const a = document.createElement('a')
       a.className = 'filter-tag-item' + (state.tag === tag.name ? ' active' : '')
       a.href = buildListUrl({ ...state, tag: state.tag === tag.name ? '' : tag.name, page: 1 })
       a.textContent = tag.name
       li.appendChild(a)
-      tagList.appendChild(li)
+      return li
+    }
+    progressiveReveal(tagList, tags.length, makeTagItem, {
+      initial: 12,
+      step: 18,
+      itemClass: 'filter-tag-li',
     })
     tagsSection.appendChild(tagList)
   }
@@ -302,16 +312,25 @@ export function renderList(
   coursH3.textContent = 'クール'
   coursSection.appendChild(coursH3)
   if (data?.cours && data.cours.length > 0) {
+    // 直近の数件だけ表示＋もっと見る/閉じる（Top「クールから探す」と同一作法＝§30/§34）
     const coursList = document.createElement('ul')
     coursList.className = 'filter-cours-list'
-    data.cours.forEach((cg) => {
+    const cours = data.cours
+    const makeCoursItem = (i: number): HTMLElement => {
+      const cg = cours[i]
       const li = document.createElement('li')
+      li.className = 'filter-cours-li'
       const a = document.createElement('a')
       a.className = 'filter-cours-item' + (state.cours === cg.cours ? ' active' : '')
       a.href = buildListUrl({ ...state, cours: state.cours === cg.cours ? '' : cg.cours, page: 1 })
       a.textContent = cg.cours
       li.appendChild(a)
-      coursList.appendChild(li)
+      return li
+    }
+    progressiveReveal(coursList, cours.length, makeCoursItem, {
+      initial: 8,
+      step: 12,
+      itemClass: 'filter-cours-li',
     })
     coursSection.appendChild(coursList)
   }
@@ -452,12 +471,29 @@ export function renderList(
       const cell = document.createElement('div')
       cell.className = 'card-cell'
       cell.appendChild(createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref))
-      // カード外枠下に、選択中の並び替えに応じた指標を表示（§5）
+      // カード外枠下のメタ。常時メタ（§31）＝[film]話数＋[bookmark]1話マイリス。
+      // 並び替え連動メタ（§32）＝現在の sort 値を Hot 風に強調。常時メタと icon が
+      // 重複する場合は出さない（二重表示の回避）。
+      const metas: MetaSpec[] = []
+      if (work.episodeCount) {
+        metas.push({
+          icon: 'film',
+          value: `${work.episodeCount}話`,
+          label: `全${work.episodeCount}話`,
+        })
+      }
+      if (typeof work.mylistFirst === 'number' && work.mylistFirst > 0) {
+        const v = formatViews(work.mylistFirst)
+        metas.push({ icon: 'bookmark', value: v, label: `1話マイリスト ${v}` })
+      }
       const metric = cardMetric?.(work)
-      if (metric) {
+      if (metric && !metas.some((m) => m.icon === metric.icon)) {
+        metas.push({ ...metric, emphasize: true })
+      }
+      if (metas.length > 0) {
         const cap = document.createElement('div')
         cap.className = 'card-caption'
-        cap.appendChild(metaSpan(metric))
+        for (const m of metas) cap.appendChild(metaSpan(m))
         cell.appendChild(cap)
       }
       grid.appendChild(cell)

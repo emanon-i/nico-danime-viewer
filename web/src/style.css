@@ -413,21 +413,86 @@
 
   /* ── クイックアクセス ────────────────────────────── */
   .quick-access {
+    /* 1 段目＝固定ボタン［今期/人気/Hot］、2 段目＝ランダムタグのマーキー（§36） */
     display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: var(--sp-2);
+    flex-direction: column;
+    gap: var(--sp-3);
     padding: var(--sp-2) var(--gutter) clamp(var(--sp-5), 5vw, var(--sp-7));
-    /* spec: 検索直下・左寄せ・はみ出しは横スワイプ（可視スクロールバー非表示） */
-    justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: none;
     /* 中身もコンテンツ幅で中央寄せ（ワイドで左に張り付かせない） */
     max-width: calc(var(--content-max) + 2 * var(--gutter));
     margin-inline: auto;
     width: 100%;
+  }
+
+  .quick-row-primary {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--sp-2);
+    /* はみ出しは横スワイプ（可視スクロールバー非表示） */
+    overflow-x: auto;
+    scrollbar-width: none;
 
     &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  /* マーキー（2 段目）: 枠でクリップし track を一定速度で流す。両端をフェード。 */
+  .quick-marquee {
+    overflow: hidden;
+    width: 100%;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 1.5rem,
+      #000 calc(100% - 1.5rem),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 1.5rem,
+      #000 calc(100% - 1.5rem),
+      transparent
+    );
+  }
+
+  .quick-marquee-track {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: max-content;
+    /* 同じ並びを 2 回敷いているので -50% で 1 セットぶん流れてシームレスにループ */
+    animation: quick-marquee-scroll 64s linear infinite;
+  }
+
+  /* ホバー中は止めて読みやすく */
+  .quick-marquee:hover .quick-marquee-track {
+    animation-play-state: paused;
+  }
+
+  @keyframes quick-marquee-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* モーション抑制時は自動スクロールを止め、手動横スクロールに切替（§36） */
+  @media (prefers-reduced-motion: reduce) {
+    .quick-marquee {
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+    .quick-marquee-track {
+      animation: none;
+    }
+    .quick-marquee::-webkit-scrollbar {
       display: none;
     }
   }

@@ -27,6 +27,8 @@ export interface Work {
   commentTotal?: number
   /** シリーズ合算マイリスト数 */
   mylistTotal?: number
+  /** 第1話のマイリスト数（カードの常時メタ＝作品横断で比較できる人気の錨・§31） */
+  mylistFirst?: number
   /** シリーズ合算再生時間（秒）。平均話長＝durationTotal/episodeCount で再生時間絞り込みに使う */
   durationTotal?: number
   relatedSeries: RelatedSeries[]

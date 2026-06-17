@@ -332,6 +332,12 @@ async function render(): Promise<void> {
         const rel = w.latestAt ? formatRelativeTime(w.latestAt) : ''
         return rel ? { icon: 'clock', value: rel, label: `投稿 ${rel}` } : null
       }
+      if (screen.state.sort === 'comments') {
+        const c = w.commentTotal
+        if (c == null || c <= 0) return null
+        return { icon: 'message', value: formatViews(c), label: `総コメント ${formatViews(c)}` }
+      }
+      // kana（五十音）は数値指標を持たないので常時メタのみ
       return null
     }
 
