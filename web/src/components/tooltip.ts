@@ -100,11 +100,16 @@ export function initTooltips(): void {
     if (t && t === activeTrigger) hide()
   })
 
-  // タッチ/クリック: タッチ端末はタップでトグル、外側で閉じる
+  // タッチ/クリック: タッチ端末はタップでトグル、外側で閉じる。
+  // pointerType 検出が端末で揺れても効くよう、hover 不可端末(`hover: none`)なら
+  // click を常にトグル扱いにする（hover で開けないため・§75 堅牢化）。
+  const isTouchLike = (): boolean =>
+    lastPointerType === 'touch' ||
+    (typeof window.matchMedia === 'function' && window.matchMedia('(hover: none)').matches)
   document.addEventListener('click', (e) => {
     const t = triggerOf(e.target)
     if (t) {
-      if (lastPointerType === 'touch') {
+      if (isTouchLike()) {
         if (activeTrigger === t) hide()
         else show(t)
         e.preventDefault()
