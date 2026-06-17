@@ -4,6 +4,7 @@ import type { SortKey } from './features/router'
 import { renderTop } from './features/top/top'
 import type { TopData } from './features/top/top'
 import { renderList } from './features/list/list'
+import type { RangeStop } from './features/list/list'
 import { renderDetail } from './features/detail/detail'
 import { renderBreadcrumb } from './features/shared/breadcrumb'
 import { buildHeader } from './features/shared/header'
@@ -54,9 +55,20 @@ let cache: {
 // お気に入り/未視聴フィルタの状態（インメモリ・URLに出さない）
 let favFilter = false
 let unwatchedFilter = false
-// 再生時間（平均話長・分）／投稿年 レンジ（インメモリ・null=絞り込みなし）
-let lenRange: [number, number] | null = null
-let yearRange: [number, number] | null = null
+// 再生時間／投稿年 レンジ＝停止点インデックス [loIdx, hiIdx]（インメモリ・null=絞り込みなし）
+let durIdx: [number, number] | null = null
+let yearIdx: [number, number] | null = null
+
+// 再生時間の停止点（離散スナップ・§23）。value=分（0=下限なし／Infinity=上限なし）
+const DURATION_STOPS: RangeStop[] = [
+  { value: 0, label: '下限なし', tick: 'なし' },
+  { value: 5, label: '5分', tick: '5分' },
+  { value: 15, label: '15分', tick: '15分' },
+  { value: 30, label: '30分', tick: '30分' },
+  { value: 60, label: '1時間', tick: '1時間' },
+  { value: 120, label: '2時間', tick: '2時間' },
+  { value: Infinity, label: '上限なし', tick: '∞' },
+]
 
 /** 作品の平均話長（分・端数四捨五入）。不明は null */
 function avgMinutes(w: Work): number | null {
@@ -251,26 +263,40 @@ async function render(): Promise<void> {
     const watchedIds = unwatchedFilter ? new Set(getWatchedIds()) : undefined
     let filtered = filterWorks(allWorks, screen.state, { favIds, watchedIds })
 
-    // 再生時間（分）／投稿年 のレンジ絞り込み（§23）。境界は全作品から算出
-    const LEN_BOUND: [number, number] = [0, 180]
+    // 投稿年の停止点（データの最小〜最大年・10 年ごとに目盛り）
     const years = allWorks.map(workYear).filter((y): y is number => y != null)
-    const YEAR_BOUND: [number, number] =
-      years.length > 0 ? [Math.min(...years), Math.max(...years)] : [2000, new Date().getFullYear()]
-    if (lenRange) {
-      const [lo, hi] = lenRange
+    const minYear = years.length > 0 ? Math.min(...years) : 2000
+    const maxYear = years.length > 0 ? Math.max(...years) : new Date().getFullYear()
+    const YEAR_STOPS: RangeStop[] = []
+    for (let y = minYear; y <= maxYear; y++) {
+      YEAR_STOPS.push({
+        value: y,
+        label: `${y}`,
+        tick: y === minYear || y === maxYear || y % 10 === 0 ? `${y}` : undefined,
+      })
+    }
+    const durLast = DURATION_STOPS.length - 1
+    const yearLast = YEAR_STOPS.length - 1
+
+    // 再生時間レンジ（停止点→分。0=下限なし／Infinity=上限なし＝§23）
+    if (durIdx) {
+      const loMin = DURATION_STOPS[durIdx[0]].value
+      const hiMin = DURATION_STOPS[durIdx[1]].value
       filtered = filtered.filter((w) => {
         const m = avgMinutes(w)
         if (m == null) return false
-        return (
-          m >= (lo <= LEN_BOUND[0] ? -Infinity : lo) && m <= (hi >= LEN_BOUND[1] ? Infinity : hi)
-        )
+        if (loMin > 0 && m < loMin) return false
+        if (hiMin !== Infinity && m > hiMin) return false
+        return true
       })
     }
-    if (yearRange) {
-      const [lo, hi] = yearRange
+    // 投稿年レンジ
+    if (yearIdx) {
+      const loY = YEAR_STOPS[yearIdx[0]]?.value ?? minYear
+      const hiY = YEAR_STOPS[yearIdx[1]]?.value ?? maxYear
       filtered = filtered.filter((w) => {
         const y = workYear(w)
-        return y != null && y >= lo && y <= hi
+        return y != null && y >= loY && y <= hiY
       })
     }
 
@@ -320,21 +346,23 @@ async function render(): Promise<void> {
         void render()
       },
       sliders: {
-        len: {
-          min: lenRange?.[0] ?? LEN_BOUND[0],
-          max: lenRange?.[1] ?? LEN_BOUND[1],
-          bound: LEN_BOUND,
-          onChange: (a, b) => {
-            lenRange = a <= LEN_BOUND[0] && b >= LEN_BOUND[1] ? null : [a, b]
+        duration: {
+          name: '再生時間',
+          stops: DURATION_STOPS,
+          lowerIdx: durIdx?.[0] ?? 0,
+          upperIdx: durIdx?.[1] ?? durLast,
+          onChange: (lo, hi) => {
+            durIdx = lo === 0 && hi === durLast ? null : [lo, hi]
             void render()
           },
         },
         year: {
-          min: yearRange?.[0] ?? YEAR_BOUND[0],
-          max: yearRange?.[1] ?? YEAR_BOUND[1],
-          bound: YEAR_BOUND,
-          onChange: (a, b) => {
-            yearRange = a <= YEAR_BOUND[0] && b >= YEAR_BOUND[1] ? null : [a, b]
+          name: '投稿年',
+          stops: YEAR_STOPS,
+          lowerIdx: yearIdx?.[0] ?? 0,
+          upperIdx: yearIdx?.[1] ?? yearLast,
+          onChange: (lo, hi) => {
+            yearIdx = lo === 0 && hi === yearLast ? null : [lo, hi]
             void render()
           },
         },

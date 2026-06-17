@@ -1558,75 +1558,118 @@
   }
 
   /* レンジスライダー（再生時間/投稿年・§23）。2 つの range input を重ねる */
+  /* 2 ハンドル離散レンジ（§23）。トラック＋選択フィル＋重ねた range input 2 本。
+     つまみは値%＝スライダー幅の % に中心が来る（フィルも同じ座標）→ 端でも中心が
+     スライダー端に乗り、はみ出す半分は左右の余白(--sp-2)に収まって切れない。 */
   .range-filter {
+    --range-thumb: 1.05rem;
+
     .range-slider {
       position: relative;
-      height: 1.5rem;
-      display: grid;
+      height: var(--range-thumb);
+      /* つまみが端で半分はみ出しても切れないよう左右に半径ぶんの余白 */
+      margin-inline: calc(var(--range-thumb) / 2);
     }
 
-    /* 重ねた range input。トラックは下のものだけ見せ、つまみは両方操作可 */
-    input[type='range'] {
-      grid-area: 1 / 1;
+    /* 背景トラック（全幅） */
+    .range-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      translate: 0 -50%;
+      height: 4px;
+      border-radius: var(--r-full);
+      background: var(--border);
+    }
+
+    /* 選択区間フィル（下限つまみ中心→上限つまみ中心） */
+    .range-fill {
+      position: absolute;
+      top: 50%;
+      translate: 0 -50%;
+      height: 4px;
+      border-radius: var(--r-full);
+      background: var(--accent);
+      left: var(--from, 0%);
+      right: calc(100% - var(--to, 100%));
+    }
+
+    /* 重ねた range input（透明トラック・つまみのみ操作可） */
+    .range-input {
+      position: absolute;
+      inset: 0;
       width: 100%;
+      height: 100%;
       margin: 0;
       background: transparent;
       pointer-events: none;
-      accent-color: var(--accent);
       -webkit-appearance: none;
       appearance: none;
-      align-self: center;
-      height: 1.5rem;
 
       &::-webkit-slider-runnable-track {
-        height: 4px;
-        border-radius: var(--r-full);
-        background: var(--border);
+        height: 100%;
+        background: transparent;
+        border: none;
       }
       &::-moz-range-track {
-        height: 4px;
-        border-radius: var(--r-full);
-        background: var(--border);
+        height: 100%;
+        background: transparent;
+        border: none;
       }
       &::-webkit-slider-thumb {
         pointer-events: auto;
         -webkit-appearance: none;
         appearance: none;
-        width: 1rem;
-        height: 1rem;
-        margin-top: -6px;
+        width: var(--range-thumb);
+        height: var(--range-thumb);
         border-radius: var(--r-full);
         background: var(--accent);
         border: 2px solid var(--bg);
+        box-shadow: 0 0 0 1px var(--border);
         cursor: pointer;
       }
       &::-moz-range-thumb {
         pointer-events: auto;
-        width: 1rem;
-        height: 1rem;
+        width: var(--range-thumb);
+        height: var(--range-thumb);
         border-radius: var(--r-full);
         background: var(--accent);
         border: 2px solid var(--bg);
+        box-shadow: 0 0 0 1px var(--border);
         cursor: pointer;
       }
-      &:focus-visible {
+      &:focus-visible::-webkit-slider-thumb {
         outline: 2px solid var(--focus-ring);
-        outline-offset: 4px;
+        outline-offset: 2px;
+      }
+      &:focus-visible::-moz-range-thumb {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
       }
     }
 
-    /* 上ハンドルだけトラックを透明にして二重線を避ける */
-    .range-upper::-webkit-slider-runnable-track {
-      background: transparent;
+    /* 目盛り（停止点ラベル） */
+    .range-ticks {
+      position: relative;
+      height: 1rem;
+      margin-top: 2px;
+      margin-inline: calc(var(--range-thumb) / 2);
     }
-    .range-upper::-moz-range-track {
-      background: transparent;
+    .range-tick {
+      position: absolute;
+      left: var(--at, 0%);
+      translate: -50% 0;
+      font-size: 0.625rem;
+      color: var(--text-muted);
+      white-space: nowrap;
     }
 
     .range-readout {
       margin-top: var(--sp-1);
       font-size: var(--text-l4);
-      color: var(--text-muted);
+      color: var(--text);
+      font-weight: 500;
       font-variant-numeric: tabular-nums;
     }
   }
