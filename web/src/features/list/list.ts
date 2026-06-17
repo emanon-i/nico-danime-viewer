@@ -582,6 +582,7 @@ export function renderList(
       initial: 12,
       step: 18,
       itemClass: 'filter-tag-li',
+      stateKey: 'reveal:list-tags', // 展開件数をページ移動間で保持（§B）
     })
     tagsSection.appendChild(tagList)
   }
@@ -617,6 +618,7 @@ export function renderList(
       initial: 8,
       step: 12,
       itemClass: 'filter-cours-li',
+      stateKey: 'reveal:list-cours', // 展開件数をページ移動間で保持（§B）
     })
     coursSection.appendChild(coursListEl)
   }

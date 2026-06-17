@@ -107,8 +107,11 @@ export function processEpisodeTags(tagsStr, title = null) {
 }
 
 /**
- * DB から各シリーズの第1話（最古話）タグを取得して正規化し、replaceSeriesTags に渡せる形で返す。
- * 作品名タグ除外のため series.title も取得して照合する。
+ * DB から各シリーズの**全エピソード**のタグを正規化して distinct union し、replaceSeriesTags に
+ * 渡せる形で返す（§A：絞り込み用タグを全話の和集合に）。第1話だけでなく後続話のタグでも
+ * そのシリーズが絞り込める。除外（dアニメストア/アニメ/第1話・作品名タグ）は per-episode の
+ * processEpisodeTags で適用済み。クール由来タグ（「〇〇年〇アニメ」）は UI 側で isCoursTag 除外。
+ * 注: クール導出は別経路（cours.mjs deriveCoursFromTags＝第1話タグ）なので本変更の影響を受けない。
  * @param {import('better-sqlite3').Database} db
  * @returns {{ seriesId: number, tags: { name: string, isCurated: boolean }[] }[]}
  */
@@ -118,18 +121,27 @@ export function deriveSeriesTags(db) {
       `SELECT e.series_id, e.tags, s.title AS series_title
        FROM episodes e
        JOIN series s ON s.series_id = e.series_id
-       WHERE e.series_id IS NOT NULL
-         AND e.content_id = (
-           SELECT e2.content_id FROM episodes e2
-           WHERE e2.series_id = e.series_id
-           ORDER BY e2.start_time ASC, COALESCE(e2.episode_no, 9999) ASC, e2.content_id ASC
-           LIMIT 1
-         )`
+       WHERE e.series_id IS NOT NULL AND e.tags IS NOT NULL AND e.tags != ''`
     )
     .all()
 
-  return rows.map((row) => ({
-    seriesId: row.series_id,
-    tags: processEpisodeTags(row.tags, row.series_title),
+  // series_id → Map(name → {name, isCurated})。複数話に出るタグは isCurated を OR で統合。
+  const bySeries = new Map()
+  for (const row of rows) {
+    let acc = bySeries.get(row.series_id)
+    if (!acc) {
+      acc = new Map()
+      bySeries.set(row.series_id, acc)
+    }
+    for (const t of processEpisodeTags(row.tags, row.series_title)) {
+      const prev = acc.get(t.name)
+      if (prev) prev.isCurated = prev.isCurated || t.isCurated
+      else acc.set(t.name, { name: t.name, isCurated: t.isCurated })
+    }
+  }
+
+  return [...bySeries.entries()].map(([seriesId, tagMap]) => ({
+    seriesId,
+    tags: [...tagMap.values()],
   }))
 }

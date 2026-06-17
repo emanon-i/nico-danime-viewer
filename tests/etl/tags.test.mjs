@@ -122,7 +122,7 @@ describe('deriveSeriesTags (F-0013)', () => {
     bulkUpsertSeries(db, [{ seriesId: 1, title: 'テスト' }], '2026-01-01T00:00:00Z')
   })
 
-  it('test_series_tags_from_first_episode: 最古話のタグを使う（第2話以降は混入しない）', () => {
+  it('test_series_tags_union_all_episodes: 全話タグの和集合を使う（後続話のタグも含む・§A）', () => {
     bulkUpsertEpisodes(
       db,
       [
@@ -140,7 +140,7 @@ describe('deriveSeriesTags (F-0013)', () => {
           title: '第2話',
           viewCounter: 90,
           startTime: '2020-01-08T00:00:00+09:00',
-          tags: '第2話専用タグ',
+          tags: '第2話専用タグ アクション',
         },
       ],
       '2026-06-16T00:00:00Z'
@@ -149,7 +149,37 @@ describe('deriveSeriesTags (F-0013)', () => {
     const result = deriveSeriesTags(db)
     expect(result).toHaveLength(1)
     const tagNames = result[0].tags.map((t) => t.name)
+    // 第1話・後続話どちらのタグも含む（distinct union）
     expect(tagNames).toContain('アクション')
-    expect(tagNames).not.toContain('第2話専用タグ')
+    expect(tagNames).toContain('第2話専用タグ')
+    // 重複は 1 つに（union＝distinct）
+    expect(tagNames.filter((n) => n === 'アクション')).toHaveLength(1)
+  })
+
+  it('全話 union でも除外タグ（アニメ/第1話）は残らない（§A）', () => {
+    bulkUpsertEpisodes(
+      db,
+      [
+        {
+          contentId: 'so1',
+          seriesId: 1,
+          title: '第1話',
+          viewCounter: 100,
+          startTime: '2020-01-01T00:00:00+09:00',
+          tags: 'アニメ 第1話 アクション',
+        },
+        {
+          contentId: 'so2',
+          seriesId: 1,
+          title: '第2話',
+          viewCounter: 90,
+          startTime: '2020-01-08T00:00:00+09:00',
+          tags: 'アニメ 日常',
+        },
+      ],
+      '2026-06-16T00:00:00Z'
+    )
+    const tagNames = deriveSeriesTags(db)[0].tags.map((t) => t.name)
+    expect(tagNames.sort()).toEqual(['アクション', '日常'])
   })
 })
