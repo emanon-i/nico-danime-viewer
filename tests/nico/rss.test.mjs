@@ -12,6 +12,7 @@ import {
   createSchema,
   bulkUpsertEpisodes,
   bulkUpsertRssItems,
+  pruneRssItems,
 } from '../../scripts/db/db.mjs'
 
 const SAMPLE_RSS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -183,5 +184,42 @@ describe('resolveRssItems (F-0019)', () => {
     const item = db.prepare('SELECT * FROM rss_items WHERE watch_id = ?').get('1111111111')
     expect(item.resolution_status).toBe('rss_only')
     expect(item.resolved_content_id).toBeNull()
+  })
+})
+
+describe('pruneRssItems（rss_items 有界化・運用監査）', () => {
+  let db
+
+  beforeEach(() => {
+    db = openDatabase(':memory:')
+    createSchema(db)
+  })
+
+  it('watch_id 降順で最新 keep 件だけ残し古いものを削除する', () => {
+    const rows = Array.from({ length: 10 }, (_, i) => ({
+      watchId: String(1000 + i), // 1000..1009（大きいほど新しい）
+      title: `動画${i}`,
+      pubDate: '2026-06-01T10:00:00+09:00',
+      guid: null,
+      titleNorm: null,
+      link: null,
+    }))
+    bulkUpsertRssItems(db, rows)
+    const removed = pruneRssItems(db, 3)
+    expect(removed).toBe(7)
+    const kept = db
+      .prepare('SELECT watch_id FROM rss_items ORDER BY CAST(watch_id AS INTEGER) DESC')
+      .all()
+      .map((r) => r.watch_id)
+    expect(kept).toEqual(['1009', '1008', '1007']) // 最新 3 件だけ残る
+  })
+
+  it('keep 件以下なら何も削除しない', () => {
+    bulkUpsertRssItems(db, [
+      { watchId: '5', title: 'a', pubDate: 'x', guid: null, titleNorm: null, link: null },
+      { watchId: '6', title: 'b', pubDate: 'x', guid: null, titleNorm: null, link: null },
+    ])
+    expect(pruneRssItems(db, 500)).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) c FROM rss_items').get().c).toBe(2)
   })
 })
