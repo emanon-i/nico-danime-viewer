@@ -4,9 +4,16 @@ import { buildListUrl } from '../router'
 function listStateLabel(state: ListState): string {
   if (state.q) return `検索「${state.q}」`
   if (state.tags.length > 0) return `タグ「${state.tags.join('・')}」`
-  if (state.cours === 'current') return '今期'
-  if (state.cours === 'previous') return '前期'
-  if (state.cours) return `クール「${state.cours}」`
+  if (state.cours) {
+    // 複数クール（§90・カンマ区切り）。プリセット(current/previous)は今期/前期。
+    const disp = (c: string): string => (c === 'current' ? '今期' : c === 'previous' ? '前期' : c)
+    const list = state.cours.split(',').filter(Boolean)
+    if (list.length === 1) {
+      const c = list[0]
+      return c === 'current' ? '今期' : c === 'previous' ? '前期' : `クール「${c}」`
+    }
+    return `クール「${list.map(disp).join('・')}」`
+  }
   if (state.sort === 'views') return '人気TOP'
   if (state.sort === 'new') return '新着'
   return ''

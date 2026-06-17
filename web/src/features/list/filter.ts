@@ -60,6 +60,18 @@ export function resolveCoursLabel(cours: string): string {
   return cours
 }
 
+/** state.cours（カンマ区切り・複数クール＝§90）を配列に分解する。空は []。 */
+export function coursList(cours: string): string[] {
+  return cours ? cours.split(',').filter(Boolean) : []
+}
+
+/** クールの追加/除去トグル（複数選択＝§90）。含まれていれば外し、無ければ足す。 */
+export function toggleCours(cours: string, target: string): string {
+  const list = coursList(cours)
+  const next = list.includes(target) ? list.filter((c) => c !== target) : [...list, target]
+  return next.join(',')
+}
+
 export interface FilterOpts {
   favIds?: Set<number>
   watchedIds?: Set<number>
@@ -73,10 +85,11 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
   let result = opts?.includeEmpty ? works : works.filter((w) => (w.episodeCount ?? 0) > 0)
 
   if (state.q) {
+    // 素のワード検索は「シリーズタイトルの部分一致のみ」（§87）。タグは対象外。
+    // タグで絞りたい時は #トークン（§35）でピル化して AND フィルタする＝役割分担：
+    // 素ワード＝タイトル検索 / #＝タグフィルタ。
     const q = state.q.toLowerCase()
-    result = result.filter(
-      (w) => w.title.toLowerCase().includes(q) || w.tags.some((t) => t.toLowerCase().includes(q))
-    )
+    result = result.filter((w) => w.title.toLowerCase().includes(q))
   }
 
   if (state.row) {
@@ -94,8 +107,10 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
   }
 
   if (state.cours) {
-    const label = resolveCoursLabel(state.cours)
-    result = result.filter((w) => w.cours === label)
+    // 複数クールは OR（いずれかに属する作品＝シーズンの和集合・§90）。URL は cours をカンマ区切りで
+    // 保持。各エントリを resolveCoursLabel（current/previous プリセット含む）で解決して突き合わせる。
+    const wanted = new Set(coursList(state.cours).map(resolveCoursLabel))
+    if (wanted.size > 0) result = result.filter((w) => w.cours != null && wanted.has(w.cours))
   }
 
   if (opts?.favIds) {

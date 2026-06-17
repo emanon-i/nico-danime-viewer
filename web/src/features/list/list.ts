@@ -7,6 +7,7 @@ import { icon } from '../../components/icon'
 import { metaSpan, formatViews } from '../../components/meta'
 import type { MetaSpec } from '../../components/meta'
 import { progressiveReveal } from '../../components/reveal'
+import { coursList, toggleCours } from './filter'
 
 export interface ListData {
   tags: Tag[]
@@ -52,6 +53,8 @@ export interface SliderSpec {
   lowerIdx: number
   upperIdx: number
   onChange: (lowerIdx: number, upperIdx: number) => void
+  /** ラベル横の ⓘ ツールチップ注記（§89・カスタムツールチップ）。任意。 */
+  info?: string
 }
 
 /**
@@ -66,6 +69,7 @@ function rangeSlider(opts: {
   lowerIdx: number
   upperIdx: number
   onChange: (lowerIdx: number, upperIdx: number) => void
+  info?: string
 }): HTMLElement {
   const n = opts.stops.length
   const last = n - 1
@@ -74,7 +78,17 @@ function rangeSlider(opts: {
   const wrap = document.createElement('div')
   wrap.className = 'range-filter'
   const h = document.createElement('h3')
-  h.textContent = opts.label
+  h.appendChild(document.createTextNode(opts.label))
+  // ラベル横の ⓘ 注記（§89・§46 カスタムツールチップ＝hover/focus/タップ開閉で統一）
+  if (opts.info) {
+    const infoBtn = document.createElement('button')
+    infoBtn.type = 'button'
+    infoBtn.className = 'info-btn'
+    infoBtn.setAttribute('aria-label', `${opts.label}について`)
+    infoBtn.dataset.tooltip = opts.info
+    infoBtn.appendChild(icon('info', 14))
+    h.appendChild(infoBtn)
+  }
   wrap.appendChild(h)
 
   const slider = document.createElement('div')
@@ -396,6 +410,13 @@ export function renderList(
     sliders?: { duration: SliderSpec; year: SliderSpec }
     /** タグ・トークン検索の確定時に呼ぶ遷移（§35）。未指定時はプレーン入力にフォールバック */
     onSearch?: (next: ListState) => void
+    /** サイドバーのタグ/クール選択を SPA 遷移する（§91）。指定時は全リロードせず再描画＝
+     * モバイルのドロワーを開いたまま連続選択できる。未指定なら従来の `<a href>` 全リロード。 */
+    onNavigate?: (next: ListState) => void
+    /** モバイルのフィルタ/並びドロワーの開閉状態（§91・再描画をまたいで保持）。 */
+    filterOpen?: boolean
+    /** ドロワー開閉トグル通知（§91・呼び出し側が状態を保持して次の描画に反映する）。 */
+    onToggleFilter?: (open: boolean) => void
   }
 ): void {
   const {
@@ -413,8 +434,23 @@ export function renderList(
     onClearShowEmpty,
     sliders,
     onSearch,
+    onNavigate,
+    filterOpen = false,
+    onToggleFilter,
   } = options
   container.innerHTML = ''
+
+  // サイドバーのタグ/クール選択を SPA 遷移化（§91）。onNavigate 指定時は全リロードせず
+  // 再描画に切替＝モバイルのドロワーを開いたまま連続選択できる。修飾キー/中クリックは素通し
+  // （新規タブを尊重）。href は維持＝アクセシビリティ/共有も従来どおり。
+  const wireSpaLink = (a: HTMLAnchorElement, next: ListState): void => {
+    if (!onNavigate) return
+    a.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      e.preventDefault()
+      onNavigate(next)
+    })
+  }
 
   // ── 検索バー（タグ・トークン入力＝§35）────────────────────────
   const searchBar = document.createElement('div')
@@ -531,12 +567,14 @@ export function renderList(
       a.className = 'filter-tag-item' + (active ? ' active' : '')
       // クリックでタグの ON/OFF をトグル（複数選択＝AND・§35）。サイドバー選択と
       // 検索トークン/適用中バーは同じ state.tags を見るので自動で同期する。
-      a.href = buildListUrl({
+      const next: ListState = {
         ...state,
         tags: active ? state.tags.filter((t) => t !== tag.name) : [...state.tags, tag.name],
         page: 1,
-      })
+      }
+      a.href = buildListUrl(next)
       a.textContent = tag.name
+      wireSpaLink(a, next) // §91: モバイルのドロワーを開いたまま連続選択
       li.appendChild(a)
       return li
     }
@@ -557,26 +595,30 @@ export function renderList(
   coursSection.appendChild(coursH3)
   if (data?.cours && data.cours.length > 0) {
     // 直近の数件だけ表示＋もっと見る/閉じる（Top「クールから探す」と同一作法＝§30/§34）
-    const coursList = document.createElement('ul')
-    coursList.className = 'filter-cours-list'
+    const coursListEl = document.createElement('ul')
+    coursListEl.className = 'filter-cours-list'
     const cours = data.cours
     const makeCoursItem = (i: number): HTMLElement => {
       const cg = cours[i]
       const li = document.createElement('li')
       li.className = 'filter-cours-li'
       const a = document.createElement('a')
-      a.className = 'filter-cours-item' + (state.cours === cg.cours ? ' active' : '')
-      a.href = buildListUrl({ ...state, cours: state.cours === cg.cours ? '' : cg.cours, page: 1 })
+      const selected = coursList(state.cours).includes(cg.cours)
+      a.className = 'filter-cours-item' + (selected ? ' active' : '')
+      // 複数選択＝追加式トグル（§90）。含まれていれば外し、無ければ足す。
+      const next: ListState = { ...state, cours: toggleCours(state.cours, cg.cours), page: 1 }
+      a.href = buildListUrl(next)
       a.textContent = cg.cours
+      wireSpaLink(a, next) // §91: ドロワーを開いたまま連続選択
       li.appendChild(a)
       return li
     }
-    progressiveReveal(coursList, cours.length, makeCoursItem, {
+    progressiveReveal(coursListEl, cours.length, makeCoursItem, {
       initial: 8,
       step: 12,
       itemClass: 'filter-cours-li',
     })
-    coursSection.appendChild(coursList)
+    coursSection.appendChild(coursListEl)
   }
   // ※ filterDiv への追加は末尾でまとめて順序制御（§66）
 
@@ -608,6 +650,7 @@ export function renderList(
       lowerIdx: spec.lowerIdx,
       upperIdx: spec.upperIdx,
       onChange: spec.onChange,
+      info: spec.info,
     })
   const durationSlider = sliders ? mkSlider(sliders.duration) : null
   const yearSlider = sliders ? mkSlider(sliders.year) : null
@@ -623,10 +666,16 @@ export function renderList(
 
   body.appendChild(filterDiv)
 
-  // モバイル: トグルでフィルタ（ドロワー）を開閉
+  // モバイル: トグルでフィルタ（ドロワー）を開閉。開閉状態は再描画をまたいで保持する（§91）＝
+  // タグ/クールを選んでも（SPA 再描画されても）ドロワーが閉じず連続選択できる。
+  if (filterOpen) {
+    filterDiv.classList.add('open')
+    filterToggle.setAttribute('aria-expanded', 'true')
+  }
   filterToggle.addEventListener('click', () => {
     const open = filterDiv.classList.toggle('open')
     filterToggle.setAttribute('aria-expanded', open ? 'true' : 'false')
+    onToggleFilter?.(open)
   })
 
   // ── 右側: 件数＋グリッド＋ページング ─────────────────────────
@@ -684,14 +733,10 @@ export function renderList(
   for (const t of state.tags) {
     addLinkChip(`タグ「${t}」`, { ...state, tags: state.tags.filter((x) => x !== t) })
   }
-  if (state.cours) {
-    const coursLabel =
-      state.cours === 'current'
-        ? '今期'
-        : state.cours === 'previous'
-          ? '前期'
-          : `クール「${state.cours}」`
-    addLinkChip(coursLabel, { ...state, cours: '' })
+  // クールは選択ごとに 1 チップ。[×] はそのクールだけ外す（複数選択＝§90）。
+  for (const c of coursList(state.cours)) {
+    const coursLabel = c === 'current' ? '今期' : c === 'previous' ? '前期' : `クール「${c}」`
+    addLinkChip(coursLabel, { ...state, cours: toggleCours(state.cours, c) })
   }
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
   if (favFilter) addBtnChip('♥ お気に入り', onClearFav)

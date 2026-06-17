@@ -65,6 +65,9 @@ let favFilter = false
 let unwatchedFilter = false
 // 空シェル（中身のない項目）も表示するか（§63・既定 OFF＝非表示・インメモリ）
 let showEmptyFilter = false
+// モバイルのフィルタ/並びドロワーの開閉状態（§91・インメモリ）。SPA 再描画をまたいで保持し、
+// タグ/クールを選んでもドロワーが閉じず連続選択できるようにする。
+let filterPanelOpen = false
 // 再生時間／投稿年 レンジは URL 状態（state.dur / state.year）で保持する（§78）。
 // ＝ページ移動（フルリロード）でも復元される。インメモリの保持変数は持たない。
 
@@ -282,6 +285,9 @@ function wireHeaderControls(): void {
 function focusMainIfNavigation(): void {
   if (!isNavigation) return
   isNavigation = false
+  // モバイルでフィルタ・ドロワーを開いたまま連続選択している間は、焦点をドロワーから
+  // 奪わない（§91）。焦点移動で main へスクロールするとドロワー操作が中断するため。
+  if (filterPanelOpen) return
   const main = app.querySelector<HTMLElement>('#main-content')
   main?.focus()
 }
@@ -482,6 +488,13 @@ async function render(): Promise<void> {
         void render()
       },
       onSearch: (next) => navigate(buildListUrl(next)),
+      // §91: サイドバーのタグ/クール選択を SPA 遷移（全リロードせず再描画＝モバイルのドロワー
+      // を開いたまま連続選択でき、12MB の works.json 再取得も避けられる）。
+      onNavigate: (next) => navigate(buildListUrl(next)),
+      filterOpen: filterPanelOpen,
+      onToggleFilter: (open) => {
+        filterPanelOpen = open
+      },
       sliders: {
         duration: {
           name: '再生時間',
@@ -501,6 +514,8 @@ async function render(): Promise<void> {
         },
         year: {
           name: '投稿年',
+          // 投稿年は startTime 由来＝支店に投稿された年（元の放送年ではない・§89）
+          info: 'dアニメストア ニコニコ支店に動画が投稿された年です（元の放送年とは異なる場合があります）',
           stops: YEAR_STOPS,
           lowerIdx: yearIdx?.[0] ?? 0,
           upperIdx: yearIdx?.[1] ?? yearLast,

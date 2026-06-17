@@ -5,6 +5,8 @@ import {
   paginateWorks,
   colKeyMatchesRow,
   currentCoursLabel,
+  coursList,
+  toggleCours,
   PAGE_SIZE,
 } from '../../web/src/features/list/filter'
 import type { FilterOpts } from '../../web/src/features/list/filter'
@@ -130,6 +132,23 @@ describe('filterWorks (F-0028/0029/0030)', () => {
     expect(result[0].seriesId).toBe(1)
   })
 
+  it('複数クールは OR で和集合になる（§90）', () => {
+    // '2026-春'(seriesId 1) と '2025-秋'(seriesId 2) のいずれか＝2 件
+    const result = filterWorks(WORKS, { ...BASE_STATE, cours: '2026-春,2025-秋' })
+    expect(result.map((w) => w.seriesId).sort()).toEqual([1, 2])
+  })
+
+  it('coursList / toggleCours: 追加式トグル（§90）', () => {
+    expect(coursList('')).toEqual([])
+    expect(coursList('2026-春,2025-秋')).toEqual(['2026-春', '2025-秋'])
+    // 無ければ追加
+    expect(toggleCours('', '2026-春')).toBe('2026-春')
+    expect(toggleCours('2026-春', '2025-秋')).toBe('2026-春,2025-秋')
+    // あれば除去（トグル解除）
+    expect(toggleCours('2026-春,2025-秋', '2026-春')).toBe('2025-秋')
+    expect(toggleCours('2026-春', '2026-春')).toBe('')
+  })
+
   it('test_current_cours_preset: cours=current が現行季に解決される', () => {
     const label = currentCoursLabel()
     const works: Work[] = [
@@ -159,10 +178,16 @@ describe('filterWorks (F-0028/0029/0030)', () => {
     expect(result[0].seriesId).toBe(1)
   })
 
-  it('q 検索: タグに部分一致する', () => {
+  it('q 検索: タグ名はワード検索の対象外（§87・タイトルのみ）', () => {
+    // 'アクション' は seriesId=2 のタグだが、素ワードでは引っ掛けない（タイトルに無いので 0 件）
     const result = filterWorks(WORKS, { ...BASE_STATE, q: 'アクション' })
-    expect(result).toHaveLength(1)
-    expect(result[0].seriesId).toBe(2)
+    expect(result).toHaveLength(0)
+  })
+
+  it('q 検索: 素ワードはタイトルのみ・#タグは tags で AND（§87 併用）', () => {
+    // 素ワード 'や'（やまとにヒット）＋ タグ 'アクション'（seriesId=2）で AND
+    const result = filterWorks(WORKS, { ...BASE_STATE, q: 'や', tags: ['アクション'] })
+    expect(result.map((w) => w.seriesId)).toEqual([2])
   })
 
   it('q が空なら全件返す', () => {

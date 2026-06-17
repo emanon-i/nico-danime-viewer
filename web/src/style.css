@@ -2040,11 +2040,12 @@
       }
     }
 
-    /* 目盛り（停止点ラベル） */
+    /* 目盛り（停止点ラベル）。つまみ（=range-slider 全高）と縦に十分離す（§88）。
+       2px だとつまみの直下に詰まって重なって見えるため、トラック下にクリアランスを確保。 */
     .range-ticks {
       position: relative;
       height: 1rem;
-      margin-top: 2px;
+      margin-top: var(--sp-2);
       margin-inline: calc(var(--range-thumb) / 2);
     }
     .range-tick {
