@@ -147,7 +147,8 @@ export function card(
   const watchedBtn = document.createElement('button')
   watchedBtn.className = 'icon-btn card-watched'
   watchedBtn.setAttribute('aria-label', '見た')
-  watchedBtn.appendChild(icon('check', 16))
+  // 「見た」は eye アイコン（on/off が形・塗りで一目で分かる＝§20）。状態は wireCards が切替。
+  watchedBtn.appendChild(icon('eye-off', 16))
   actions.appendChild(watchedBtn)
 
   el.appendChild(actions)

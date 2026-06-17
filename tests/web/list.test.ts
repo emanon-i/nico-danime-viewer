@@ -159,7 +159,7 @@ describe('renderList - フィルタ・ソートUI (F-0028/0029/0030/0031)', () =
     expect(container.querySelector('select[name="period"]')).toBeNull()
   })
 
-  it('sort ラジオボタンが4種あり選択状態が反映される（F-0031）', () => {
+  it('sort ラジオボタンが5種あり選択状態が反映される（§19・総コメント数追加）', () => {
     renderList(container, {
       state: { ...BASE_STATE, sort: 'views' },
       works: [],
@@ -167,7 +167,8 @@ describe('renderList - フィルタ・ソートUI (F-0028/0029/0030/0031)', () =
       totalPages: 1,
     })
     const radios = container.querySelectorAll<HTMLInputElement>('input[name="sort"]')
-    expect(radios.length).toBe(4)
+    expect(radios.length).toBe(5)
+    expect(Array.from(radios).map((r) => r.value)).toContain('comments')
     const checked = Array.from(radios).find((r) => r.checked)
     expect(checked?.value).toBe('views')
   })

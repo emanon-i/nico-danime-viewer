@@ -695,3 +695,25 @@ export function hiResThumb(url: string | null): string {
 
 - **14 クール源をタグ導出へ確定変更**：snapshot タグの `YYYY年<季>アニメ`（例「2022年秋アニメ」）をパースして放送季を導出する＝**追加 fetch 不要・放送季で正確・高 recall**（実測 **213 季・約 3,900 作品**）。`§10.3` の「クール判定の源は period HTML」を上書きし、**主源＝タグ導出**、`programlist`（今季）→ `period`（日本語タイトル突合）は欠落分の補完とする（`foundation.md` のクール源も同様）。実装: `etl/cours.mjs`（`coursFromTags`/`deriveCoursFromTags`）・`fetch.mjs`（`runCoursPipeline`）。
 - **15 関連シリーズ/続編の突合を刷新**：`etl/series.mjs` `computeFranchiseKeys` を **`〜シリーズ` タグ＋タイトル語幹（`titleStem`・続編/形式マーカー除去）の union-find** に変更。声優・スタッフ・汎用共有タグ（旧「2〜50 件共有」ルール＝誤束ねの主因）を**廃止**。続編チェーン（進撃/Re:ゼロ/転スラ/SPY 等）が正しく束ねられる。`franchise_key` は `f:<成分内最小 series_id>`（不透明・成分一致のみ意味を持つ）。サブタイトル付き映画・スピンオフは取りこぼし得る（ベストエフォート）。
+
+## 21. 公開後フィードバック反映（v1.2・追加 13 件）
+
+> **実装状況** 【実装済】。データは既存 snapshot 列（commentCounter/mylistCounter/lengthSeconds/startTime）から export 追加のみ（再 fetch 不要）。
+
+| #   | 指摘 → 決定                                                                                                                                     | 実装                                                                                          |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 16  | 一覧に**適用中バー**（並び替え・フィルタ・件数を可視化。チップ＋[×] で解除）                                                                    | `.list-applied`（`list.ts`）。URL フィルタは [×]=リンク、♥/未視聴/レンジは [×]=コールバック   |
+| 17  | 作品詳細の各話**行ヘッダから再生数を撤去**（ドロワーで見えるため冗長）                                                                          | `detail.ts`（`.ep-views` をヘッダから削除しドロワーへ集約）                                   |
+| 18  | 作品詳細に**コメント数・マイリス数**を追加（[message]/[bookmark]）。各話ドロワー＋シリーズメタ（総コメント/総マイリス。総再生数は出さない=§17） | `detail.ts`／`export.mjs`（episodes に comment/mylist/length、works に commentTotal 等）      |
+| 19  | 一覧の並び替えに**「総コメント数」**を追加（`commentTotal` 降順）                                                                               | `router.ts`/`filter.ts`/`list.ts`                                                             |
+| 20  | **♥ ON＝赤の塗り**（`--heart`）。**「見た」を check→eye/eye-off**（塗り/形で on/off が一目）                                                    | `icon.ts`（eye/eye-off）・`card.ts`/`detail.ts`/`main.ts`・CSS `.card-favorite.active` 等     |
+| 21  | 一覧の並び替えを**2 列**に（`.sort-options{grid 2col}`）                                                                                        | `list.ts`/CSS                                                                                 |
+| 22  | タグは**出現数順に十分な数**＋もっと見る/閉じる                                                                                                 | `top.ts`（`progressiveReveal` initial 24/step 40）                                            |
+| 23  | 一覧に**再生時間（平均話長・分）＝2 ハンドルレンジスライダー**＋**投稿年レンジ**。CSP/a11y 準拠                                                 | `list.ts` `rangeSlider`（range input×2 重ね・aria）／`main.ts`（インメモリ状態・post-filter） |
+| 24  | Top**新着シリーズ**行を**詳細＋↗**に戻す（カード=詳細・↗=公式）。**動画新着（各話）は外部直行のまま**（型の差別化）                             | `top.ts`（series 行に `externalHref`／episode 行は whole-external 維持）                      |
+| 25  | 動画新着（各話）のメタに**コメント/マイリス**も追加                                                                                             | `top.ts`／`export.mjs`（new.json に comment/mylist）                                          |
+| 26  | Top「クールから探す」を**段階表示（もっと見る）＋折りたたみ（閉じる）**。「タグから探す」にも閉じるを追加                                       | `top.ts` `progressiveReveal`（クール initial 8/step 70）                                      |
+| 27  | **「アニメ」「第1話/第一話」タグを既定除外**（ノイズ・全半角とも）                                                                              | `etl/tags.mjs` `EXCLUDED_TAGS`＋正規化後チェック／`top.ts` `discoveryTags`                    |
+| 28  | **タグチップ**を中身に応じて伸ばし、**省略（…）をやめ**、最大幅を拡大（7rem→22rem）                                                             | CSS `.tag-chip`                                                                               |
+
+> **クール源**は §20-14（タグ導出）が主、period/programlist は補完。**再生時間フィルタ**は「平均話長＝durationTotal/episodeCount（分）」で短編/TV/映画を弁別。**投稿年**は firstAt（無ければ latestAt）の年。両レンジはインメモリ（fav/未視聴と同様 URL 非再現）。

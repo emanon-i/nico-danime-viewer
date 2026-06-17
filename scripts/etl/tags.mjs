@@ -3,7 +3,8 @@
 
 const RE_SUFFIX_CURATION = /_dアニメ(ストア)?$/u
 const RE_PREFIX_CURATION = /^dアニメ_/u
-const EXCLUDED_TAGS = new Set(['dアニメストア'])
+// 配信元マーカー＋ノイズタグ（全作品に付く「アニメ」・第1話源由来の「第1話/第一話」）を除外（§27）
+const EXCLUDED_TAGS = new Set(['dアニメストア', 'アニメ', '第1話', '第一話'])
 
 // よくある表記ゆれ・エイリアスマップ（正規化後の小文字→標準表記）
 const ALIAS_MAP = new Map([
@@ -94,6 +95,8 @@ export function processEpisodeTags(tagsStr, title = null) {
     const { tags, isCurated } = extractTagsFromRaw(raw)
     for (const name of tags) {
       if (!name || seen.has(name)) continue
+      // 正規化後にもノイズタグ（全角「第１話」→「第1話」等）を除外（§27）
+      if (EXCLUDED_TAGS.has(name)) continue
       // 作品名タグ（作品名そのもの）はフィルタ候補に出さない
       if (isTitleTag(name, title)) continue
       seen.add(name)

@@ -85,7 +85,7 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   // 横並び 2 列の整列のため、両列の件数を揃える（最大 5）
   const count = Math.min(5, newSeries.length, resolvedEps.length)
 
-  // 新着シリーズ（シリーズ型: layers バッジ＋[film]N話）。Top は行全体が外部（公式シリーズ）＝§11
+  // 新着シリーズ（シリーズ型）: 本体クリック＝うちの作品詳細・↗ で公式シリーズ（§24）
   const seriesSec = document.createElement('li')
   seriesSec.dataset.subsection = 'new-series'
   const seriesLabel = document.createElement('strong')
@@ -99,11 +99,11 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
     const row = listRow({
       kind: 'series',
       title: w.title,
-      href: seriesLink(w.seriesId) ?? `https://www.nicovideo.jp/series/${w.seriesId}`,
+      href: `?series=${w.seriesId}`,
       thumbnailUrl: w.thumbnailUrl,
-      external: true,
       badge: 'シリーズ',
       metas,
+      externalHref: seriesLink(w.seriesId) ?? undefined,
     })
     row.classList.add('recent-item')
     seriesSec.appendChild(row)
@@ -119,7 +119,8 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   resolvedEps.slice(0, count).forEach((ep) => {
     const cid = ep.resolvedContentId as string
     const watchHref = watchLink(cid) ?? `https://www.nicovideo.jp/watch/${cid}`
-    // 各話型は「新しさ（投稿時間）で語る」＝[clock]投稿時間（強調）＋[play]再生数（§9.3）
+    // 各話型は「新しさ（投稿時間）で語る」＝[clock]投稿時間（強調）＋[play]再生数
+    // ＋取れていれば [message]コメント・[bookmark]マイリス（§25）
     const metas: MetaSpec[] = []
     const rel = formatRelativeTime(ep.pubDate)
     if (rel) metas.push({ icon: 'clock', value: rel, label: `投稿 ${rel}`, emphasize: true })
@@ -128,6 +129,20 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
         icon: 'play',
         value: formatViews(ep.viewCounter),
         label: `再生数 ${formatViews(ep.viewCounter)}`,
+      })
+    }
+    if (typeof ep.commentCounter === 'number') {
+      metas.push({
+        icon: 'message',
+        value: formatViews(ep.commentCounter),
+        label: `コメント ${formatViews(ep.commentCounter)}`,
+      })
+    }
+    if (typeof ep.mylistCounter === 'number') {
+      metas.push({
+        icon: 'bookmark',
+        value: formatViews(ep.mylistCounter),
+        label: `マイリスト ${formatViews(ep.mylistCounter)}`,
       })
     }
     const ep_label = splitEpisodeLabel(ep.title, ep.episodeNo)
@@ -157,21 +172,14 @@ function coursButton(cg: CoursGroup): HTMLElement {
 
 function populateCours(coursDiv: HTMLElement, cours: CoursGroup[]): void {
   coursDiv.innerHTML = ''
-  // 直近の季はインライン、それ以前は [過去季 ▾] の後ろに畳む（screens.md 準拠）
-  const INLINE = 4
-  cours.slice(0, INLINE).forEach((cg) => coursDiv.appendChild(coursButton(cg)))
-
-  const past = cours.slice(INLINE)
-  if (past.length > 0) {
-    const moreBtn = document.createElement('button')
-    moreBtn.className = 'cours-more-btn'
-    moreBtn.textContent = '過去季 ▾'
-    moreBtn.addEventListener('click', () => {
-      past.forEach((cg) => coursDiv.insertBefore(coursButton(cg), moreBtn))
-      moreBtn.remove()
-    })
-    coursDiv.appendChild(moreBtn)
-  }
+  // 直近の季をインライン、それ以降は「もっと見る」で段階表示＋「閉じる」で畳む（§26）
+  // 全 213 季を一度に出さず、押すごとに増える（数回で全部見える）
+  progressiveReveal(coursDiv, cours.length, (i) => coursButton(cours[i]), {
+    initial: 8,
+    step: 70,
+    itemClass: 'cours-btn',
+    moreLabel: 'もっと見る',
+  })
 }
 
 /** ラベル付きチップ行に「ラベル＋チップ群」を描画する（Hot/人気/定番で共通）。 */
@@ -184,10 +192,49 @@ function fillTagRow(row: HTMLElement, label: string, tags: string[]): void {
   tags.forEach((t) => row.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
 }
 
-/** タグ辞書として発見性のあるタグ（巨大な汎用タグ「アニメ」「第一話」を除外）。 */
+/** タグ辞書として発見性のあるタグ（巨大な汎用タグ「アニメ」「第1話/第一話」を除外＝§27）。 */
 function discoveryTags(allTags: Tag[]): Tag[] {
-  const EXCLUDE = new Set(['アニメ', '第一話'])
+  const EXCLUDE = new Set(['アニメ', '第一話', '第1話'])
   return allTags.filter((t) => !EXCLUDE.has(t.name))
+}
+
+/**
+ * 段階表示＋折りたたみトグル（§26）。`もっと見る ▾` で step ずつ増やし、
+ * `閉じる ▴` で initial に戻す。item は `itemClass` を持つ要素を返すこと。
+ */
+function progressiveReveal(
+  container: HTMLElement,
+  count: number,
+  makeItem: (i: number) => HTMLElement,
+  opts: { initial: number; step: number; itemClass: string; moreLabel?: string }
+): void {
+  const more = document.createElement('button')
+  more.className = 'reveal-more-btn'
+  more.textContent = `${opts.moreLabel ?? 'もっと見る'} ▾`
+  const less = document.createElement('button')
+  less.className = 'reveal-less-btn'
+  less.textContent = '閉じる ▴'
+  container.appendChild(more)
+  container.appendChild(less)
+
+  let shown = 0
+  const sync = () => {
+    more.hidden = shown >= count
+    less.hidden = shown <= opts.initial
+  }
+  const grow = (to: number) => {
+    for (let i = shown; i < to; i++) container.insertBefore(makeItem(i), more)
+    shown = to
+    sync()
+  }
+  more.addEventListener('click', () => grow(Math.min(count, shown + opts.step)))
+  less.addEventListener('click', () => {
+    const items = container.querySelectorAll('.' + opts.itemClass)
+    for (let i = items.length - 1; i >= opts.initial; i--) items[i].remove()
+    shown = opts.initial
+    sync()
+  })
+  grow(Math.min(opts.initial, count))
 }
 
 function populateTags(
@@ -239,31 +286,28 @@ function populateTags(
 
   // タグ一覧＝全タグを出現（作品）数の多い順。[もっと▾] でバッチ追加表示（§7）
   if (curatedDiv) {
+    curatedDiv.innerHTML = ''
+    const labelEl = document.createElement('span')
+    labelEl.className = 'tag-section-label'
+    labelEl.textContent = 'タグ'
+    curatedDiv.appendChild(labelEl)
+
     const all = discoveryTags(allTags)
       .slice()
       .sort((a, b) => b.seriesCount - a.seriesCount)
       .map((t) => t.name)
-    const INITIAL = 20
-    const STEP = 30
-    let shown = Math.min(INITIAL, all.length)
-    fillTagRow(curatedDiv, 'タグ', all.slice(0, shown))
-
-    if (all.length > shown) {
-      const moreBtn = document.createElement('button')
-      moreBtn.className = 'tag-more-btn'
-      moreBtn.textContent = 'もっと ▾'
-      moreBtn.addEventListener('click', () => {
-        const next = Math.min(shown + STEP, all.length)
-        all
-          .slice(shown, next)
-          .forEach((t) =>
-            curatedDiv.insertBefore(chip(t, `?tag=${encodeURIComponent(t)}`), moreBtn)
-          )
-        shown = next
-        if (shown >= all.length) moreBtn.remove()
-      })
-      curatedDiv.appendChild(moreBtn)
-    }
+    // 出現数の多い順に十分な数を初期表示し、もっと見る ▾／閉じる ▴ で増減（§22/§26）
+    progressiveReveal(
+      curatedDiv,
+      all.length,
+      (i) => chip(all[i], `?tag=${encodeURIComponent(all[i])}`),
+      {
+        initial: 24,
+        step: 40,
+        itemClass: 'tag-chip',
+        moreLabel: 'もっと見る',
+      }
+    )
   }
 }
 

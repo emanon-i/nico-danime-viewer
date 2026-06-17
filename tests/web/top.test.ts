@@ -234,7 +234,7 @@ describe('renderTop with data (F-0032)', () => {
     expect(img?.getAttribute('src')).toBe('https://nicovideo.cdn.nimg.jp/thumbnails/123/123.456.L')
   })
 
-  it('新着シリーズ行はシリーズ型（kind=series・[film]N話・Top は行全体が外部 /series/）', () => {
+  it('新着シリーズ行はシリーズ型（kind=series・[film]N話・本体=詳細・↗ で公式＝§24）', () => {
     renderTop(container, SAMPLE_DATA)
     const row = container.querySelector('[data-subsection="new-series"] .recent-item.list-row')
     expect(row?.getAttribute('data-kind')).toBe('series')
@@ -242,12 +242,12 @@ describe('renderTop with data (F-0032)', () => {
     // メタはアイコン圧縮（[film]12話・「全」は省く＝§8.2）
     expect(row?.querySelector('.list-row-meta')?.textContent).toBe('12話')
     expect(row?.querySelector('.list-row-meta .meta svg')).not.toBeNull()
-    // §11: Top のカード/行は本体が外部（公式）へ。冗長な ↗ ボタンは出さない
-    expect(row?.querySelector('.list-row-external')).toBeNull()
+    // §24: 新着シリーズは本体クリック＝うちの詳細・↗ で公式シリーズ（外部）
     const body = row?.querySelector<HTMLAnchorElement>('.list-row-body')
-    expect(body?.getAttribute('href')).toBe('https://www.nicovideo.jp/series/100')
-    expect(body?.getAttribute('target')).toBe('_blank')
-    expect(body?.getAttribute('rel')).toContain('noopener')
+    expect(body?.getAttribute('href')).toBe('?series=100')
+    const ext = row?.querySelector<HTMLAnchorElement>('.list-row-external')
+    expect(ext?.getAttribute('href')).toBe('https://www.nicovideo.jp/series/100')
+    expect(ext?.getAttribute('rel')).toContain('noopener')
   })
 
   it('最新の動画行は各話型（kind=episode・第N話・本体が外部 watch・↗ なし）', () => {

@@ -295,7 +295,8 @@ describe('F-0047: 総合/E2E テスト', () => {
         page: 1,
       }
       renderList(container, { state, works: [], totalCount: 0, totalPages: 1 })
-      const countEl = container.querySelector('.list-count')
+      // 件数は適用中バー（§16）の .applied-count に表示される
+      const countEl = container.querySelector('.applied-count')
       expect(countEl?.textContent).toContain('0')
     })
 

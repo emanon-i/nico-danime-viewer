@@ -21,6 +21,14 @@ export interface Work {
   episodeCount: number
   /** 最新話の投稿時刻（episodes.start_time の最大・ISO8601）。新着順・投稿時間メタに使う（旧 JSON では欠落） */
   latestAt?: string | null
+  /** 最古話の投稿時刻（episodes.start_time の最小・ISO8601）。投稿時間レンジ絞り込みに使う */
+  firstAt?: string | null
+  /** シリーズ合算コメント数（総コメント数順・メタ用） */
+  commentTotal?: number
+  /** シリーズ合算マイリスト数 */
+  mylistTotal?: number
+  /** シリーズ合算再生時間（秒）。平均話長＝durationTotal/episodeCount で再生時間絞り込みに使う */
+  durationTotal?: number
   relatedSeries: RelatedSeries[]
 }
 
@@ -88,6 +96,10 @@ export interface NewItem {
   episodeNo: number | null
   /** 話の再生数（episodes.view_counter）。未解決なら null */
   viewCounter: number | null
+  /** 話のコメント数（episodes.comment_counter）。未解決/旧 JSON なら null */
+  commentCounter?: number | null
+  /** 話のマイリスト数（episodes.mylist_counter）。未解決/旧 JSON なら null */
+  mylistCounter?: number | null
 }
 
 export interface NewJson {
@@ -100,6 +112,12 @@ export interface SeriesEpisode {
   episodeNo: number | null
   title: string | null
   viewCounter: number
+  /** コメント数（snapshot commentCounter・旧 JSON では欠落） */
+  commentCounter?: number | null
+  /** マイリスト数（snapshot mylistCounter） */
+  mylistCounter?: number | null
+  /** 尺（秒・snapshot lengthSeconds） */
+  lengthSeconds?: number | null
   startTime: string | null
   thumbnailUrl: string | null
 }

@@ -54,6 +54,22 @@ let cache: {
 // お気に入り/未視聴フィルタの状態（インメモリ・URLに出さない）
 let favFilter = false
 let unwatchedFilter = false
+// 再生時間（平均話長・分）／投稿年 レンジ（インメモリ・null=絞り込みなし）
+let lenRange: [number, number] | null = null
+let yearRange: [number, number] | null = null
+
+/** 作品の平均話長（分・端数四捨五入）。不明は null */
+function avgMinutes(w: Work): number | null {
+  if (!w.durationTotal || !w.episodeCount) return null
+  return Math.round(w.durationTotal / w.episodeCount / 60)
+}
+/** 作品の投稿年（初出＝firstAt 優先・なければ latestAt）。不明は null */
+function workYear(w: Work): number | null {
+  const t = w.firstAt ?? w.latestAt
+  if (!t) return null
+  const d = new Date(t)
+  return Number.isNaN(d.getTime()) ? null : d.getFullYear()
+}
 
 async function ensureData(): Promise<void> {
   if (cache.works !== null) return
@@ -89,7 +105,13 @@ function buildTopData(): TopData | undefined {
   }
 }
 
-/** カードの ♥/✓ ボタンを localStorage と同期させる */
+/** 「見た」ボタンの状態を反映（on=eye / off=eye-off・塗り/形で一目・§20）。アイコンサイズ可変 */
+function setWatchedState(btn: HTMLElement, on: boolean, size = 16): void {
+  btn.classList.toggle('active', on)
+  btn.replaceChildren(icon(on ? 'eye' : 'eye-off', size))
+}
+
+/** カードの ♥/見た ボタンを localStorage と同期させる */
 function wireCards(container: HTMLElement): void {
   container.querySelectorAll<HTMLElement>('.series-card').forEach((card) => {
     const seriesId = Number(card.dataset.seriesId)
@@ -106,10 +128,9 @@ function wireCards(container: HTMLElement): void {
       })
     }
     if (watchedBtn) {
-      if (isWatched(seriesId)) watchedBtn.classList.add('active')
+      setWatchedState(watchedBtn, isWatched(seriesId))
       watchedBtn.addEventListener('click', () => {
-        const nowWatched = toggleWatched(seriesId)
-        watchedBtn.classList.toggle('active', nowWatched)
+        setWatchedState(watchedBtn, toggleWatched(seriesId))
       })
     }
   })
@@ -128,11 +149,16 @@ function wireDetailMarks(container: HTMLElement, seriesId: number): void {
     })
   }
   if (watchedBtn) {
-    if (isWatched(seriesId)) watchedBtn.classList.add('active')
-    watchedBtn.addEventListener('click', () => {
-      const nowWatched = toggleWatched(seriesId)
-      watchedBtn.classList.toggle('active', nowWatched)
-    })
+    // 詳細の「見た」ボタンはアイコン（eye/eye-off）＋テキスト。アイコンのみ差し替える。
+    const setDetailWatched = (on: boolean) => {
+      watchedBtn.classList.toggle('active', on)
+      const svg = watchedBtn.querySelector('svg')
+      const next = icon(on ? 'eye' : 'eye-off', 16)
+      if (svg) svg.replaceWith(next)
+      else watchedBtn.insertBefore(next, watchedBtn.firstChild)
+    }
+    setDetailWatched(isWatched(seriesId))
+    watchedBtn.addEventListener('click', () => setDetailWatched(toggleWatched(seriesId)))
   }
 }
 
@@ -223,7 +249,31 @@ async function render(): Promise<void> {
     const allWorks = cache.works?.works ?? []
     const favIds = favFilter ? new Set(getFavoriteIds()) : undefined
     const watchedIds = unwatchedFilter ? new Set(getWatchedIds()) : undefined
-    const filtered = filterWorks(allWorks, screen.state, { favIds, watchedIds })
+    let filtered = filterWorks(allWorks, screen.state, { favIds, watchedIds })
+
+    // 再生時間（分）／投稿年 のレンジ絞り込み（§23）。境界は全作品から算出
+    const LEN_BOUND: [number, number] = [0, 180]
+    const years = allWorks.map(workYear).filter((y): y is number => y != null)
+    const YEAR_BOUND: [number, number] =
+      years.length > 0 ? [Math.min(...years), Math.max(...years)] : [2000, new Date().getFullYear()]
+    if (lenRange) {
+      const [lo, hi] = lenRange
+      filtered = filtered.filter((w) => {
+        const m = avgMinutes(w)
+        if (m == null) return false
+        return (
+          m >= (lo <= LEN_BOUND[0] ? -Infinity : lo) && m <= (hi >= LEN_BOUND[1] ? Infinity : hi)
+        )
+      })
+    }
+    if (yearRange) {
+      const [lo, hi] = yearRange
+      filtered = filtered.filter((w) => {
+        const y = workYear(w)
+        return y != null && y >= lo && y <= hi
+      })
+    }
+
     const sorted = sortWorks(filtered, screen.state.sort, cache.ranking ?? null)
     const { items, totalCount, totalPages } = paginateWorks(sorted, screen.state.page)
 
@@ -261,6 +311,34 @@ async function render(): Promise<void> {
       favFilter,
       unwatchedFilter,
       cardMetric,
+      onClearFav: () => {
+        favFilter = false
+        void render()
+      },
+      onClearUnwatched: () => {
+        unwatchedFilter = false
+        void render()
+      },
+      sliders: {
+        len: {
+          min: lenRange?.[0] ?? LEN_BOUND[0],
+          max: lenRange?.[1] ?? LEN_BOUND[1],
+          bound: LEN_BOUND,
+          onChange: (a, b) => {
+            lenRange = a <= LEN_BOUND[0] && b >= LEN_BOUND[1] ? null : [a, b]
+            void render()
+          },
+        },
+        year: {
+          min: yearRange?.[0] ?? YEAR_BOUND[0],
+          max: yearRange?.[1] ?? YEAR_BOUND[1],
+          bound: YEAR_BOUND,
+          onChange: (a, b) => {
+            yearRange = a <= YEAR_BOUND[0] && b >= YEAR_BOUND[1] ? null : [a, b]
+            void render()
+          },
+        },
+      },
     })
 
     const searchInput = app.querySelector<HTMLInputElement>('.list-search-input')

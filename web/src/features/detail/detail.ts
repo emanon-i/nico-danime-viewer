@@ -3,7 +3,7 @@ import { watchLink, seriesLink } from '../../shared/deeplink'
 import { buildDetailUrl } from '../router'
 import { icon } from '../../components/icon'
 import { hiResThumb } from '../../components/card'
-import { metaSpan, formatViews, formatRelativeTime } from '../../components/meta'
+import { metaSpan, formatViews, formatRelativeTime, formatDuration } from '../../components/meta'
 
 /**
  * 各話行を生成する。
@@ -35,13 +35,7 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
   titleSpan.textContent = ep.title ?? ''
   main.appendChild(titleSpan)
 
-  const viewsSpan = metaSpan({
-    icon: 'play',
-    value: formatViews(ep.viewCounter),
-    label: `再生数 ${formatViews(ep.viewCounter)}`,
-  })
-  viewsSpan.classList.add('ep-views')
-  main.appendChild(viewsSpan)
+  // 再生数は行ヘッダに常時出さず、ドロワー（下記）に集約する（§17・冗長排除）
 
   const chevron = document.createElement('span')
   chevron.className = 'ep-toggle'
@@ -84,6 +78,7 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
 
   const dmeta = document.createElement('div')
   dmeta.className = 'episode-detail-meta'
+  // [play]再生数 ＋ [message]コメント ＋ [bookmark]マイリス ＋ [clock]投稿 ＋ [film]尺（§18）
   dmeta.appendChild(
     metaSpan({
       icon: 'play',
@@ -91,11 +86,33 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
       label: `再生数 ${formatViews(ep.viewCounter)}`,
     })
   )
+  if (typeof ep.commentCounter === 'number') {
+    dmeta.appendChild(
+      metaSpan({
+        icon: 'message',
+        value: formatViews(ep.commentCounter),
+        label: `コメント ${formatViews(ep.commentCounter)}`,
+      })
+    )
+  }
+  if (typeof ep.mylistCounter === 'number') {
+    dmeta.appendChild(
+      metaSpan({
+        icon: 'bookmark',
+        value: formatViews(ep.mylistCounter),
+        label: `マイリスト ${formatViews(ep.mylistCounter)}`,
+      })
+    )
+  }
   if (ep.startTime) {
     const rel = formatRelativeTime(ep.startTime)
     if (rel) {
       dmeta.appendChild(metaSpan({ icon: 'clock', value: rel, label: `投稿 ${rel}` }))
     }
+  }
+  if (typeof ep.lengthSeconds === 'number' && ep.lengthSeconds > 0) {
+    const dur = formatDuration(ep.lengthSeconds)
+    dmeta.appendChild(metaSpan({ icon: 'film', value: dur, label: `再生時間 ${dur}` }))
   }
   detail.appendChild(dmeta)
   row.appendChild(detail)
@@ -171,6 +188,39 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   })
   infoDiv.appendChild(tagsDiv)
 
+  // シリーズメタ＝[film]話数 ＋ [message]総コメント ＋ [bookmark]総マイリス（§18）。
+  // 総再生数は出さない（各話ドロワーで見られるため冗長＝§17）。
+  if (series.episodes.length > 0) {
+    const sumComment = series.episodes.reduce((a, e) => a + (e.commentCounter ?? 0), 0)
+    const sumMylist = series.episodes.reduce((a, e) => a + (e.mylistCounter ?? 0), 0)
+    const metaRow = document.createElement('div')
+    metaRow.className = 'detail-series-meta'
+    metaRow.appendChild(
+      metaSpan({
+        icon: 'film',
+        value: `${series.episodes.length}話`,
+        label: `全${series.episodes.length}話`,
+      })
+    )
+    if (sumComment > 0)
+      metaRow.appendChild(
+        metaSpan({
+          icon: 'message',
+          value: formatViews(sumComment),
+          label: `総コメント ${formatViews(sumComment)}`,
+        })
+      )
+    if (sumMylist > 0)
+      metaRow.appendChild(
+        metaSpan({
+          icon: 'bookmark',
+          value: formatViews(sumMylist),
+          label: `総マイリスト ${formatViews(sumMylist)}`,
+        })
+      )
+    infoDiv.appendChild(metaRow)
+  }
+
   if (officialHref) {
     const offLink = document.createElement('a')
     offLink.className = 'btn-primary official-series-link'
@@ -188,12 +238,15 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   const favBtn = document.createElement('button')
   favBtn.className = 'btn-favorite'
   favBtn.setAttribute('aria-label', 'お気に入り')
-  favBtn.textContent = '♥ お気に入り'
+  favBtn.appendChild(icon('heart', 16))
+  favBtn.appendChild(document.createTextNode('お気に入り'))
   marksDiv.appendChild(favBtn)
   const watchedBtn = document.createElement('button')
   watchedBtn.className = 'btn-watched'
   watchedBtn.setAttribute('aria-label', '見た')
-  watchedBtn.textContent = '✓ 見た'
+  // アイコン（eye/eye-off）と active 状態は main.ts wireDetailMarks が設定する（§20）
+  watchedBtn.appendChild(icon('eye-off', 16))
+  watchedBtn.appendChild(document.createTextNode('見た'))
   marksDiv.appendChild(watchedBtn)
   infoDiv.appendChild(marksDiv)
 

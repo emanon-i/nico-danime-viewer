@@ -92,6 +92,11 @@ export function sortWorks(
   if (sort === 'new') {
     return [...works].sort((a, b) => b.seriesId - a.seriesId)
   }
+  if (sort === 'comments') {
+    return [...works].sort(
+      (a, b) => (b.commentTotal ?? 0) - (a.commentTotal ?? 0) || a.seriesId - b.seriesId
+    )
+  }
   if (sort === 'kana') {
     return [...works].sort((a, b) => {
       const ai = kanaRowIndex(a.colKey)

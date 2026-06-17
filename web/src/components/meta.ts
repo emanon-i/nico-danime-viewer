@@ -42,6 +42,17 @@ export function metaRow(specs: MetaSpec[], className: string): HTMLElement {
   return row
 }
 
+/** 秒を再生時間表記（`24分` / `1時間30分` / `45秒`）に整形する。 */
+export function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds))
+  if (s < 60) return `${s}秒`
+  const min = Math.round(s / 60)
+  if (min < 60) return `${min}分`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m === 0 ? `${h}時間` : `${h}時間${m}分`
+}
+
 /** 再生数を日本語の概数（308万 / 9,876）に整形する。 */
 export function formatViews(n: number): string {
   if (n >= 10000) {

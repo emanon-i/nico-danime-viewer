@@ -84,6 +84,14 @@ describe('processEpisodeTags (F-0013)', () => {
     expect(result.find((t) => t.name === 'アクション')?.isCurated).toBe(false)
   })
 
+  it('ノイズタグ「アニメ」「第1話/第一話」を除外する（§27・全半角とも）', () => {
+    const names = processEpisodeTags('アニメ 第1話 第１話 第一話 日常').map((t) => t.name)
+    expect(names).not.toContain('アニメ')
+    expect(names).not.toContain('第1話')
+    expect(names).not.toContain('第一話')
+    expect(names).toContain('日常')
+  })
+
   it('作品名そのもののタグは除外される（§2(b)）', () => {
     const result = processEpisodeTags(
       'ぼっち・ざ・ろっく！ 日常/ほのぼの_dアニメ',

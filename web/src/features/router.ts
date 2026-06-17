@@ -1,4 +1,4 @@
-export type SortKey = 'hot' | 'views' | 'new' | 'kana'
+export type SortKey = 'hot' | 'views' | 'new' | 'kana' | 'comments'
 
 export interface ListState {
   q: string
@@ -14,7 +14,7 @@ export type Screen =
   | { type: 'list'; state: ListState }
   | { type: 'detail'; seriesId: number }
 
-const VALID_SORTS: SortKey[] = ['hot', 'views', 'new', 'kana']
+const VALID_SORTS: SortKey[] = ['hot', 'views', 'new', 'kana', 'comments']
 const LIST_PARAMS = ['q', 'row', 'tag', 'cours', 'sort', 'page']
 
 export function parseScreen(params: URLSearchParams): Screen {

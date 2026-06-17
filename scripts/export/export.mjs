@@ -19,7 +19,11 @@ export function exportWorks(db, outDir, lastUpdated) {
       `SELECT s.series_id, s.title, s.thumbnail_url, s.description_first,
               s.col_key, s.cours, s.franchise_key,
               (SELECT COUNT(*) FROM episodes e WHERE e.series_id = s.series_id) AS episode_count,
-              (SELECT MAX(e.start_time) FROM episodes e WHERE e.series_id = s.series_id) AS latest_at
+              (SELECT MAX(e.start_time) FROM episodes e WHERE e.series_id = s.series_id) AS latest_at,
+              (SELECT MIN(e.start_time) FROM episodes e WHERE e.series_id = s.series_id) AS first_at,
+              (SELECT COALESCE(SUM(e.comment_counter),0) FROM episodes e WHERE e.series_id = s.series_id) AS comment_total,
+              (SELECT COALESCE(SUM(e.mylist_counter),0) FROM episodes e WHERE e.series_id = s.series_id) AS mylist_total,
+              (SELECT COALESCE(SUM(e.length_seconds),0) FROM episodes e WHERE e.series_id = s.series_id) AS duration_total
        FROM series s
        WHERE s.is_available = 1
        ORDER BY s.series_id`
@@ -71,6 +75,10 @@ export function exportWorks(db, outDir, lastUpdated) {
     colKey: s.col_key,
     episodeCount: s.episode_count ?? 0,
     latestAt: s.latest_at ?? null,
+    firstAt: s.first_at ?? null,
+    commentTotal: s.comment_total ?? 0,
+    mylistTotal: s.mylist_total ?? 0,
+    durationTotal: s.duration_total ?? 0,
     relatedSeries: relatedBySeries.get(s.series_id) ?? [],
   }))
 
@@ -236,7 +244,7 @@ export function exportNew(db, outDir, lastUpdated) {
   const rows = db
     .prepare(
       `SELECT r.watch_id, r.title, r.pub_date, r.resolved_content_id, r.resolution_status,
-              e.thumbnail_url, e.episode_no, e.view_counter
+              e.thumbnail_url, e.episode_no, e.view_counter, e.comment_counter, e.mylist_counter
        FROM rss_items r
        LEFT JOIN episodes e ON e.content_id = r.resolved_content_id
        ORDER BY r.pub_date DESC
@@ -255,6 +263,8 @@ export function exportNew(db, outDir, lastUpdated) {
       thumbnailUrl: r.thumbnail_url ?? null,
       episodeNo: r.episode_no ?? null,
       viewCounter: r.view_counter ?? null,
+      commentCounter: r.comment_counter ?? null,
+      mylistCounter: r.mylist_counter ?? null,
     })),
   })
 }
@@ -299,7 +309,8 @@ function exportSeries(db, outDir, lastUpdated) {
 
   // エピソードはシリーズ単位で取得（全件一括ロードを避ける）
   const epStmt = db.prepare(
-    `SELECT content_id, episode_no, title, view_counter, start_time, thumbnail_url
+    `SELECT content_id, episode_no, title, view_counter, comment_counter, mylist_counter,
+            length_seconds, start_time, thumbnail_url
      FROM episodes WHERE series_id = ?
      ORDER BY COALESCE(episode_no, 9999), start_time`
   )
@@ -328,6 +339,9 @@ function exportSeries(db, outDir, lastUpdated) {
         episodeNo: ep.episode_no,
         title: ep.title,
         viewCounter: ep.view_counter,
+        commentCounter: ep.comment_counter ?? null,
+        mylistCounter: ep.mylist_counter ?? null,
+        lengthSeconds: ep.length_seconds ?? null,
         startTime: ep.start_time,
         thumbnailUrl: ep.thumbnail_url,
       })),

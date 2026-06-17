@@ -162,6 +162,9 @@
     --r-lg: 0.75rem;
     --r-full: 9999px;
 
+    /* ♥ お気に入り ON の赤（テーマ非依存・ダーク/ライト両方で視認＝§20） */
+    --heart: oklch(0.62 0.21 25);
+
     /* カード比率: 16:9。素サムネは 4:3(360×270) だが中身は 16:9 映像を
        上下黒帯でレターボックスした焼き込み。16:9 cover で黒帯(上下各 1/8)を
        正確にトリミングして実コンテンツだけを見せる。1トークンで全カード追従。 */
@@ -720,11 +723,23 @@
     .card-favorite.active,
     .card-watched.active {
       opacity: 1;
-      color: var(--accent);
       background: oklch(0 0 0 / 0.55);
+    }
 
+    /* ♥ お気に入り ON＝赤の塗り（§20） */
+    .card-favorite.active {
+      color: var(--heart);
       svg {
-        fill: var(--accent);
+        fill: var(--heart);
+        stroke: var(--heart);
+      }
+    }
+
+    /* 見た ON＝eye を accent で塗り（off の eye-off と形/塗りで一目・§20） */
+    .card-watched.active {
+      color: var(--accent);
+      svg {
+        fill: color-mix(in oklch, var(--accent) 30%, transparent);
         stroke: var(--accent);
       }
     }
@@ -825,7 +840,8 @@
   /* ── タグチップ ──────────────────────────────────── */
   .tag-chip {
     display: inline-block;
-    max-width: 7rem;
+    /* 中身に応じて伸びる・省略しない・上限は広めに（§28） */
+    max-width: 22rem;
     padding: var(--sp-1) var(--sp-3);
     border: 1px solid var(--border);
     border-radius: var(--r-full);
@@ -833,8 +849,6 @@
     color: var(--text-muted);
     background: var(--surface);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     vertical-align: middle;
     transition:
       color 0.15s,
@@ -1516,6 +1530,175 @@
     }
   }
 
+  /* 並び替えを 2 列に（§21・窮屈さ解消） */
+  .sort-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-1) var(--sp-3);
+  }
+
+  /* もっと見る ▾ / 閉じる ▴ トグル（§26）。クール/タグ共通 */
+  .reveal-more-btn,
+  .reveal-less-btn {
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--text-l4);
+    font-weight: 500;
+    color: var(--text-muted);
+    border: 1px dashed var(--border);
+    border-radius: var(--r-full);
+    background: transparent;
+
+    &:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    &[hidden] {
+      display: none;
+    }
+  }
+
+  /* レンジスライダー（再生時間/投稿年・§23）。2 つの range input を重ねる */
+  .range-filter {
+    .range-slider {
+      position: relative;
+      height: 1.5rem;
+      display: grid;
+    }
+
+    /* 重ねた range input。トラックは下のものだけ見せ、つまみは両方操作可 */
+    input[type='range'] {
+      grid-area: 1 / 1;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+      pointer-events: none;
+      accent-color: var(--accent);
+      -webkit-appearance: none;
+      appearance: none;
+      align-self: center;
+      height: 1.5rem;
+
+      &::-webkit-slider-runnable-track {
+        height: 4px;
+        border-radius: var(--r-full);
+        background: var(--border);
+      }
+      &::-moz-range-track {
+        height: 4px;
+        border-radius: var(--r-full);
+        background: var(--border);
+      }
+      &::-webkit-slider-thumb {
+        pointer-events: auto;
+        -webkit-appearance: none;
+        appearance: none;
+        width: 1rem;
+        height: 1rem;
+        margin-top: -6px;
+        border-radius: var(--r-full);
+        background: var(--accent);
+        border: 2px solid var(--bg);
+        cursor: pointer;
+      }
+      &::-moz-range-thumb {
+        pointer-events: auto;
+        width: 1rem;
+        height: 1rem;
+        border-radius: var(--r-full);
+        background: var(--accent);
+        border: 2px solid var(--bg);
+        cursor: pointer;
+      }
+      &:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 4px;
+      }
+    }
+
+    /* 上ハンドルだけトラックを透明にして二重線を避ける */
+    .range-upper::-webkit-slider-runnable-track {
+      background: transparent;
+    }
+    .range-upper::-moz-range-track {
+      background: transparent;
+    }
+
+    .range-readout {
+      margin-top: var(--sp-1);
+      font-size: var(--text-l4);
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  /* 適用中バー（並び替え・フィルタ・件数を可視化＝§16） */
+  .list-applied {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 0 0 var(--sp-3);
+    font-size: var(--text-l4);
+  }
+
+  .applied-count {
+    color: var(--text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .applied-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: 2px var(--sp-1) 2px var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    color: var(--text-muted);
+    background: var(--surface);
+    max-width: 16rem;
+
+    & > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .applied-sort {
+    color: var(--accent);
+    border-color: color-mix(in oklch, var(--accent) 50%, var(--border));
+    padding-right: var(--sp-3);
+  }
+
+  .applied-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: var(--r-full);
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+
+    &:hover {
+      color: var(--bg);
+      background: var(--accent);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring);
+    }
+  }
+
+  /* 詳細のシリーズメタ（話数・総コメント・総マイリス・§18） */
+  .detail-series-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+
   /* 0 件メッセージ（空白を出さない＝§18） */
   .list-empty {
     grid-column: 1 / -1;
@@ -1723,14 +1906,29 @@
       color 0.15s,
       border-color 0.15s;
 
-    &.active {
-      color: var(--accent);
-      border-color: var(--accent);
-    }
     &:hover {
       color: var(--text);
       border-color: var(--text-muted);
     }
+
+    svg {
+      width: 1em;
+      height: 1em;
+    }
+  }
+
+  /* ♥ ON＝赤・見た ON＝accent（§20） */
+  .btn-favorite.active {
+    color: var(--heart);
+    border-color: var(--heart);
+    svg {
+      fill: var(--heart);
+      stroke: var(--heart);
+    }
+  }
+  .btn-watched.active {
+    color: var(--accent);
+    border-color: var(--accent);
   }
 
   .detail-episodes,
