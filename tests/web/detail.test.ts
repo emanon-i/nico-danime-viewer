@@ -126,7 +126,7 @@ describe('renderDetail (F-0025)', () => {
     expect(tagsRow!.querySelector('.tag-chip')?.getAttribute('href')).toContain('tag=')
   })
 
-  it('各話タグの構造的定番（最終回/神回）は UI から除外される（§C）', () => {
+  it('各話タグの構造的定番（最終回）は除外・神回や内容タグは残す（§C）', () => {
     const withStructural: SeriesDetail = {
       ...SERIES,
       episodes: [
@@ -138,8 +138,8 @@ describe('renderDetail (F-0025)', () => {
     const chips = [...container.querySelectorAll('.episode-detail-tags .tag-chip')].map(
       (c) => c.textContent
     )
-    // 最終回・神回は消え、内容タグ（水着回・ジャンル）は残る
-    expect(chips).toEqual(['水着回', 'アクション/バトル'])
+    // 最終回（全作品共通の構造）は消え、神回・水着回・ジャンルは残る
+    expect(chips).toEqual(['神回', '水着回', 'アクション/バトル'])
   })
 
   it('各話タグが全てクール由来なら tags 行を出さない（§77）', () => {
