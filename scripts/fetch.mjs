@@ -15,7 +15,6 @@ import {
   bulkUpsertEpisodes,
   bulkUpsertSeries,
   bulkUpsertRssItems,
-  pruneRssItems,
   updateSeriesFields,
   updateEpisodeOrderBatch,
   replaceSeriesTags,
@@ -283,9 +282,7 @@ async function runHourly() {
     if (rssRows.length > 0) {
       bulkUpsertRssItems(db, rssRows)
       resolveRssItems(db)
-      // ローリングウィンドウで rss_items を有界化（無限増大の防止・運用監査）
-      const pruned = pruneRssItems(db)
-      logger.info('fetch', 'RSS new items inserted', { count: rssRows.length, pruned })
+      logger.info('fetch', 'RSS new items inserted', { count: rssRows.length })
     }
 
     const newLastGuid = items[0]?.guid ?? meta.rss_last_guid
@@ -393,9 +390,7 @@ async function main() {
     if (rssRows.length > 0) {
       bulkUpsertRssItems(db, rssRows)
       resolveRssItems(db)
-      // ローリングウィンドウで rss_items を有界化（無限増大の防止・運用監査）
-      const pruned = pruneRssItems(db)
-      logger.info('fetch', 'RSS new items inserted', { count: rssRows.length, pruned })
+      logger.info('fetch', 'RSS new items inserted', { count: rssRows.length })
     }
 
     const newLastGuid = items[0]?.guid ?? meta.rss_last_guid

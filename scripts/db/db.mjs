@@ -367,24 +367,6 @@ export function bulkUpsertRssItems(db, items) {
 }
 
 /**
- * rss_items をローリングウィンドウで有界化（運用監査）。watch_id（新しいほど大きい数値）の
- * 降順で最新 keep 件だけ残し、それ以前を削除する。INSERT のみで無限増大していたのを防ぐ。
- * 落とすのは「すでに episodes に解決済み」または「古い未解決」の行だけで、new.json は最新
- * ~20 件しか使わないため表示・delta に影響しない。keep は new 表示数より十分大きく取る。
- * @returns {number} 削除した行数
- */
-export function pruneRssItems(db, keep = 500) {
-  const info = db
-    .prepare(
-      `DELETE FROM rss_items WHERE watch_id NOT IN (
-         SELECT watch_id FROM rss_items ORDER BY CAST(watch_id AS INTEGER) DESC LIMIT ?
-       )`
-    )
-    .run(keep)
-  return info.changes
-}
-
-/**
  * RSS item の解決状態を更新
  */
 export function updateRssResolution(db, watchId, resolvedContentId, status) {
