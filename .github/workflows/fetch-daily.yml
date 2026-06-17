@@ -2,8 +2,8 @@
 # 実行タイミング: JST 05:00（UTC 20:00）/ 手動起動
 # 起動条件: ユーザーの GO 後に有効化（このフェーズでは cron を有効にしない）
 #
-# 状態の真実源: state ブランチ（DB / prev_view_counter / HWM を永続化）
-# actions/cache は高速化フォールバックとしてのみ使用（真実源ではない）
+# 状態の真実源: state ブランチ（series/*.json / state/*.json を永続化）
+# SQLite は廃止（PH-0008 M5）。正本データは純 JSON + メモリ JS ETL。
 # 状態書き込みは concurrency group "state-writer" で直列化
 
 name: Daily Full Fetch & Deploy
@@ -70,17 +70,6 @@ jobs:
             cp -r state/. src/data/ 2>/dev/null || true
           fi
 
-      # ── build.sqlite キャッシュ（DB 永続化＝完全DBの真実源・§G）──────────────
-      # **daily だけが完全DBを保存する**専用名前空間 `sqlite-daily-<os>-<run_id>`。hourly は
-      # この系を restore 専用で読む（書き戻さない）ため、痩せた hourly DB が混ざって縮小が
-      # 連鎖する事故が起きない。restore-keys で直近の daily 完全DBを復元する。
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: src/data/build.sqlite
-          key: sqlite-daily-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            sqlite-daily-${{ runner.os }}-
-
       # ── Node / pnpm セットアップ ─────────────────────────────────
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
@@ -115,6 +104,7 @@ jobs:
         env:
           NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
           NICO_FORCE_SEED: ${{ inputs.force_seed && '1' || '0' }}
+          NODE_OPTIONS: '--max-old-space-size=4096'
 
       # ── ビルド（CSP meta 含む）・data/ を dist/ に配置 ──────────
       - name: Build static site

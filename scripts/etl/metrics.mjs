@@ -78,3 +78,91 @@ export function recalcSeriesMetrics(db, now, config = defaultMetricsConfig) {
     `
   ).run({ now, tau, w_delta: delta, w_velocity: velocity, w_recency: recency })
 }
+
+/**
+ * Store から series_metrics を純 JS で再計算する（SQL CTE の等価移植・§A-5）。
+ *
+ * SQL⇄JS 等価要点:
+ *  - julianday 差 ≡ (Date(a)−Date(b)) / 86400000（SQLite は naive datetime → UTC 解釈）
+ *  - SUM(COALESCE(view−prev, 0)) の null 伝播: view==null||prev==null → 0（Opus §1 修正）
+ *  - exp_neg_div(x, tau) ≡ Math.exp(−(x??0)/tau)（null→1.0）
+ *  - MIN/MAX は null を無視（derived では velocity/recencyDays は非null なので問題なし）
+ *  - ranges が単一シリーズ → delta_max===delta_min → delta_n = 0
+ *
+ * @param {import('../store/store.mjs').Store} store
+ * @param {string} now - ISO8601 タイムスタンプ
+ * @param {typeof defaultMetricsConfig} config
+ * @returns {Map<number, {totalViews:number,deltaViews:number,velocity:number,recency:number,hotScore:number}>}
+ */
+export function recalcSeriesMetricsJS(store, now, config = defaultMetricsConfig) {
+  const { delta: w_delta, velocity: w_vel, recency: w_rec } = config.weights
+  const { tau } = config
+  const nowMs = new Date(now).getTime()
+
+  // pass1: per-series 集計（SQL ep_agg CTE 相当）
+  const agg = new Map() // seriesId → {totalViews, deltaViews, latest, first}
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null) continue
+    let a = agg.get(ep.seriesId)
+    if (!a) {
+      a = { totalViews: 0, deltaViews: 0, latest: null, first: null }
+      agg.set(ep.seriesId, a)
+    }
+    // SUM(CAST(view_counter AS REAL)) - SQL は NULL を無視
+    if (ep.viewCounter != null) a.totalViews += ep.viewCounter
+    // SUM(COALESCE(view−prev, 0)) - view==null||prev==null → 0（Opus §1）
+    if (ep.viewCounter != null && ep.prevViewCounter != null) {
+      a.deltaViews += ep.viewCounter - ep.prevViewCounter
+    }
+    // MAX/MIN(start_time): null を無視（startTime が null なら latest/first に影響させない）
+    if (ep.startTime) {
+      const t = new Date(ep.startTime).getTime()
+      if (!isNaN(t)) {
+        if (a.latest === null || t > a.latest) a.latest = t
+        if (a.first === null || t < a.first) a.first = t
+      }
+    }
+  }
+
+  // pass1b: velocity / recencyDays（SQL derived CTE 相当）
+  const derived = new Map()
+  for (const [sid, a] of agg) {
+    // null first → julianday(NULL) = NULL → MAX(1.0, NULL) = 1.0 → velocity = total/1.0
+    const daysSinceFirst = a.first !== null ? (nowMs - a.first) / 86400000 : null
+    const velocity = a.totalViews / Math.max(1.0, daysSinceFirst ?? 1.0)
+    // null latest → recency_days = NULL → exp_neg_div(NULL,tau) = exp(0) = 1.0
+    const recencyDays = a.latest !== null ? (nowMs - a.latest) / 86400000 : null
+    derived.set(sid, { ...a, velocity, recencyDays })
+  }
+
+  // pass2: グローバルレンジ（SQL ranges CTE 相当）
+  let deltaMin = Infinity,
+    deltaMax = -Infinity
+  let velLogMin = Infinity,
+    velLogMax = -Infinity
+  for (const d of derived.values()) {
+    if (d.deltaViews < deltaMin) deltaMin = d.deltaViews
+    if (d.deltaViews > deltaMax) deltaMax = d.deltaViews
+    const logV = Math.log1p(d.velocity)
+    if (logV < velLogMin) velLogMin = logV
+    if (logV > velLogMax) velLogMax = logV
+  }
+
+  // pass3: 正規化 + ブレンド（SQL normalized + SELECT 相当）
+  const metrics = new Map()
+  for (const [sid, d] of derived) {
+    const deltaN = deltaMax === deltaMin ? 0 : (d.deltaViews - deltaMin) / (deltaMax - deltaMin)
+    const velocityN =
+      velLogMax === velLogMin ? 0 : (Math.log1p(d.velocity) - velLogMin) / (velLogMax - velLogMin)
+    const recencyN = Math.exp(-((d.recencyDays ?? 0) / tau)) // exp_neg_div 等価
+    const hotScore = w_delta * deltaN + w_vel * velocityN + w_rec * recencyN
+    metrics.set(sid, {
+      totalViews: d.totalViews,
+      deltaViews: d.deltaViews,
+      velocity: d.velocity,
+      recency: recencyN,
+      hotScore,
+    })
+  }
+  return metrics
+}

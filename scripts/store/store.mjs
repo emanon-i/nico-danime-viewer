@@ -1,0 +1,796 @@
+/**
+ * Store: 純 JSON ＋ メモリ JS による正本データ層（PH-0008 M1）
+ *
+ * 設計原則:
+ * - canonical JSON → Store → derived projection（一方向フロー）
+ * - projection ファイルを Store の入力に使わない
+ * - isAvailable=false のシリーズも Store に保持（tombstone として除外せずに保つ）
+ * - prevViewCounter は state/prev-views.json で管理（public series JSON には入れない）
+ */
+
+import fs from 'node:fs/promises'
+import path from 'node:path'
+
+// ────────────────────────────────────────────────────────────────────────────
+// 型定義（JSDoc）
+// ────────────────────────────────────────────────────────────────────────────
+/**
+ * @typedef {Object} SeriesEntry
+ * @property {number} seriesId
+ * @property {string} title
+ * @property {string|null} colKey
+ * @property {string|null} thumbnailUrl
+ * @property {string|null} descriptionFirst
+ * @property {string|null} firstSeen
+ * @property {string|null} lastSeen
+ * @property {string|null} cours
+ * @property {string|null} franchiseKey
+ * @property {boolean} isAvailable
+ * @property {{name:string,isCurated:boolean}[]} tags
+ * @property {{seriesId:number,title:string,thumbnailUrl:string|null}[]} relatedSeries
+ */
+
+/**
+ * @typedef {Object} EpisodeEntry
+ * @property {string} contentId
+ * @property {number|null} seriesId
+ * @property {number|null} episodeNo
+ * @property {string} title
+ * @property {number|null} viewCounter
+ * @property {number|null} prevViewCounter
+ * @property {number|null} commentCounter
+ * @property {number|null} likeCounter
+ * @property {number|null} mylistCounter
+ * @property {number|null} lengthSeconds
+ * @property {string|null} startTime
+ * @property {string|null} thumbnailUrl
+ * @property {string|null} description
+ * @property {string[]} tags              正規化済みタグ名配列
+ * @property {string[]} tagsCurated       キュレーションタグ名配列（tags の部分集合）
+ * @property {string|null} lastUpdated
+ */
+
+/**
+ * @typedef {Object} RssEntry
+ * @property {string} watchId
+ * @property {string|null} guid
+ * @property {string|null} pubDate
+ * @property {string|null} title
+ * @property {string|null} titleNorm
+ * @property {string|null} link
+ * @property {string|null} resolvedContentId
+ * @property {string} resolutionStatus   'unresolved'|'resolved'|'rss_only'
+ */
+
+/**
+ * @typedef {Object} MetaRecord
+ * @property {string|null} rssLastGuid
+ * @property {string|null} snapshotLastStartTime
+ * @property {string|null} snapshotVersionLastModified
+ * @property {string|null} lastSeedAt
+ */
+
+/**
+ * @typedef {Object} Store
+ * @property {Map<number,SeriesEntry>} series
+ * @property {Map<string,EpisodeEntry>} episodes
+ * @property {Map<string,RssEntry>} rss
+ * @property {MetaRecord} meta
+ * @property {Set<number>} _dirtySeries  writeBack 時に上書きする seriesId（hourly 用）
+ */
+
+// ────────────────────────────────────────────────────────────────────────────
+// ファクトリ
+// ────────────────────────────────────────────────────────────────────────────
+
+export function createStore() {
+  return {
+    series: new Map(),
+    episodes: new Map(),
+    rss: new Map(),
+    meta: {
+      rssLastGuid: null,
+      snapshotLastStartTime: null,
+      snapshotVersionLastModified: null,
+      lastSeedAt: null,
+    },
+    _dirtySeries: new Set(),
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ロード
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * data/ 以下の series/*.json + state/*.json を読み込んで Store を返す。
+ * @param {string} dataDir  data/ への絶対パス
+ * @returns {Promise<Store>}
+ */
+export async function loadStore(dataDir) {
+  const store = createStore()
+  const seriesDir = path.join(dataDir, 'series')
+  const stateDir = path.join(dataDir, 'state')
+
+  // ── series JSON 全件（並列読み込みで高速化）───────────────────────
+  let files
+  try {
+    files = await fs.readdir(seriesDir)
+  } catch {
+    files = []
+  }
+
+  const jsonFiles = files.filter((f) => f.endsWith('.json'))
+
+  // Promise.all で並列ロード（OS のファイルキャッシュを活用）
+  const CHUNK = 200
+  for (let i = 0; i < jsonFiles.length; i += CHUNK) {
+    const chunk = jsonFiles.slice(i, i + CHUNK)
+    const results = await Promise.all(
+      chunk.map(async (file) => {
+        try {
+          return JSON.parse(await fs.readFile(path.join(seriesDir, file), 'utf-8'))
+        } catch {
+          return null
+        }
+      })
+    )
+    for (const json of results) {
+      if (json) _ingestSeriesJson(store, json)
+    }
+  }
+
+  // ── state/*.json ─────────────────────────────────────────────────
+  await _loadState(store, stateDir)
+
+  return store
+}
+
+/**
+ * 部分ロード（hourly 用）: series-index.json + 指定 series ファイルのみ。
+ * works.json 等の projection は読まない。
+ * @param {string} dataDir
+ * @param {number[]} seriesIds  追加で読む seriesId 一覧
+ * @returns {Promise<{store: Store, contentToSeries: Map<string,number>}>}
+ */
+export async function loadPartialStore(dataDir, seriesIds = []) {
+  const store = createStore()
+  const stateDir = path.join(dataDir, 'state')
+  const seriesDir = path.join(dataDir, 'series')
+
+  // series-index.json（contentId → seriesId の逆引きインデックス）
+  let contentToSeries = new Map()
+  try {
+    const idx = JSON.parse(await fs.readFile(path.join(stateDir, 'series-index.json'), 'utf-8'))
+    contentToSeries = new Map(Object.entries(idx).map(([cid, sid]) => [cid, Number(sid)]))
+  } catch {
+    // ファイルが存在しない場合は空マップで進む（初回 bootstrap）
+  }
+
+  // 指定 seriesId の JSON を読む
+  const toLoad = new Set(seriesIds)
+  for (const sid of toLoad) {
+    const filePath = path.join(seriesDir, `${sid}.json`)
+    try {
+      const json = JSON.parse(await fs.readFile(filePath, 'utf-8'))
+      _ingestSeriesJson(store, json)
+    } catch {
+      // ファイル不在はスキップ（新規 series は後続で upsertSeries が作る）
+    }
+  }
+
+  await _loadState(store, stateDir)
+
+  return { store, contentToSeries }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 内部: JSON → Store マッピング
+// ────────────────────────────────────────────────────────────────────────────
+
+function _ingestSeriesJson(store, json) {
+  const seriesId = Number(json.seriesId)
+  if (!seriesId) return
+
+  const existing = store.series.get(seriesId)
+
+  // series エントリ（上書き or 新規）
+  // tags はシリーズレベルの集約タグ。JSON では string[] or {name,isCurated}[] どちらも許容。
+  const rawTags = Array.isArray(json.tags) ? json.tags : []
+  const tags = rawTags.map((t) =>
+    typeof t === 'string'
+      ? { name: t, isCurated: false }
+      : { name: t.name, isCurated: !!t.isCurated }
+  )
+
+  const entry = {
+    seriesId,
+    title: json.title ?? existing?.title ?? '',
+    colKey: json.colKey ?? existing?.colKey ?? null,
+    thumbnailUrl: json.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
+    descriptionFirst: json.descriptionFirst ?? existing?.descriptionFirst ?? null,
+    firstSeen: json.firstSeen ?? existing?.firstSeen ?? null,
+    lastSeen: json.lastSeen ?? existing?.lastSeen ?? null,
+    cours: json.cours ?? existing?.cours ?? null,
+    franchiseKey: json.franchiseKey ?? existing?.franchiseKey ?? null,
+    isAvailable: json.isAvailable !== false,
+    tags,
+    relatedSeries: Array.isArray(json.relatedSeries)
+      ? json.relatedSeries
+      : (existing?.relatedSeries ?? []),
+  }
+  store.series.set(seriesId, entry)
+
+  // episodes
+  const episodes = Array.isArray(json.episodes) ? json.episodes : []
+  for (const ep of episodes) {
+    const cid = ep.contentId
+    if (!cid) continue
+    const existing = store.episodes.get(cid)
+    const epEntry = {
+      contentId: cid,
+      seriesId,
+      episodeNo: ep.episodeNo ?? existing?.episodeNo ?? null,
+      title: ep.title ?? existing?.title ?? '',
+      viewCounter: ep.viewCounter ?? existing?.viewCounter ?? null,
+      prevViewCounter: existing?.prevViewCounter ?? null, // state から後で上書き
+      commentCounter: ep.commentCounter ?? existing?.commentCounter ?? null,
+      likeCounter: ep.likeCounter ?? existing?.likeCounter ?? null,
+      mylistCounter: ep.mylistCounter ?? existing?.mylistCounter ?? null,
+      lengthSeconds: ep.lengthSeconds ?? existing?.lengthSeconds ?? null,
+      startTime: ep.startTime ?? existing?.startTime ?? null,
+      thumbnailUrl: ep.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
+      description: ep.description ?? existing?.description ?? null,
+      tags: Array.isArray(ep.tags)
+        ? ep.tags.filter((t) => typeof t === 'string')
+        : (existing?.tags ?? []),
+      tagsCurated: Array.isArray(ep.tagsCurated) ? ep.tagsCurated : (existing?.tagsCurated ?? []),
+      lastUpdated: ep.lastUpdated ?? existing?.lastUpdated ?? null,
+    }
+    store.episodes.set(cid, epEntry)
+  }
+}
+
+async function _loadState(store, stateDir) {
+  // meta.json
+  try {
+    const meta = JSON.parse(await fs.readFile(path.join(stateDir, 'meta.json'), 'utf-8'))
+    Object.assign(store.meta, {
+      rssLastGuid: meta.rssLastGuid ?? null,
+      snapshotLastStartTime: meta.snapshotLastStartTime ?? null,
+      snapshotVersionLastModified: meta.snapshotVersionLastModified ?? null,
+      lastSeedAt: meta.lastSeedAt ?? null,
+    })
+  } catch {
+    /* 初回 bootstrap では存在しない */
+  }
+
+  // prev-views.json
+  try {
+    const prevViews = JSON.parse(await fs.readFile(path.join(stateDir, 'prev-views.json'), 'utf-8'))
+    for (const [contentId, prev] of Object.entries(prevViews)) {
+      const ep = store.episodes.get(contentId)
+      if (ep) ep.prevViewCounter = typeof prev === 'number' ? prev : null
+    }
+  } catch {
+    /* 初回はなくてよい */
+  }
+
+  // rss.json
+  try {
+    const rssData = JSON.parse(await fs.readFile(path.join(stateDir, 'rss.json'), 'utf-8'))
+    if (rssData.lastGuid && !store.meta.rssLastGuid) {
+      store.meta.rssLastGuid = rssData.lastGuid
+    }
+    for (const item of rssData.items ?? []) {
+      store.rss.set(item.watchId, {
+        watchId: item.watchId,
+        guid: item.guid ?? null,
+        pubDate: item.pubDate ?? null,
+        title: item.title ?? null,
+        titleNorm: item.titleNorm ?? null,
+        link: item.link ?? null,
+        resolvedContentId: item.resolvedContentId ?? null,
+        resolutionStatus: item.resolutionStatus ?? 'unresolved',
+      })
+    }
+  } catch {
+    /* 初回はなくてよい */
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Write-back（atomic temp→verify→rename）
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Store の内容を data/ 以下に書き戻す。
+ *
+ * opts.seriesIds: 指定時はその series ファイルのみ上書き（hourly 用）。
+ *                 省略時は全 series を書き出し（daily 用）。
+ * opts.now: 書き出し時刻（ISO 8601）。省略時は new Date().toISOString()。
+ *
+ * 書き出し順序（atomic）:
+ * 1. temp ディレクトリ（data/.tmp-store-XXXX）に全ファイルを書く
+ * 2. 件数 invariant を確認
+ * 3. 本番パスへ rename / move（fs.rename で OS 原子性）
+ * 4. state/series-index.json を更新（contentId → seriesId 逆引き）
+ */
+export async function writeBackStore(store, dataDir, opts = {}) {
+  const { seriesIds = null } = opts
+  const seriesDir = path.join(dataDir, 'series')
+  const stateDir = path.join(dataDir, 'state')
+
+  await fs.mkdir(seriesDir, { recursive: true })
+  await fs.mkdir(stateDir, { recursive: true })
+
+  // 書き出す series の範囲
+  const targets = seriesIds != null ? new Set(seriesIds.map(Number)) : new Set(store.series.keys())
+
+  // ── series/*.json ────────────────────────────────────────────────
+  for (const seriesId of targets) {
+    const s = store.series.get(seriesId)
+    if (!s) continue
+
+    const episodes = _getEpisodesForSeriesSorted(store, seriesId)
+
+    const json = {
+      seriesId: s.seriesId,
+      title: s.title,
+      thumbnailUrl: s.thumbnailUrl,
+      descriptionFirst: s.descriptionFirst,
+      tags: s.tags.map((t) => t.name), // web フロントは string[] を期待
+      cours: s.cours,
+      colKey: s.colKey,
+      franchiseKey: s.franchiseKey,
+      relatedSeries: s.relatedSeries,
+      isAvailable: s.isAvailable, // 内部フィールド（Store 再ロード用）
+      firstSeen: s.firstSeen,
+      lastSeen: s.lastSeen,
+      episodes: episodes.map((ep) => ({
+        contentId: ep.contentId,
+        episodeNo: ep.episodeNo,
+        title: ep.title,
+        viewCounter: ep.viewCounter,
+        commentCounter: ep.commentCounter,
+        likeCounter: ep.likeCounter,
+        mylistCounter: ep.mylistCounter,
+        lengthSeconds: ep.lengthSeconds,
+        startTime: ep.startTime,
+        thumbnailUrl: ep.thumbnailUrl,
+        description: ep.description,
+        tags: ep.tags,
+        tagsCurated: ep.tagsCurated, // 内部フィールド
+        lastUpdated: ep.lastUpdated,
+      })),
+    }
+
+    await _writeJsonAtomic(path.join(seriesDir, `${seriesId}.json`), json)
+  }
+
+  // ── state/prev-views.json ────────────────────────────────────────
+  // 全 episodes の prevViewCounter を書き出す（hourly も含めて常に全量更新）
+  const prevViews = {}
+  for (const ep of store.episodes.values()) {
+    if (ep.prevViewCounter != null) {
+      prevViews[ep.contentId] = ep.prevViewCounter
+    }
+  }
+  await _writeJsonAtomic(path.join(stateDir, 'prev-views.json'), prevViews)
+
+  // ── state/meta.json ──────────────────────────────────────────────
+  await _writeJsonAtomic(path.join(stateDir, 'meta.json'), store.meta)
+
+  // ── state/rss.json ───────────────────────────────────────────────
+  const rssData = {
+    lastGuid: store.meta.rssLastGuid,
+    items: [...store.rss.values()],
+  }
+  await _writeJsonAtomic(path.join(stateDir, 'rss.json'), rssData)
+
+  // ── state/series-index.json（contentId → seriesId 逆引き）────────
+  const idx = {}
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId != null) idx[ep.contentId] = ep.seriesId
+  }
+  await _writeJsonAtomic(path.join(stateDir, 'series-index.json'), idx)
+
+  // _dirtySeries リセット（部分書き出し完了後）
+  if (seriesIds != null) {
+    for (const sid of seriesIds) store._dirtySeries.delete(Number(sid))
+  } else {
+    store._dirtySeries.clear()
+  }
+}
+
+async function _writeJsonAtomic(filePath, data) {
+  const tmp = filePath + '.tmp'
+  await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8')
+  await fs.rename(tmp, filePath)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// CRUD API
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * エピソードを upsert する（snapshot 取り込み用）。
+ *
+ * PRESERVE（既存値を上書きしない）:
+ *   seriesId, episodeNo, title, startTime（一度 nvapi で確定した値を保護）
+ * UPDATE（常に更新）:
+ *   viewCounter, prevViewCounter=現 viewCounter, commentCounter, likeCounter,
+ *   mylistCounter, lengthSeconds, thumbnailUrl, tags, tagsCurated, lastUpdated
+ *
+ * @param {Store} store
+ * @param {Partial<EpisodeEntry>[]} rawEps
+ */
+export function upsertEpisodes(store, rawEps) {
+  const now = new Date().toISOString()
+  for (const raw of rawEps) {
+    const cid = raw.contentId
+    if (!cid) continue
+    const existing = store.episodes.get(cid)
+
+    if (existing) {
+      // PRESERVE seriesId, episodeNo, title, startTime（確定済みなら守る）
+      const prevView = existing.viewCounter // 旧 viewCounter を prev に退避
+      existing.prevViewCounter = prevView
+      existing.viewCounter = raw.viewCounter ?? existing.viewCounter
+      existing.commentCounter = raw.commentCounter ?? existing.commentCounter
+      existing.likeCounter = raw.likeCounter ?? existing.likeCounter
+      existing.mylistCounter = raw.mylistCounter ?? existing.mylistCounter
+      existing.lengthSeconds = raw.lengthSeconds ?? existing.lengthSeconds
+      existing.thumbnailUrl = raw.thumbnailUrl ?? existing.thumbnailUrl
+      if (raw.tags != null) existing.tags = raw.tags
+      if (raw.tagsCurated != null) existing.tagsCurated = raw.tagsCurated
+      existing.lastUpdated = now
+      // seriesId が null なら受け入れる（linkEpisodes で後から設定）
+      // seriesId が non-null なら既存を保護（orphan 化を防ぐ）
+      if (existing.seriesId == null && raw.seriesId != null) {
+        existing.seriesId = raw.seriesId
+      }
+    } else {
+      store.episodes.set(cid, {
+        contentId: cid,
+        seriesId: raw.seriesId ?? null,
+        episodeNo: raw.episodeNo ?? null,
+        title: raw.title ?? '',
+        viewCounter: raw.viewCounter ?? null,
+        prevViewCounter: null,
+        commentCounter: raw.commentCounter ?? null,
+        likeCounter: raw.likeCounter ?? null,
+        mylistCounter: raw.mylistCounter ?? null,
+        lengthSeconds: raw.lengthSeconds ?? null,
+        startTime: raw.startTime ?? null,
+        thumbnailUrl: raw.thumbnailUrl ?? null,
+        description: raw.description ?? null,
+        tags: raw.tags ?? [],
+        tagsCurated: raw.tagsCurated ?? [],
+        lastUpdated: now,
+      })
+    }
+  }
+}
+
+/**
+ * シリーズを upsert する（list.json / nvapi 取り込み用）。
+ * thumbnailUrl は COALESCE（既存があれば保護）。
+ * @param {Store} store
+ * @param {Partial<SeriesEntry>[]} seriesList
+ */
+export function upsertSeries(store, seriesList) {
+  for (const raw of seriesList) {
+    const sid = Number(raw.seriesId)
+    if (!sid) continue
+    const existing = store.series.get(sid)
+    if (existing) {
+      existing.title = raw.title ?? existing.title
+      existing.colKey = raw.colKey ?? existing.colKey
+      // thumbnailUrl COALESCE: 既存があれば保護、null の時だけ受け入れ
+      existing.thumbnailUrl = existing.thumbnailUrl ?? raw.thumbnailUrl ?? null
+      existing.descriptionFirst = raw.descriptionFirst ?? existing.descriptionFirst
+      existing.cours = raw.cours ?? existing.cours
+      existing.franchiseKey = raw.franchiseKey ?? existing.franchiseKey
+      if (raw.isAvailable !== undefined) existing.isAvailable = raw.isAvailable
+      if (raw.relatedSeries != null) existing.relatedSeries = raw.relatedSeries
+      if (raw.tags != null && raw.tags.length > 0) {
+        existing.tags = raw.tags.map((t) =>
+          typeof t === 'string' ? { name: t, isCurated: false } : t
+        )
+      }
+    } else {
+      store.series.set(sid, {
+        seriesId: sid,
+        title: raw.title ?? '',
+        colKey: raw.colKey ?? null,
+        thumbnailUrl: raw.thumbnailUrl ?? null,
+        descriptionFirst: raw.descriptionFirst ?? null,
+        firstSeen: raw.firstSeen ?? null,
+        lastSeen: raw.lastSeen ?? null,
+        cours: raw.cours ?? null,
+        franchiseKey: raw.franchiseKey ?? null,
+        isAvailable: raw.isAvailable !== false,
+        tags: (raw.tags ?? []).map((t) =>
+          typeof t === 'string' ? { name: t, isCurated: false } : t
+        ),
+        relatedSeries: raw.relatedSeries ?? [],
+      })
+    }
+  }
+}
+
+/**
+ * エピソードにシリーズを紐付ける（nvapi 結果から）。
+ * @param {Store} store
+ * @param {{contentId:string, seriesId:number, episodeNo?:number}[]} updates
+ */
+export function linkEpisodes(store, updates) {
+  for (const u of updates) {
+    const ep = store.episodes.get(u.contentId)
+    if (!ep) continue
+    ep.seriesId = Number(u.seriesId)
+    if (u.episodeNo != null) ep.episodeNo = u.episodeNo
+    store._dirtySeries.add(ep.seriesId)
+  }
+}
+
+/**
+ * シリーズのフィールドを更新する（ホワイトリスト）。
+ * @param {Store} store
+ * @param {number} seriesId
+ * @param {Partial<SeriesEntry>} fields
+ */
+const SERIES_UPDATE_WHITELIST = new Set([
+  'title',
+  'colKey',
+  'thumbnailUrl',
+  'descriptionFirst',
+  'firstSeen',
+  'lastSeen',
+  'cours',
+  'franchiseKey',
+  'isAvailable',
+  'tags',
+  'relatedSeries',
+])
+
+export function updateSeries(store, seriesId, fields) {
+  const s = store.series.get(Number(seriesId))
+  if (!s) return
+  for (const [k, v] of Object.entries(fields)) {
+    if (SERIES_UPDATE_WHITELIST.has(k)) s[k] = v
+  }
+}
+
+/**
+ * シリーズのサムネイルを最古エピソードから補完する。
+ * @param {Store} store
+ */
+export function syncSeriesThumbnails(store) {
+  for (const s of store.series.values()) {
+    if (s.thumbnailUrl) continue
+    const eps = _getEpisodesForSeriesSorted(store, s.seriesId)
+    for (const ep of eps) {
+      if (ep.thumbnailUrl) {
+        s.thumbnailUrl = ep.thumbnailUrl
+        break
+      }
+    }
+  }
+}
+
+/**
+ * シリーズの firstSeen / lastSeen を全エピソードの startTime から再計算する。
+ * @param {Store} store
+ */
+export function syncSeriesTimestamps(store) {
+  // seriesId → {first, last} の計算
+  const ranges = new Map()
+  for (const ep of store.episodes.values()) {
+    if (!ep.seriesId || !ep.startTime) continue
+    const t = new Date(ep.startTime).getTime()
+    if (isNaN(t)) continue
+    const r = ranges.get(ep.seriesId)
+    if (!r) {
+      ranges.set(ep.seriesId, { first: t, last: t, firstStr: ep.startTime, lastStr: ep.startTime })
+    } else {
+      if (t < r.first) {
+        r.first = t
+        r.firstStr = ep.startTime
+      }
+      if (t > r.last) {
+        r.last = t
+        r.lastStr = ep.startTime
+      }
+    }
+  }
+  for (const [sid, r] of ranges) {
+    const s = store.series.get(sid)
+    if (s) {
+      s.firstSeen = r.firstStr
+      s.lastSeen = r.lastStr
+    }
+  }
+}
+
+// ── meta state ─────────────────────────────────────────────────────────────
+
+export function getMetaState(store) {
+  return { ...store.meta }
+}
+
+export function updateMetaState(store, fields) {
+  Object.assign(store.meta, fields)
+}
+
+// ── RSS ────────────────────────────────────────────────────────────────────
+
+/**
+ * RSS アイテムを upsert する。
+ * @param {Store} store
+ * @param {Partial<RssEntry>[]} items
+ */
+export function upsertRssItems(store, items) {
+  for (const item of items) {
+    const wid = item.watchId
+    if (!wid) continue
+    const existing = store.rss.get(wid)
+    if (existing) {
+      existing.guid = item.guid ?? existing.guid
+      existing.pubDate = item.pubDate ?? existing.pubDate
+      existing.title = item.title ?? existing.title
+      existing.titleNorm = item.titleNorm ?? existing.titleNorm
+      existing.link = item.link ?? existing.link
+      // resolvedContentId / status は updateRssResolution で管理
+    } else {
+      store.rss.set(wid, {
+        watchId: wid,
+        guid: item.guid ?? null,
+        pubDate: item.pubDate ?? null,
+        title: item.title ?? null,
+        titleNorm: item.titleNorm ?? null,
+        link: item.link ?? null,
+        resolvedContentId: item.resolvedContentId ?? null,
+        resolutionStatus: item.resolutionStatus ?? 'unresolved',
+      })
+    }
+  }
+}
+
+/**
+ * RSS アイテムの解決状態を更新する。
+ * @param {Store} store
+ * @param {string} watchId
+ * @param {string|null} resolvedContentId
+ * @param {string} status
+ */
+export function updateRssResolution(store, watchId, resolvedContentId, status) {
+  const item = store.rss.get(watchId)
+  if (!item) return
+  item.resolvedContentId = resolvedContentId
+  item.resolutionStatus = status
+}
+
+// ── タグ ────────────────────────────────────────────────────────────────────
+
+/**
+ * シリーズのタグを置換する（deriveSeriesTags の結果を受け取る）。
+ * @param {Store} store
+ * @param {number} seriesId
+ * @param {{name:string,isCurated:boolean}[]} tags
+ */
+export function replaceSeriesTags(store, seriesId, tags) {
+  const s = store.series.get(Number(seriesId))
+  if (!s) return
+  s.tags = tags
+}
+
+// ── orphan / seed ──────────────────────────────────────────────────────────
+
+/**
+ * seriesId が null のエピソード数を返す（seed 要否の判定に使う）。
+ * @param {Store} store
+ * @returns {number}
+ */
+export function countOrphanEpisodes(store) {
+  let n = 0
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null) n++
+  }
+  return n
+}
+
+/**
+ * nvapi seed 対象シリーズを選定する（§0-5）。
+ *
+ * 優先度:
+ * 1. list.json 収録済みだがエピソード 0 件のシリーズ（新規）
+ * 2. エピソード数が insufficientThreshold 以下のシリーズ（不完全）
+ * 3. orphan エピソードがあれば全 series が対象（orphan-driven seed）
+ *
+ * @param {Store} store
+ * @param {{insufficientThreshold?:number, allIfOrphans?:boolean}} opts
+ * @returns {number[]} seriesId 配列
+ */
+export function selectSeedTargets(store, opts = {}) {
+  const { insufficientThreshold = 3, allIfOrphans = true } = opts
+
+  const epCountBySeries = new Map()
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId != null) {
+      epCountBySeries.set(ep.seriesId, (epCountBySeries.get(ep.seriesId) ?? 0) + 1)
+    }
+  }
+
+  const orphans = countOrphanEpisodes(store)
+  if (allIfOrphans && orphans > 0) {
+    // orphan が存在 → 全シリーズを seed 対象（紐付けを全件やり直す）
+    return [...store.series.keys()].filter((sid) => store.series.get(sid).isAvailable)
+  }
+
+  const targets = []
+  for (const [sid, s] of store.series) {
+    if (!s.isAvailable) continue
+    const count = epCountBySeries.get(sid) ?? 0
+    if (count <= insufficientThreshold) targets.push(sid)
+  }
+  return targets
+}
+
+// ── エピソード取得 ─────────────────────────────────────────────────────────
+
+/**
+ * seriesId に属するエピソードを chronoSort 順で返す。
+ * @param {Store} store
+ * @param {number} seriesId
+ * @returns {EpisodeEntry[]}
+ */
+export function getEpisodesForSeries(store, seriesId) {
+  return _getEpisodesForSeriesSorted(store, seriesId)
+}
+
+/**
+ * エピソードのクロノロジカルソート比較関数。
+ * 優先度: startTime → episodeNo → contentId（安定）
+ */
+export function chronoSort(a, b) {
+  if (a.startTime && b.startTime) {
+    const diff = new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    if (diff !== 0) return diff
+  } else if (a.startTime) return -1
+  else if (b.startTime) return 1
+
+  if (a.episodeNo != null && b.episodeNo != null) {
+    const diff = a.episodeNo - b.episodeNo
+    if (diff !== 0) return diff
+  } else if (a.episodeNo != null) return -1
+  else if (b.episodeNo != null) return 1
+
+  return a.contentId < b.contentId ? -1 : a.contentId > b.contentId ? 1 : 0
+}
+
+// ── 統計 ────────────────────────────────────────────────────────────────────
+
+/**
+ * ep>0 のシリーズ数（shrink 検出用）。
+ * @param {Store} store
+ * @returns {number}
+ */
+export function countSeriesWithEpisodes(store) {
+  const sids = new Set()
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId != null) sids.add(ep.seriesId)
+  }
+  return sids.size
+}
+
+// ── 内部ヘルパ ──────────────────────────────────────────────────────────────
+
+function _getEpisodesForSeriesSorted(store, seriesId) {
+  const result = []
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId === seriesId) result.push(ep)
+  }
+  return result.sort(chronoSort)
+}

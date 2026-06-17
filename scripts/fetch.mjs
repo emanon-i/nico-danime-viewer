@@ -35,14 +35,18 @@ import {
   assertRssOk,
   extractWatchId,
   resolveRssItems,
+  resolveRssItemsFromStore,
 } from './nico/rss.mjs'
 
 import { deriveSeriesTags } from './etl/tags.mjs'
+import { deriveSeriesTagsFromStore } from './etl/tags.mjs'
 import {
   extractSeriesIdFromUrl,
   deriveSeriesOverviews,
   getSeriesTagsMap,
   computeFranchiseKeys,
+  deriveSeriesOverviewsFromStore,
+  getSeriesTagsMapFromStore,
 } from './etl/series.mjs'
 import {
   mapCurrentCours,
@@ -50,6 +54,7 @@ import {
   parsePeriodHtml,
   matchPeriodEntriesToSeries,
   deriveCoursFromTags,
+  deriveCoursFromTagsFromStore,
 } from './etl/cours.mjs'
 import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
@@ -57,6 +62,27 @@ import { exportAll } from './export/export.mjs'
 import { selfHealEmptySeries, backfillSeries } from './backfill.mjs'
 
 import { logger } from './lib/logger.mjs'
+
+// ── Store ベース（M3/M4）─────────────────────────────────────────────────────
+import {
+  loadStore,
+  loadPartialStore,
+  writeBackStore,
+  upsertEpisodes as storeUpsertEps,
+  upsertSeries as storeUpsertSeries,
+  linkEpisodes as storeLinkEps,
+  updateSeries as storeUpdateSeries,
+  syncSeriesThumbnails as storeSyncThumbs,
+  syncSeriesTimestamps as storeSyncTimestamps,
+  updateMetaState as storeUpdateMeta,
+  upsertRssItems as storeUpsertRss,
+  replaceSeriesTags as storeReplaceSeriesTags,
+  countOrphanEpisodes,
+  selectSeedTargets,
+  countSeriesWithEpisodes,
+  chronoSort,
+} from './store/store.mjs'
+import { projectAll, exportNew as exportNewStore } from './store/project.mjs'
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '../data')
 const DB_PATH = join(DATA_DIR, 'build.sqlite')
@@ -593,13 +619,444 @@ async function main() {
   logger.info('fetch', 'all done', { now })
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Store ベース shrink 検出
+// ────────────────────────────────────────────────────────────────────────────
+
+function detectShrinkFromStore(store, dataDir, threshold = 0.9) {
+  const ep0 = countSeriesWithEpisodes(store)
+  let baseline = 0
+  try {
+    const w = JSON.parse(readFileSync(join(dataDir, 'works.json'), 'utf-8'))
+    baseline = (w.works ?? []).filter((x) => (x.episodeCount ?? 0) > 0).length
+  } catch {
+    /* works.json が無ければ baseline 0 = 比較しない（初回） */
+  }
+  return { ep0, baseline, shrink: baseline > 0 && ep0 < Math.floor(baseline * threshold) }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Store ベース クールパイプライン（M3）
+// ────────────────────────────────────────────────────────────────────────────
+
+async function runCoursPipelineFromStore(store, now) {
+  // 0. クリア（is_available シリーズのみ）
+  for (const s of store.series.values()) {
+    if (s.isAvailable) s.cours = null
+  }
+
+  // 1. 主源 = 第1話タグの「YYYY年<季>アニメ」から放送季を導出
+  const tagMap = deriveCoursFromTagsFromStore(store, chronoSort)
+  for (const [id, cours] of tagMap) {
+    const s = store.series.get(id)
+    if (s) s.cours = cours
+  }
+  logger.info('fetch', 'E3 cours from tags (primary)', { count: tagMap.size })
+
+  // 2. 補完 = 今季 programlist
+  const programlist = await fetchProgramlist()
+  const coursLabel = makeCoursLabel(new Date(now).getFullYear(), currentSeason(now))
+  const curMap = mapCurrentCours(programlist, coursLabel)
+  let curAdded = 0
+  for (const [id] of curMap) {
+    const s = store.series.get(id)
+    if (s && s.isAvailable && s.cours == null) {
+      s.cours = coursLabel
+      curAdded++
+    }
+  }
+  logger.info('fetch', 'E3b cours from programlist (fill)', { added: curAdded })
+
+  // 3. 補完 = period 日本語タイトル突合（cours IS NULL のみ）
+  const pastCours = await derivePastCoursFromStore(store, now)
+  logger.info('fetch', 'E3c cours from period (fill)', pastCours)
+}
+
+async function derivePastCoursFromStore(store, now) {
+  const assigned = new Set()
+  for (const s of store.series.values()) {
+    if (s.isAvailable && s.cours != null) assigned.add(s.seriesId)
+  }
+  const seriesMap = new Map()
+  for (const s of store.series.values()) {
+    if (s.isAvailable) seriesMap.set(s.seriesId, s.title)
+  }
+
+  const seasons = enumeratePastSeasons(new Date(now), COURS_FROM_YEAR)
+  let assignedCount = 0
+  let seasonsWithData = 0
+
+  for (const { year, season } of seasons) {
+    let html = null
+    try {
+      const res = await fetchPeriodHtml(year, season)
+      if (res.status !== 200 || !res.body) continue
+      html = res.body
+    } catch (err) {
+      logger.warn('fetch', 'period fetch failed (skip season)', {
+        year,
+        season,
+        error: err.message,
+      })
+      continue
+    }
+    let parsed
+    try {
+      parsed = parsePeriodHtml(html, `${year}-${season}`)
+    } catch {
+      continue
+    }
+    if (!parsed.title.includes('dアニメストア') || parsed.slugs.length < 1) continue
+    seasonsWithData++
+
+    const coursLabel = makeCoursLabel(year, season)
+    const matches = matchPeriodEntriesToSeries(parsed.entries, seriesMap)
+    let seasonAssigned = 0
+    for (const m of matches) {
+      if (m.seriesId == null || m.confidence < COURS_MATCH_MIN) continue
+      if (assigned.has(m.seriesId)) continue
+      const s = store.series.get(m.seriesId)
+      if (!s || !s.isAvailable) continue
+      s.cours = coursLabel
+      assigned.add(m.seriesId)
+      assignedCount++
+      seasonAssigned++
+    }
+    logger.info('fetch', 'period season done', {
+      cours: coursLabel,
+      entries: parsed.entries.length,
+      assigned: seasonAssigned,
+    })
+  }
+  return { seasons: seasonsWithData, assigned: assignedCount }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// M3: --mode=full-js  Store ベース フルパイプライン
+// ────────────────────────────────────────────────────────────────────────────
+
+async function runFullJS() {
+  mkdirSync(DATA_DIR, { recursive: true })
+  const now = new Date().toISOString()
+
+  logger.info('fetch', '[JS] loadStore start')
+  const store = await loadStore(DATA_DIR)
+  logger.info('fetch', '[JS] loadStore done', {
+    series: store.series.size,
+    episodes: store.episodes.size,
+    rss: store.rss.size,
+  })
+
+  // ── Phase A: Snapshot ──────────────────────────────────────────────────────
+  logger.info('fetch', '[JS] phase A: snapshot')
+  const storedVersion = store.meta.snapshotVersionLastModified ?? null
+  const snapResult = await fetchAllBranchEpisodes(storedVersion)
+
+  if (!snapResult.skipped) {
+    const { episodes, newVersion } = snapResult
+    assertSnapshotOk({ meta: { status: 200, totalCount: episodes.length }, data: episodes }, null)
+    // snapshot の生タグ文字列 → processEpisodeTags でタグ配列化
+    // （fetch.mjs では tags は space-separated string → Store は string[]）
+    const { processEpisodeTags } = await import('./etl/tags.mjs')
+    const mappedEps = episodes.map((ep) => {
+      const processedTags = processEpisodeTags(ep.tags ?? '', null)
+      return {
+        ...ep,
+        tags: processedTags.map((t) => t.name),
+        tagsCurated: processedTags.filter((t) => t.isCurated).map((t) => t.name),
+        lastUpdated: now,
+      }
+    })
+    storeUpsertEps(store, mappedEps)
+    storeUpdateMeta(store, { snapshotVersionLastModified: newVersion })
+    logger.info('fetch', '[JS] snapshot done', { count: episodes.length })
+  } else {
+    logger.info('fetch', '[JS] snapshot version unchanged, skipping')
+  }
+
+  // ── Phase B: list.json → col_key + series 登録 + is_available 同期 ──────
+  logger.info('fetch', '[JS] phase B: list.json')
+  const listJson = await fetchListJson()
+  const listSeriesIds = new Set()
+  const seriesFromList = []
+
+  for (const item of listJson) {
+    const seriesId = extractSeriesIdFromUrl(item.url)
+    if (!seriesId) continue
+    listSeriesIds.add(seriesId)
+    seriesFromList.push({
+      seriesId,
+      title: item.title,
+      colKey: item.col_key ?? null,
+      isAvailable: true,
+    })
+  }
+
+  // list.json 外のシリーズを unavailable にマーク
+  for (const s of store.series.values()) {
+    if (!listSeriesIds.has(s.seriesId)) s.isAvailable = false
+  }
+  // list.json 収録シリーズを upsert（新規は追加、既存は title/colKey 更新）
+  storeUpsertSeries(store, seriesFromList)
+  // colKey を明示的に設定（upsertSeries は colKey を保護しないので直接更新）
+  for (const item of seriesFromList) {
+    if (item.colKey)
+      storeUpdateSeries(store, item.seriesId, { colKey: item.colKey, isAvailable: true })
+  }
+  logger.info('fetch', '[JS] list.json done', { count: seriesFromList.length })
+
+  // ── Phase C: nvapi seed（orphan-driven）────────────────────────────────────
+  const orphans = countOrphanEpisodes(store)
+  const daysSinceRefresh = store.meta.lastSeedAt
+    ? (Date.now() - new Date(store.meta.lastSeedAt).getTime()) / 86400000
+    : Infinity
+  const forceSeed = process.env.NICO_FORCE_SEED === '1'
+  const needSeed = forceSeed || orphans > 0 || daysSinceRefresh >= 7
+
+  if (needSeed) {
+    const seedTargets = selectSeedTargets(store, { allIfOrphans: true })
+    logger.info('fetch', '[JS] phase C: nvapi seed', {
+      total: seedTargets.length,
+      orphans,
+      daysSinceRefresh: Math.round(daysSinceRefresh),
+      forceSeed,
+    })
+    await seedAllSeries(seedTargets, async (seriesId, data) => {
+      const updates = mapNvapiItems(seriesId, data.items ?? [])
+      if (updates.length > 0) storeLinkEps(store, updates)
+    })
+    storeUpdateMeta(store, { lastSeedAt: now })
+  } else {
+    logger.info('fetch', '[JS] phase C: nvapi seed skipped', {
+      orphans,
+      daysSinceRefresh: Math.round(daysSinceRefresh),
+    })
+  }
+
+  // ── Phase D: RSS 新着 ──────────────────────────────────────────────────────
+  logger.info('fetch', '[JS] phase D: RSS')
+  const rssResult = await fetchRss()
+  if (rssResult.status === 200 && rssResult.body) {
+    const { channelTitle, items } = parseRssXml(rssResult.body)
+    assertRssOk(items, channelTitle)
+    const newItems = filterNewRssItems(items, store.meta.rssLastGuid ?? null)
+    const rssRows = newItems
+      .map((item) => {
+        const watchId = extractWatchId(item.link)
+        if (!watchId) return null
+        return {
+          watchId,
+          guid: item.guid ?? null,
+          pubDate: item.pubDate ?? null,
+          title: item.title ?? null,
+          titleNorm: null,
+          link: item.link ?? null,
+        }
+      })
+      .filter(Boolean)
+    if (rssRows.length > 0) {
+      storeUpsertRss(store, rssRows)
+      resolveRssItemsFromStore(store)
+      logger.info('fetch', '[JS] RSS new items inserted', { count: rssRows.length })
+    }
+    const newLastGuid = items[0]?.guid ?? store.meta.rssLastGuid
+    if (newLastGuid) storeUpdateMeta(store, { rssLastGuid: newLastGuid })
+  } else if (rssResult.status === 304) {
+    logger.info('fetch', '[JS] RSS 304 not modified, skipping')
+  }
+
+  // ── Phase E: ETL 派生 ──────────────────────────────────────────────────────
+  logger.info('fetch', '[JS] phase E: ETL derivation')
+
+  // E1: Series overviews
+  const overviews = deriveSeriesOverviewsFromStore(store, chronoSort)
+  for (const { seriesId, descriptionFirst } of overviews) {
+    if (descriptionFirst) storeUpdateSeries(store, seriesId, { descriptionFirst })
+  }
+  logger.info('fetch', '[JS] E1 overviews done', { count: overviews.length })
+
+  // E2: Tags
+  const seriesTags = deriveSeriesTagsFromStore(store)
+  for (const { seriesId, tags } of seriesTags) {
+    if (tags.length > 0) storeReplaceSeriesTags(store, seriesId, tags)
+  }
+  logger.info('fetch', '[JS] E2 series tags done', { count: seriesTags.length })
+
+  // E3: Cours
+  await runCoursPipelineFromStore(store, now)
+
+  // E4: Franchise keys
+  const seriesTagsMap = getSeriesTagsMapFromStore(store)
+  const titleMap = new Map()
+  for (const s of store.series.values()) {
+    if (s.isAvailable) titleMap.set(s.seriesId, s.title)
+  }
+  const franchiseKeys = computeFranchiseKeys(seriesTagsMap, titleMap)
+  for (const s of store.series.values()) s.franchiseKey = null
+  for (const [seriesId, franchiseKey] of franchiseKeys) {
+    storeUpdateSeries(store, seriesId, { franchiseKey })
+  }
+  // franchise = Store の relatedSeries を再計算
+  const byFranchise = new Map()
+  for (const s of store.series.values()) {
+    if (!s.franchiseKey) continue
+    if (!byFranchise.has(s.franchiseKey)) byFranchise.set(s.franchiseKey, [])
+    byFranchise.get(s.franchiseKey).push(s)
+  }
+  for (const members of byFranchise.values()) {
+    for (const s of members) {
+      s.relatedSeries = members
+        .filter((m) => m.seriesId !== s.seriesId && m.isAvailable)
+        .map((m) => ({ seriesId: m.seriesId, title: m.title, thumbnailUrl: m.thumbnailUrl }))
+    }
+  }
+  logger.info('fetch', '[JS] E4 franchise keys done', { count: franchiseKeys.size })
+
+  // E5: Timestamps
+  storeSyncTimestamps(store)
+
+  // E6: Thumbnails
+  storeSyncThumbs(store)
+  logger.info('fetch', '[JS] E6 thumbnails synced')
+
+  // ── 回帰ガード ───────────────────────────────────────────────────────────
+  const guard = detectShrinkFromStore(store, DATA_DIR)
+  if (guard.shrink) {
+    logger.error('fetch', '[JS] REGRESSION GUARD: full-js would shrink → skip export', guard)
+    logger.info('fetch', '[JS] all done (guarded)', { now })
+    return
+  }
+
+  // ── Phase F + G: metrics + export ─────────────────────────────────────────
+  logger.info('fetch', '[JS] phase F+G: project all')
+  await writeBackStore(store, DATA_DIR, { now })
+  await projectAll(store, DATA_DIR, now)
+  logger.info('fetch', '[JS] all done', { now, ep0: guard.ep0 })
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// M4: --mode=hourly-js  Store ベース 毎時 RSS パイプライン
+// ────────────────────────────────────────────────────────────────────────────
+
+async function runHourlyJS() {
+  mkdirSync(DATA_DIR, { recursive: true })
+  const now = new Date().toISOString()
+  const stateDir = join(DATA_DIR, 'state')
+
+  // ── Phase D: RSS 新着取得（series-index + state だけロード）────────────────
+  logger.info('fetch', '[JS] phase D: RSS (hourly)')
+
+  // まず state/meta.json と rss.json だけ読んで lightweight な Store を作る
+  // （series/episodes は RSS 処理後に必要分だけ読む）
+  const { store: partialStore, contentToSeries } = await loadPartialStore(DATA_DIR, [])
+
+  // 空 Store ガード（series-index.json が存在しない = 初回 or 壊れた状態）
+  if (contentToSeries.size === 0) {
+    // series-index がないと rss_only 解決もできない → skip してガードする
+    logger.warn('fetch', '[JS] hourly: no series-index (first run?) → skip', {})
+    return
+  }
+
+  const rssResult = await fetchRss()
+  if (rssResult.status === 304) {
+    logger.info('fetch', '[JS] RSS 304 not modified, skipping')
+    return
+  }
+
+  let insertedEpisodes = 0
+
+  if (rssResult.status === 200 && rssResult.body) {
+    const { channelTitle, items } = parseRssXml(rssResult.body)
+    assertRssOk(items, channelTitle)
+    const newItems = filterNewRssItems(items, partialStore.meta.rssLastGuid ?? null)
+    const rssRows = newItems
+      .map((item) => {
+        const watchId = extractWatchId(item.link)
+        if (!watchId) return null
+        return {
+          watchId,
+          guid: item.guid ?? null,
+          pubDate: item.pubDate ?? null,
+          title: item.title ?? null,
+          titleNorm: null,
+          link: item.link ?? null,
+        }
+      })
+      .filter(Boolean)
+
+    if (rssRows.length > 0) {
+      storeUpsertRss(partialStore, rssRows)
+      logger.info('fetch', '[JS] hourly: new RSS items', { count: rssRows.length })
+    }
+    const newLastGuid = items[0]?.guid ?? partialStore.meta.rssLastGuid
+    if (newLastGuid) storeUpdateMeta(partialStore, { rssLastGuid: newLastGuid })
+
+    // ── Phase D2: rss_only → 対応シリーズ nvapi backfill ──────────────────
+    // contentToSeries インデックスから rss_only タイトルに対応するシリーズを特定。
+    // 軽量なシリーズ情報だけロードして backfill し、series/*.json と new.json のみ更新する。
+    //
+    // §0-4: hourly は works.json を書かない（全量 projection を避ける）。
+    const rssOnlyTitles = [...partialStore.rss.values()]
+      .filter((r) => r.resolutionStatus === 'rss_only' && r.title)
+      .map((r) => r.title)
+
+    if (rssOnlyTitles.length > 0) {
+      // タイトル前方一致でシリーズ特定（series title が必要）。
+      // 必要なシリーズ情報を series-index から逆引きして該当 series JSON を読む。
+      // ただし、rss_only 解決のためには series タイトルが必要。
+      // シリーズ JSON をすべて読むのは重い（6352件）ので、まず rss title から候補 seriesId を
+      // contentToSeries + heuristic で絞る。
+      //
+      // 簡略化: rss_only タイトルの prefix が seriesId に対応するか探すには series タイトルが必要。
+      // ここでは「全シリーズタイトルインデックス」を state に持つ必要がある → series-titles.json
+      // （M4 段階ではまだ存在しないため、この step は skip して rss_only は日次 full で回収する）
+      logger.info('fetch', '[JS] hourly: rss_only items will be resolved by next daily', {
+        count: rssOnlyTitles.length,
+      })
+    }
+  }
+
+  // ── new.json のみ書き出し（§0-4: works.json は書かない）──────────────────
+  // partialStore.rss には更新済みの全 RSS アイテムが入っている（state/rss.json から）
+  await exportNewStore(partialStore, DATA_DIR, now)
+
+  // ── state 書き戻し（touched series なし・meta + rss + series-index のみ）────
+  // prev-views.json は変化なし（viewCounter 更新なし）→ 既存ファイルを保持
+  const rssData = { lastGuid: partialStore.meta.rssLastGuid, items: [...partialStore.rss.values()] }
+  const { writeFile } = await import('node:fs/promises')
+  const { mkdir } = await import('node:fs/promises')
+  await mkdir(stateDir, { recursive: true })
+  const tmpMeta = join(stateDir, 'meta.json.tmp')
+  await writeFile(tmpMeta, JSON.stringify(partialStore.meta, null, 2), 'utf-8')
+  const { rename } = await import('node:fs/promises')
+  await rename(tmpMeta, join(stateDir, 'meta.json'))
+  const tmpRss = join(stateDir, 'rss.json.tmp')
+  await writeFile(tmpRss, JSON.stringify(rssData, null, 2), 'utf-8')
+  await rename(tmpRss, join(stateDir, 'rss.json'))
+
+  if (insertedEpisodes > 0) {
+    writeFileSync(join(DATA_DIR, '.deploy-needed'), `${insertedEpisodes}\n`)
+  }
+  logger.info('fetch', '[JS] hourly done', { now, insertedEpisodes })
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
+// M6: --mode=full / デフォルト → runFullJS()（SQLite 廃止）
+//     --mode=full-db  → main()（旧 SQLite 版・後方互換フォールバック）
+//     --mode=hourly   → runHourlyJS()
+//     --mode=hourly-db → runHourly()（旧 SQLite 版）
 const runner = CLI_CHECK_VERSION
   ? checkVersion()
-  : CLI_MODE === 'hourly'
-    ? runHourly()
-    : CLI_MODE === 'export-only'
-      ? runExportOnly()
-      : main()
+  : CLI_MODE === 'hourly' || CLI_MODE === 'hourly-js'
+    ? runHourlyJS()
+    : CLI_MODE === 'hourly-db'
+      ? runHourly()
+      : CLI_MODE === 'full-db'
+        ? main()
+        : CLI_MODE === 'export-only'
+          ? runExportOnly()
+          : runFullJS() // default: full / full-js / 引数なし
 runner.catch((err) => {
   logger.error('fetch', err.message, err.assertFields ?? {})
   process.exit(1)

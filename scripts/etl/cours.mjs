@@ -171,6 +171,32 @@ export function deriveCoursFromTags(db) {
 }
 
 /**
+ * Store 版 deriveCoursFromTags: 各シリーズの第1話タグ（tags 配列の文字列）から
+ * 放送季クールを導出する。
+ * @param {import('./store/store.mjs').Store} store
+ * @param {Function} chronoSort - store.mjs の chronoSort
+ * @returns {Map<number, string>} seriesId → "YYYY-季"
+ */
+export function deriveCoursFromTagsFromStore(store, chronoSort) {
+  const result = new Map()
+  for (const [seriesId, s] of store.series) {
+    if (!s.isAvailable) continue
+    // 最古エピソードを取得（chronoSort）
+    let firstEp = null
+    for (const ep of store.episodes.values()) {
+      if (ep.seriesId !== seriesId) continue
+      if (!firstEp || chronoSort(ep, firstEp) < 0) firstEp = ep
+    }
+    if (!firstEp) continue
+    // tags は string[] - space join して coursFromTags に渡す
+    const tagsStr = (firstEp.tags ?? []).join(' ')
+    const cours = coursFromTags(tagsStr)
+    if (cours) result.set(seriesId, cours)
+  }
+  return result
+}
+
+/**
  * タイトルをスラッグ突合用に正規化（小文字・記号除去）
  */
 export function normalizeTitleForMatch(title) {

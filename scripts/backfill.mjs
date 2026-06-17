@@ -30,6 +30,7 @@ import {
 import { seedAllSeries, mapNvapiEpisodes } from './nico/nvapi.mjs'
 import { exportAll } from './export/export.mjs'
 import { logger } from './lib/logger.mjs'
+import { upsertEpisodes as storeUpsertEps, linkEpisodes as storeLinkEps } from './store/store.mjs'
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '../data')
 const DB_PATH = join(DATA_DIR, 'build.sqlite')
@@ -97,6 +98,49 @@ export async function backfillSeries(db, seriesIds, opts = {}) {
       // この紐付けが無いと既存話のシリーズは 0 話のまま残る（§85 の要修正点）。
       updateEpisodeOrderBatch(
         db,
+        eps.map((e) => ({ contentId: e.contentId, seriesId, episodeNo: e.episodeNo }))
+      )
+    }
+    backfilled++
+    episodes += eps.length
+    perSeries.push({ seriesId, episodes: eps.length })
+  })
+
+  return { processed, skipped, backfilled, episodes, perSeries, emptyResults }
+}
+
+/**
+ * Store 版 backfillSeries: nvapi v2/series から各話を取得して Store に upsert/link する（§85）。
+ * - tags は nvapi が提供しないため既存 tags/tagsCurated は保護される（null → PRESERVE）。
+ * - サムネ/タイムスタンプ同期は呼び出し側で行う。
+ * @param {import('./store/store.mjs').Store} store
+ * @param {number[]} seriesIds
+ * @param {{ dryRun?: boolean }} opts
+ * @returns {Promise<{processed:number,skipped:number,backfilled:number,episodes:number,perSeries:{seriesId:number,episodes:number}[],emptyResults:number[]}>}
+ */
+export async function backfillSeriesFromStore(store, seriesIds, opts = {}) {
+  const { dryRun = false } = opts
+  const now = new Date().toISOString()
+  let backfilled = 0
+  let episodes = 0
+  const perSeries = []
+  const emptyResults = []
+
+  const { processed, skipped } = await seedAllSeries(seriesIds, async (seriesId, data) => {
+    const eps = mapNvapiEpisodes(seriesId, data.items ?? [])
+    if (eps.length === 0) {
+      emptyResults.push(seriesId)
+      return
+    }
+    if (!dryRun) {
+      // upsertEpisodes: viewCounter/counts/thumbnail/startTime 等を更新。tags=null → PRESERVE
+      storeUpsertEps(
+        store,
+        eps.map((e) => ({ ...e, lastUpdated: now }))
+      )
+      // linkEpisodes: seriesId + episodeNo を確定（orphan 話を含む）
+      storeLinkEps(
+        store,
         eps.map((e) => ({ contentId: e.contentId, seriesId, episodeNo: e.episodeNo }))
       )
     }

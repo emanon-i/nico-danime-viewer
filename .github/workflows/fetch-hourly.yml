@@ -64,19 +64,6 @@ jobs:
             cp -r state/. src/data/ 2>/dev/null || true
           fi
 
-      # ── build.sqlite を「daily の完全DBから restore 専用で」復元（§G 縮小ループ遮断）──
-      # hourly は「フルDB上で増分追加するだけ」。過去の痩せた hourly キャッシュを掴んで
-      # それがソース化し縮小が連鎖する事故を断つため、**hourly はキャッシュを保存しない**
-      # （restore 専用）＝書き戻しが無いので daily の完全DBだけが復元対象になる。
-      # daily は `sqlite-daily-<os>-<run_id>` で完全DBを保存する（restore-keys でその系を取得）。
-      # 不完全/未取得なら runHourly の空DB/回帰ガードが export/deploy を skip して痩せを止める。
-      - uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: src/data/build.sqlite
-          key: sqlite-daily-${{ runner.os }}-restore
-          restore-keys: |
-            sqlite-daily-${{ runner.os }}-
-
       # ── Node / pnpm セットアップ ─────────────────────────────────
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:

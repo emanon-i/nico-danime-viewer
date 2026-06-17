@@ -152,3 +152,37 @@ export function resolveRssItems(db) {
   }).length
   logger.info('rss', 'resolution complete', { total: unresolved.length, resolved })
 }
+
+/**
+ * Store 版 resolveRssItems: unresolved/rss_only な RSS アイテムを
+ * store.episodes のタイトルインデックスで contentId に解決する。
+ * @param {import('../store/store.mjs').Store} store
+ */
+export function resolveRssItemsFromStore(store) {
+  // 解決候補: unresolved or rss_only
+  const pending = []
+  for (const item of store.rss.values()) {
+    if (item.resolutionStatus === 'resolved') continue
+    pending.push(item)
+  }
+  if (!pending.length) return
+
+  // episodes からタイトル → contentId インデックスを構築
+  const index = new Map()
+  for (const ep of store.episodes.values()) {
+    if (!ep.title) continue
+    const key = normalizeTitleForMatch(ep.title)
+    if (key) index.set(key, ep.contentId)
+  }
+
+  let resolved = 0
+  for (const item of pending) {
+    const key = normalizeTitleForMatch(item.title ?? '')
+    const contentId = index.get(key) ?? null
+    const status = contentId ? 'resolved' : 'rss_only'
+    item.resolvedContentId = contentId
+    item.resolutionStatus = status
+    if (contentId) resolved++
+  }
+  logger.info('rss', 'resolution complete (store)', { total: pending.length, resolved })
+}

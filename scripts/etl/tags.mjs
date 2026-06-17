@@ -145,3 +145,36 @@ export function deriveSeriesTags(db) {
     tags: [...tagMap.values()],
   }))
 }
+
+/**
+ * Store 版 deriveSeriesTags: エピソードの tags + tagsCurated から各シリーズの
+ * 全エピソードタグを正規化して distinct union し、replaceSeriesTags に渡せる形で返す。
+ * tagsCurated を使って isCurated を復元（M-pre で付与済み）。
+ * @param {import('../store/store.mjs').Store} store
+ * @returns {{ seriesId: number, tags: { name: string, isCurated: boolean }[] }[]}
+ */
+export function deriveSeriesTagsFromStore(store) {
+  // seriesId → Map(name → {name, isCurated})
+  const bySeries = new Map()
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null) continue
+    let acc = bySeries.get(ep.seriesId)
+    if (!acc) {
+      acc = new Map()
+      bySeries.set(ep.seriesId, acc)
+    }
+    const curatedSet = new Set(ep.tagsCurated ?? [])
+    for (const name of ep.tags ?? []) {
+      if (!name) continue
+      const prev = acc.get(name)
+      const isCurated = curatedSet.has(name)
+      if (prev) prev.isCurated = prev.isCurated || isCurated
+      else acc.set(name, { name, isCurated })
+    }
+  }
+
+  return [...bySeries.entries()].map(([seriesId, tagMap]) => ({
+    seriesId,
+    tags: [...tagMap.values()],
+  }))
+}

@@ -106,6 +106,47 @@ export function titleStem(title) {
 }
 
 /**
+ * Store 版 deriveSeriesOverviews: 各シリーズの第1話（chronoSort 最古話）の
+ * description を HTML 除去して返す。
+ * @param {import('../store/store.mjs').Store} store
+ * @param {Function} chronoSort - store.mjs の chronoSort
+ * @returns {{ seriesId: number, descriptionFirst: string }[]}
+ */
+export function deriveSeriesOverviewsFromStore(store, chronoSort) {
+  const result = []
+  for (const [seriesId] of store.series) {
+    const eps = []
+    for (const ep of store.episodes.values()) {
+      if (ep.seriesId === seriesId) eps.push(ep)
+    }
+    if (eps.length === 0) continue
+    eps.sort(chronoSort)
+    const first = eps[0]
+    result.push({
+      seriesId,
+      descriptionFirst: stripHtml(first.description),
+    })
+  }
+  return result
+}
+
+/**
+ * Store 版 getSeriesTagsMap: store.series の tags から seriesId → タグ名[] を返す。
+ * @param {import('../store/store.mjs').Store} store
+ * @returns {Map<number, string[]>}
+ */
+export function getSeriesTagsMapFromStore(store) {
+  const map = new Map()
+  for (const [sid, s] of store.series) {
+    map.set(
+      sid,
+      s.tags.map((t) => t.name)
+    )
+  }
+  return map
+}
+
+/**
  * フランチャイズ（続編/関連シリーズ）束ねキーを決定する（ベストエフォート・§15）。
  * union-find で次のエッジを張り、同一連結成分を 1 フランチャイズとする:
  *  (1) **タイトル語幹**（4 文字以上）が一致するシリーズ同士＝続編の主シグナル
