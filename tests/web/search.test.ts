@@ -4,7 +4,7 @@ import { initHeaderSearch } from '../../web/src/features/shared/search'
 import { renderList } from '../../web/src/features/list/list'
 import type { ListState } from '../../web/src/features/router'
 
-const BASE_STATE: ListState = { q: '', row: '', tag: '', cours: '', sort: 'hot', page: 1 }
+const BASE_STATE: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
 
 describe('initHeaderSearch (F-0027)', () => {
   let wrapper: HTMLDivElement

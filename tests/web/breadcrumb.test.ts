@@ -5,7 +5,7 @@ import type { Screen } from '../../web/src/features/router'
 
 const LIST_SCREEN: Screen = {
   type: 'list',
-  state: { q: '', row: '', tag: '', cours: '', sort: 'hot', page: 1 },
+  state: { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 },
 }
 
 describe('renderBreadcrumb (F-0033)', () => {
@@ -43,7 +43,7 @@ describe('renderBreadcrumb (F-0033)', () => {
   it('test_breadcrumb_reflects_state: tag フィルタが反映される', () => {
     renderBreadcrumb(container, {
       type: 'list',
-      state: { ...LIST_SCREEN.state, tag: '日常' },
+      state: { ...LIST_SCREEN.state, tags: ['日常'] },
     })
     expect(container.querySelector('.breadcrumb-current')?.textContent).toContain('タグ「日常」')
   })

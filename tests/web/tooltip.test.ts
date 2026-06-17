@@ -7,7 +7,7 @@ import type { ListState } from '../../web/src/features/router'
 import { card as createSeriesCard } from '../../web/src/components/card'
 import type { SeriesDetail } from '../../web/src/data/types'
 
-const BASE_STATE: ListState = { q: '', row: '', tag: '', cours: '', sort: 'hot', page: 1 }
+const BASE_STATE: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
 
 const SERIES: SeriesDetail = {
   seriesId: 1,

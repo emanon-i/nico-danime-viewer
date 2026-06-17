@@ -164,6 +164,205 @@ function rangeSlider(opts: {
   return wrap
 }
 
+/**
+ * タグ・トークン入力（オートコンプリート付き）＝§35。
+ * - 確定タグはピル表示・[×]で個別削除。複数タグは AND（router/filter 側）。
+ * - 入力が `#` 始まりでタグモード（候補ドロップダウン）。プレーンテキストは作品名検索(q)。
+ * - キーボード: ↑↓ で候補移動 / Enter で確定 / Esc で閉じる / 空 Backspace で末尾ピル削除。
+ * - role=combobox + listbox（aria-expanded / aria-activedescendant）。
+ * - 候補はクライアントのタグ一覧（出現頻度＝seriesCount 降順）から前方/部分一致で。
+ * - サイドバー選択・適用中バー(§16)とは同じ state.tags を見るため自動同期。
+ */
+function buildTagSearch(
+  state: ListState,
+  tags: Tag[],
+  onNavigate: (next: ListState) => void
+): HTMLElement {
+  const root = document.createElement('div')
+  root.className = 'tag-search'
+
+  const field = document.createElement('div')
+  field.className = 'tag-search-field'
+  root.appendChild(field)
+
+  const makePill = (text: string, aria: string, onRemove: () => void): HTMLElement => {
+    const pill = document.createElement('span')
+    pill.className = 'tag-pill'
+    const label = document.createElement('span')
+    label.className = 'tag-pill-label'
+    label.textContent = text
+    pill.appendChild(label)
+    const x = document.createElement('button')
+    x.type = 'button'
+    x.className = 'tag-pill-x'
+    x.textContent = '×'
+    x.setAttribute('aria-label', `${aria} を外す`)
+    x.addEventListener('click', onRemove)
+    pill.appendChild(x)
+    return pill
+  }
+
+  // ピル: 作品名検索(q) ＋ 選択タグ群
+  if (state.q) {
+    field.appendChild(
+      makePill(`「${state.q}」`, `検索 ${state.q}`, () => onNavigate({ ...state, q: '', page: 1 }))
+    )
+  }
+  for (const t of state.tags) {
+    field.appendChild(
+      makePill(`#${t}`, `タグ ${t}`, () =>
+        onNavigate({ ...state, tags: state.tags.filter((x) => x !== t), page: 1 })
+      )
+    )
+  }
+
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.className = 'tag-search-input'
+  input.autocomplete = 'off'
+  input.setAttribute('role', 'combobox')
+  input.setAttribute('aria-expanded', 'false')
+  input.setAttribute('aria-autocomplete', 'list')
+  input.setAttribute('aria-controls', 'tag-search-listbox')
+  input.setAttribute('aria-label', '作品名で検索、または # でタグを絞り込み')
+  input.placeholder =
+    state.q || state.tags.length > 0 ? 'さらに絞り込む（#タグ可）…' : '作品・#タグで検索…'
+  field.appendChild(input)
+
+  const listbox = document.createElement('ul')
+  listbox.className = 'tag-search-listbox'
+  listbox.id = 'tag-search-listbox'
+  listbox.setAttribute('role', 'listbox')
+  listbox.hidden = true
+  root.appendChild(listbox)
+
+  let options: Tag[] = []
+  let active = -1
+  const optId = (i: number) => `tag-opt-${i}`
+
+  const close = () => {
+    listbox.hidden = true
+    input.setAttribute('aria-expanded', 'false')
+    input.removeAttribute('aria-activedescendant')
+    active = -1
+  }
+
+  const addTag = (name: string) =>
+    onNavigate({
+      ...state,
+      tags: state.tags.includes(name) ? state.tags : [...state.tags, name],
+      page: 1,
+    })
+
+  const setActive = (i: number) => {
+    const items = listbox.querySelectorAll<HTMLElement>('.tag-search-option')
+    items.forEach((el, idx) => {
+      el.classList.toggle('active', idx === i)
+      el.setAttribute('aria-selected', idx === i ? 'true' : 'false')
+    })
+    active = i
+    if (i >= 0 && items[i]) {
+      input.setAttribute('aria-activedescendant', optId(i))
+      items[i].scrollIntoView({ block: 'nearest' })
+    } else {
+      input.removeAttribute('aria-activedescendant')
+    }
+  }
+
+  const renderOptions = (term: string) => {
+    const q = term.toLowerCase().trim()
+    const selected = new Set(state.tags)
+    options = tags
+      .filter((t) => !selected.has(t.name) && t.name.toLowerCase().includes(q))
+      .sort((a, b) => b.seriesCount - a.seriesCount)
+      .slice(0, 10)
+    listbox.innerHTML = ''
+    if (options.length === 0) {
+      close()
+      return
+    }
+    options.forEach((t, i) => {
+      const li = document.createElement('li')
+      li.className = 'tag-search-option'
+      li.id = optId(i)
+      li.setAttribute('role', 'option')
+      li.setAttribute('aria-selected', 'false')
+      const name = document.createElement('span')
+      name.className = 'opt-name'
+      name.textContent = `#${t.name}`
+      const cnt = document.createElement('span')
+      cnt.className = 'opt-count'
+      cnt.textContent = `${t.seriesCount}作品`
+      li.appendChild(name)
+      li.appendChild(cnt)
+      // mousedown（click より先・preventDefault で input の blur を防ぐ）で確定
+      li.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        addTag(t.name)
+      })
+      listbox.appendChild(li)
+    })
+    active = -1
+    listbox.hidden = false
+    input.setAttribute('aria-expanded', 'true')
+  }
+
+  input.addEventListener('input', () => {
+    const v = input.value
+    if (v.startsWith('#')) renderOptions(v.slice(1))
+    else close()
+  })
+
+  input.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown' && !listbox.hidden) {
+      e.preventDefault()
+      setActive(Math.min(active + 1, options.length - 1))
+    } else if (e.key === 'ArrowUp' && !listbox.hidden) {
+      e.preventDefault()
+      setActive(Math.max(active - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (!listbox.hidden && active >= 0 && options[active]) {
+        addTag(options[active].name)
+        return
+      }
+      const v = input.value.trim()
+      if (v.startsWith('#')) {
+        const term = v.slice(1).trim()
+        if (!term) return
+        const exact = tags.find((t) => t.name === term && !state.tags.includes(t.name))
+        if (exact) addTag(exact.name)
+        else if (options[0]) addTag(options[0].name)
+      } else if (v) {
+        onNavigate({ ...state, q: v, page: 1 })
+      }
+    } else if (e.key === 'Escape' && !listbox.hidden) {
+      e.preventDefault()
+      close()
+    } else if (e.key === 'Backspace' && input.value === '') {
+      // 空で Backspace → 末尾ピル（タグ優先、無ければ検索クエリ）を外す
+      if (state.tags.length > 0) {
+        e.preventDefault()
+        onNavigate({ ...state, tags: state.tags.slice(0, -1), page: 1 })
+      } else if (state.q) {
+        e.preventDefault()
+        onNavigate({ ...state, q: '', page: 1 })
+      }
+    }
+  })
+
+  // フィールド余白クリックで入力へフォーカス・blur で候補を閉じる（外側クリック対策）
+  field.addEventListener('click', (e) => {
+    if (e.target === field) input.focus()
+  })
+  input.addEventListener('blur', () => {
+    // option の mousedown は preventDefault でフォーカス維持するため、ここは外側クリック時のみ
+    window.setTimeout(close, 0)
+  })
+
+  return root
+}
+
 /** 一覧画面（検索バー／五十音／フィルタ／グリッド／ページング）を描画する */
 export function renderList(
   container: HTMLElement,
@@ -182,6 +381,8 @@ export function renderList(
     onClearUnwatched?: () => void
     /** 再生時間（離散スナップ・上限なし可）/ 投稿年 のレンジ絞り込み（§23・停止点インデックス方式） */
     sliders?: { duration: SliderSpec; year: SliderSpec }
+    /** タグ・トークン検索の確定時に呼ぶ遷移（§35）。未指定時はプレーン入力にフォールバック */
+    onSearch?: (next: ListState) => void
   }
 ): void {
   const {
@@ -196,20 +397,26 @@ export function renderList(
     onClearFav,
     onClearUnwatched,
     sliders,
+    onSearch,
   } = options
   container.innerHTML = ''
 
-  // ── 検索バー ────────────────────────────────────────────────
+  // ── 検索バー（タグ・トークン入力＝§35）────────────────────────
   const searchBar = document.createElement('div')
   searchBar.className = 'list-search'
   searchBar.dataset.part = 'search'
-  const searchInput = document.createElement('input')
-  searchInput.type = 'search'
-  searchInput.className = 'list-search-input'
-  searchInput.value = state.q
-  searchInput.placeholder = '作品・タグで検索…'
-  searchInput.setAttribute('aria-label', '作品・タグで検索')
-  searchBar.appendChild(searchInput)
+  if (onSearch) {
+    searchBar.appendChild(buildTagSearch(state, data?.tags ?? [], onSearch))
+  } else {
+    // フォールバック（onSearch 未指定）＝従来のプレーン検索入力
+    const searchInput = document.createElement('input')
+    searchInput.type = 'search'
+    searchInput.className = 'list-search-input'
+    searchInput.value = state.q
+    searchInput.placeholder = '作品・タグで検索…'
+    searchInput.setAttribute('aria-label', '作品・タグで検索')
+    searchBar.appendChild(searchInput)
+  }
   container.appendChild(searchBar)
 
   // ── 五十音ボタン ─────────────────────────────────────────────
@@ -290,8 +497,15 @@ export function renderList(
       const li = document.createElement('li')
       li.className = 'filter-tag-li'
       const a = document.createElement('a')
-      a.className = 'filter-tag-item' + (state.tag === tag.name ? ' active' : '')
-      a.href = buildListUrl({ ...state, tag: state.tag === tag.name ? '' : tag.name, page: 1 })
+      const active = state.tags.includes(tag.name)
+      a.className = 'filter-tag-item' + (active ? ' active' : '')
+      // クリックでタグの ON/OFF をトグル（複数選択＝AND・§35）。サイドバー選択と
+      // 検索トークン/適用中バーは同じ state.tags を見るので自動で同期する。
+      a.href = buildListUrl({
+        ...state,
+        tags: active ? state.tags.filter((t) => t !== tag.name) : [...state.tags, tag.name],
+        page: 1,
+      })
       a.textContent = tag.name
       li.appendChild(a)
       return li
@@ -429,7 +643,10 @@ export function renderList(
   }
 
   if (state.q) addLinkChip(`検索「${state.q}」`, { ...state, q: '' })
-  if (state.tag) addLinkChip(`タグ「${state.tag}」`, { ...state, tag: '' })
+  // タグは選択ごとに 1 チップ。[×] はそのタグだけ外す（§35）。
+  for (const t of state.tags) {
+    addLinkChip(`タグ「${t}」`, { ...state, tags: state.tags.filter((x) => x !== t) })
+  }
   if (state.cours) addLinkChip(`クール「${state.cours}」`, { ...state, cours: '' })
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
   if (favFilter) addBtnChip('♥ お気に入り', onClearFav)

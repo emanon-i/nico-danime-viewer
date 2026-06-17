@@ -361,6 +361,7 @@ async function render(): Promise<void> {
         unwatchedFilter = false
         void render()
       },
+      onSearch: (next) => navigate(buildListUrl(next)),
       sliders: {
         duration: {
           name: '再生時間',
@@ -385,14 +386,7 @@ async function render(): Promise<void> {
       },
     })
 
-    const searchInput = app.querySelector<HTMLInputElement>('.list-search-input')
-    searchInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const q = searchInput.value.trim()
-        if (q) navigate(buildListUrl({ ...screen.state, q, page: 1 }))
-      }
-    })
-
+    // タグ・トークン検索（§35）は renderList 内で onSearch 経由で navigate 済み。
     const sortRadios = app.querySelectorAll<HTMLInputElement>('input[name="sort"]')
     sortRadios.forEach((radio) => {
       radio.addEventListener('change', () => {

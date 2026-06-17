@@ -1439,6 +1439,122 @@
     }
   }
 
+  /* ── タグ・トークン検索（§35）──────────────────────────────
+     ピル（確定タグ/検索語）＋入力を 1 つのフィールドに収め、下に候補ドロップダウン。 */
+  .tag-search {
+    position: relative;
+    flex: 1;
+  }
+
+  .tag-search-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    min-height: 2.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    cursor: text;
+
+    &:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--focus-ring);
+    }
+  }
+
+  .tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: 0.15rem var(--sp-1) 0.15rem var(--sp-3);
+    background: color-mix(in oklch, var(--accent) 16%, var(--surface));
+    border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent);
+    border-radius: var(--r-full);
+    font-size: var(--text-l4);
+    color: var(--text);
+    max-width: 14rem;
+  }
+
+  .tag-pill-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tag-pill-x {
+    display: inline-grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: var(--r-full);
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    flex-shrink: 0;
+
+    &:hover {
+      color: var(--text);
+      background: color-mix(in oklch, var(--text) 12%, transparent);
+    }
+  }
+
+  .tag-search-input {
+    flex: 1;
+    min-width: 8rem;
+    border: none;
+    background: transparent;
+    padding: var(--sp-1) 0;
+    color: var(--text);
+    font-size: var(--text-l3);
+
+    &:focus {
+      outline: none;
+    }
+    &::placeholder {
+      color: var(--text-muted);
+    }
+  }
+
+  .tag-search-listbox {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + var(--sp-1));
+    left: 0;
+    right: 0;
+    max-height: 16rem;
+    overflow-y: auto;
+    padding: var(--sp-1);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.18));
+    list-style: none;
+  }
+
+  .tag-search-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font-size: var(--text-l3);
+
+    & .opt-count {
+      color: var(--text-muted);
+      font-size: var(--text-l4);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+    &:hover,
+    &.active {
+      background: var(--surface-2);
+    }
+  }
+
   /* 本体: 左サイドバー（フィルタ）＋右グリッド（デスクトップ常駐） */
   .list-body {
     display: grid;

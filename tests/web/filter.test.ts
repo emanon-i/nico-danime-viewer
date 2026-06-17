@@ -24,7 +24,7 @@ const BASE_WORK: Work = {
   relatedSeries: [],
 }
 
-const BASE_STATE: ListState = { q: '', row: '', tag: '', cours: '', sort: 'hot', page: 1 }
+const BASE_STATE: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
 
 const BASE_RANKING: RankingJson = {
   lastUpdated: '2026-06-16T00:00:00Z',
@@ -92,7 +92,7 @@ describe('filterWorks (F-0028/0029/0030)', () => {
   })
 
   it('test_tag_filter: タグ絞りが機能する', () => {
-    const result = filterWorks(WORKS, { ...BASE_STATE, tag: '日常' })
+    const result = filterWorks(WORKS, { ...BASE_STATE, tags: ['日常'] })
     expect(result).toHaveLength(2)
     expect(result.map((w) => w.seriesId).sort()).toEqual([1, 3])
   })
@@ -121,7 +121,7 @@ describe('filterWorks (F-0028/0029/0030)', () => {
   })
 
   it('test_filter_sort_combination: 複数フィルタを組み合わせられる', () => {
-    const result = filterWorks(WORKS, { ...BASE_STATE, row: 'は', tag: '日常' })
+    const result = filterWorks(WORKS, { ...BASE_STATE, row: 'は', tags: ['日常'] })
     expect(result).toHaveLength(1)
     expect(result[0].seriesId).toBe(3)
   })

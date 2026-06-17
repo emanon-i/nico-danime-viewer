@@ -3,7 +3,8 @@ export type SortKey = 'hot' | 'views' | 'new' | 'kana' | 'comments'
 export interface ListState {
   q: string
   row: string
-  tag: string
+  /** 選択中タグ（複数＝AND）。URL では `tag` をカンマ区切りで保持（§35）。 */
+  tags: string[]
   cours: string
   sort: SortKey
   page: number
@@ -34,7 +35,10 @@ export function parseScreen(params: URLSearchParams): Screen {
       state: {
         q: params.get('q') ?? '',
         row: params.get('row') ?? '',
-        tag: params.get('tag') ?? '',
+        tags: (params.get('tag') ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
         cours: params.get('cours') ?? '',
         sort,
         page: Math.max(1, parseInt(params.get('page') ?? '1', 10)),
@@ -49,7 +53,7 @@ export function buildListUrl(state: Partial<ListState>): string {
   const p = new URLSearchParams()
   if (state.q) p.set('q', state.q)
   if (state.row) p.set('row', state.row)
-  if (state.tag) p.set('tag', state.tag)
+  if (state.tags && state.tags.length > 0) p.set('tag', state.tags.join(','))
   if (state.cours) p.set('cours', state.cours)
   if (state.sort && state.sort !== 'hot') p.set('sort', state.sort)
   if (state.page && state.page > 1) p.set('page', String(state.page))

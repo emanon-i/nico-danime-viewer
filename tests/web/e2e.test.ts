@@ -175,7 +175,7 @@ describe('F-0047: 総合/E2E テスト', () => {
     })
 
     it('一覧画面が作品グリッドを描画する', () => {
-      const state: ListState = { q: '', row: '', tag: '', cours: '', sort: 'hot', page: 1 }
+      const state: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
       renderList(container, {
         state,
         works: FIXTURE_WORKS,
@@ -210,7 +210,7 @@ describe('F-0047: 総合/E2E テスト', () => {
       const original: ListState = {
         q: 'テスト作品',
         row: '',
-        tag: '',
+        tags: [],
         cours: '',
         sort: 'hot',
         page: 1,
@@ -228,7 +228,7 @@ describe('F-0047: 総合/E2E テスト', () => {
       const original: ListState = {
         q: '',
         row: 'あ',
-        tag: '日常',
+        tags: ['日常'],
         cours: '2022-秋',
         sort: 'views',
         page: 2,
@@ -239,7 +239,7 @@ describe('F-0047: 総合/E2E テスト', () => {
       expect(screen.type).toBe('list')
       if (screen.type === 'list') {
         expect(screen.state.row).toBe('あ')
-        expect(screen.state.tag).toBe('日常')
+        expect(screen.state.tags).toEqual(['日常'])
         expect(screen.state.cours).toBe('2022-秋')
         expect(screen.state.sort).toBe('views')
         expect(screen.state.page).toBe(2)
@@ -289,7 +289,7 @@ describe('F-0047: 総合/E2E テスト', () => {
       const state: ListState = {
         q: 'ヒットしない検索',
         row: '',
-        tag: '',
+        tags: [],
         cours: '',
         sort: 'hot',
         page: 1,

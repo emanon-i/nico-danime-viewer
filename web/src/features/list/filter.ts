@@ -48,8 +48,9 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
     result = result.filter((w) => colKeyMatchesRow(w.colKey, state.row))
   }
 
-  if (state.tag) {
-    result = result.filter((w) => w.tags.includes(state.tag))
+  if (state.tags.length > 0) {
+    // 複数タグは AND（すべて含むものだけ）＝§35
+    result = result.filter((w) => state.tags.every((t) => w.tags.includes(t)))
   }
 
   if (state.cours) {

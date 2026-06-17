@@ -9,7 +9,7 @@ describe('parseScreen (F-0022)', () => {
     expect(screen.type).toBe('list')
     if (screen.type !== 'list') return
     expect(screen.state.q).toBe('テスト')
-    expect(screen.state.tag).toBe('日常')
+    expect(screen.state.tags).toEqual(['日常'])
     expect(screen.state.cours).toBe('2026春')
     expect(screen.state.sort).toBe('views')
     expect(screen.state.page).toBe(2)
@@ -58,7 +58,7 @@ describe('parseScreen (F-0022)', () => {
 
 describe('buildListUrl (F-0022)', () => {
   it('状態を URL クエリに変換する', () => {
-    const url = buildListUrl({ q: 'テスト', tag: '日常', page: 2 })
+    const url = buildListUrl({ q: 'テスト', tags: ['日常'], page: 2 })
     const params = new URLSearchParams(url.slice(1))
     expect(params.get('q')).toBe('テスト')
     expect(params.get('tag')).toBe('日常')
@@ -77,7 +77,7 @@ describe('test_history_navigation (F-0022)', () => {
   it('buildListUrl → parseScreen でラウンドトリップが成立する', () => {
     const state: ListState = {
       q: 'foo',
-      tag: 'bar',
+      tags: ['bar'],
       cours: '2026春',
       sort: 'views',
       page: 2,
@@ -88,7 +88,7 @@ describe('test_history_navigation (F-0022)', () => {
     expect(restored.type).toBe('list')
     if (restored.type !== 'list') return
     expect(restored.state.q).toBe(state.q)
-    expect(restored.state.tag).toBe(state.tag)
+    expect(restored.state.tags).toEqual(state.tags)
     expect(restored.state.cours).toBe(state.cours)
     expect(restored.state.sort).toBe(state.sort)
     expect(restored.state.page).toBe(state.page)
