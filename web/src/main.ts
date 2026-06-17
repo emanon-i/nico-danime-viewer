@@ -341,16 +341,20 @@ async function render(): Promise<void> {
     })
 
     // 投稿年の停止点。両端に「下限なし／上限なし」（§80・再生時間と同作法）。
-    // 中央はデータの最小〜最大年、10 年ごとに目盛り。
+    // 中央の目盛りは「5 年刻み」だが、両端の開放端ラベル（なし/∞）と横方向で重ならないよう
+    // **端に隣接する年（minYear/maxYear の直近）には目盛りを出さない**（§88 横方向衝突の解消）。
+    // 正確な下限〜上限は readout（「2015 〜 2020」等）に出るので中間目盛りは間引いて可。
     const years = allWorks.map(workYear).filter((y): y is number => y != null)
     const minYear = years.length > 0 ? Math.min(...years) : 2000
     const maxYear = years.length > 0 ? Math.max(...years) : new Date().getFullYear()
     const YEAR_STOPS: RangeStop[] = [{ value: -Infinity, label: '下限なし', tick: 'なし' }]
     for (let y = minYear; y <= maxYear; y++) {
+      // 端から 1 年以内（なし/∞ に隣接）は目盛りラベルを出さない＝衝突回避
+      const interior = y > minYear + 1 && y < maxYear - 1
       YEAR_STOPS.push({
         value: y,
         label: `${y}`,
-        tick: y === minYear || y === maxYear || y % 10 === 0 ? `${y}` : undefined,
+        tick: interior && y % 5 === 0 ? `${y}` : undefined,
       })
     }
     YEAR_STOPS.push({ value: Infinity, label: '上限なし', tick: '∞' })
