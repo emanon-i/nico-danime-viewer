@@ -1095,16 +1095,31 @@
       gap: var(--sp-1);
     }
 
-    & > li > strong {
+    /* 列ヘッダ＝ラベル（左）── すべて見る（右端）の両端揃え（§73 微修正・TOP10 と同作法） */
+    & > li > .recent-col-head {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-3);
       height: 2rem; /* 両列の見出しを同高にして 1 行目を揃える */
-      font-size: var(--text-l4);
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      color: var(--text-muted);
       border-bottom: 1px solid var(--border);
       margin-bottom: var(--sp-1);
+
+      & > strong {
+        font-size: var(--text-l4);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--text-muted);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      & > .see-all {
+        margin-top: 0; /* 見出し行内では上マージン不要 */
+        flex-shrink: 0;
+      }
     }
   }
 
