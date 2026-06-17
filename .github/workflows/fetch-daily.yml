@@ -1,6 +1,7 @@
 # F-0046: 日次フルフェッチ＆Pages デプロイ ワークフロー
-# 実行タイミング: JST 05:00（UTC 20:00）/ 手動起動
-# 起動条件: ユーザーの GO 後に有効化（このフェーズでは cron を有効にしない）
+# 実行タイミング: JST 06:00（UTC 21:00）/ 手動起動
+# ※ snapshot 索引は AM5:00 頃に更新されるため、5:00 ジャストより 6:00 の方が鮮度が良い
+# 起動条件: M7 完走確認後に有効化
 #
 # 状態の真実源: state ブランチ（series/*.json / state/*.json を永続化）
 # SQLite は廃止（PH-0008 M5）。正本データは純 JSON + メモリ JS ETL。
@@ -10,8 +11,8 @@ name: Daily Full Fetch & Deploy
 
 on:
   schedule:
-    # UTC 20:00 = JST 05:00（閑散帯）。発見系＝日次フル（version ゲート・period 全季・503 バックオフ）。
-    - cron: '0 20 * * *'
+    # UTC 21:00 = JST 06:00（snapshot 索引更新完了後）。発見系＝日次フル（version ゲート・period 全季・503 バックオフ）。
+    - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
       mode:
