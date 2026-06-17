@@ -58,9 +58,9 @@
 ### 1.3 データストア
 
 - **実行時（配信）のデータ層＝静的 JSON ファイル（`data/*.json`）。** 常時稼働 DB・サーバは持たない。
-- **ビルド/CI 時の加工＝SQLite（ファイル DB・サーバ無し）**: 取得結果を SQLite に入れ、**DB 側で**増分 upsert・ランキング/勢い集計・タグ正規化（dアニメ 接頭/接尾）・フランチャイズ束ね・period 由来クール結合を行い、用途別 JSON に export する。SQLite は**中間生成物**（再生成可能）。**状態（DB・`prev_view_counter`・HWM）の真実源は専用 artifact もしくは state ブランチ**、`actions/cache` は高速化フォールバック・状態書き込みは単一 state-writer の concurrency group（詳細は [`db-design.md`](db-design.md) §7）。**スキーマ・インデックス・UPSERT/delta・PRAGMA・2 ジョブフローは [`db-design.md`](db-design.md)**、全体のデータフローは [`dataflow.md`](dataflow.md)。
+- **ビルド/CI 時の加工＝SQLite（ファイル DB・サーバ無し）**: 取得結果を SQLite に入れ、**DB 側で**増分 upsert・ランキング/勢い集計・タグ正規化（dアニメ 接頭/接尾）・フランチャイズ束ね（タイトル語幹＋`〜シリーズ` タグの union-find）・クール結合（タグ導出主源＋programlist/period 補完）を行い、用途別 JSON に export する。SQLite は**中間生成物**（再生成可能）。**状態（DB・`prev_view_counter`・HWM）の真実源は専用 artifact もしくは state ブランチ**、`actions/cache` は高速化フォールバック・状態書き込みは単一 state-writer の concurrency group（詳細は [`db-design.md`](db-design.md) §7）。**スキーマ・インデックス・UPSERT/delta・PRAGMA・2 ジョブフローは [`db-design.md`](db-design.md)**、全体のデータフローは [`dataflow.md`](dataflow.md)。
 - **ユーザー状態（お気に入り/見た）＝ブラウザの localStorage**（「id＋フラグ」程度の小さな JSON・クライアント側・サーバに出さない・配信層とは別物）。大規模化する場合は IndexedDB を再検討。
-- **export メタ**: 各 JSON に**最終更新時刻**を含める（ヘッダ ⚙ 設定/情報モーダルの「データ最終更新」表示用。詳細は [`dataflow.md`](dataflow.md)）。
+- **export メタ**: 各 JSON に**最終更新時刻**を含める（全ページ固定フッターの「データ最終更新」表示用。詳細は [`dataflow.md`](dataflow.md)）。
 - 増分取得の cursor（新着の最終 id、snapshot の最大 `startTime` 等）は SQLite／状態ファイルで保持（§2.5）。
 - 選定理由: 読み取り専用配信は静的 JSON で十分。加工だけ SQLite を使い、常時稼働 DB・サーバは持たない。生成物はコミットせず再生成可能。
 
