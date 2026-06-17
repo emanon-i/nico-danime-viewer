@@ -22,12 +22,30 @@ export function colKeyMatchesRow(colKey: string | null, row: string): boolean {
   return colKey.trim() === row
 }
 
+const SEASONS = ['冬', '春', '夏', '秋'] as const
+
+function seasonIndex(month: number): number {
+  return month <= 3 ? 0 : month <= 6 ? 1 : month <= 9 ? 2 : 3
+}
+
 export function currentCoursLabel(): string {
   const now = new Date()
+  return `${now.getFullYear()}-${SEASONS[seasonIndex(now.getMonth() + 1)]}`
+}
+
+/** 今期の 1 つ前のクール（冬→前年秋にロールオーバー）＝§50 「前期」。 */
+export function previousCoursLabel(): string {
+  const now = new Date()
   const year = now.getFullYear()
-  const month = now.getMonth() + 1
-  const season = month <= 3 ? '冬' : month <= 6 ? '春' : month <= 9 ? '夏' : '秋'
-  return `${year}-${season}`
+  const si = seasonIndex(now.getMonth() + 1)
+  return si === 0 ? `${year - 1}-${SEASONS[3]}` : `${year}-${SEASONS[si - 1]}`
+}
+
+/** クール keyword（current/previous）を実ラベルに解決する。それ以外はそのまま。 */
+export function resolveCoursLabel(cours: string): string {
+  if (cours === 'current') return currentCoursLabel()
+  if (cours === 'previous') return previousCoursLabel()
+  return cours
 }
 
 export interface FilterOpts {
@@ -55,7 +73,7 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
   }
 
   if (state.cours) {
-    const label = state.cours === 'current' ? currentCoursLabel() : state.cours
+    const label = resolveCoursLabel(state.cours)
     result = result.filter((w) => w.cours === label)
   }
 
@@ -103,7 +121,14 @@ function sortWorksDesc(
     })
   }
   if (sort === 'new') {
-    return [...works].sort((a, b) => b.seriesId - a.seriesId)
+    // 新着＝各シリーズの「最新話の投稿時刻」(latestAt = MAX(episode startTime)) 降順（§54）。
+    // カード表示の日付（cardMetric の latestAt）とソート基準を一致させる。
+    const t = (w: Work): number => {
+      const v = w.latestAt ?? w.firstAt
+      const ms = v ? Date.parse(v) : NaN
+      return Number.isNaN(ms) ? -Infinity : ms
+    }
+    return [...works].sort((a, b) => t(b) - t(a) || b.seriesId - a.seriesId)
   }
   if (sort === 'comments') {
     return [...works].sort(

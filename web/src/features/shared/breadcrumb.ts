@@ -5,6 +5,7 @@ function listStateLabel(state: ListState): string {
   if (state.q) return `検索「${state.q}」`
   if (state.tags.length > 0) return `タグ「${state.tags.join('・')}」`
   if (state.cours === 'current') return '今期'
+  if (state.cours === 'previous') return '前期'
   if (state.cours) return `クール「${state.cours}」`
   if (state.sort === 'views') return '人気TOP'
   if (state.sort === 'new') return '新着'

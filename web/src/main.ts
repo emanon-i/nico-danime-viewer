@@ -257,6 +257,10 @@ async function render(): Promise<void> {
     wireHeaderControls()
     wireCards(app)
   } else if (screen.type === 'list') {
+    // クイックアクセス「お気に入り」からの遷移（?fav=1）でお気に入りフィルタを有効化（§50）。
+    // 以後はメモリ状態（チェックボックス/×）が引き継ぐ。
+    if (params.get('fav') === '1') favFilter = true
+
     // 共通ヘッダ（banner）＋パンくず（nav）＋ main（content）
     app.appendChild(buildHeader({ heroSearchToggle: false }))
 

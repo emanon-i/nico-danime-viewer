@@ -278,7 +278,7 @@ export function exportNew(db, outDir, lastUpdated) {
  * 全シリーズを 1 ファイルにまとめると JSON.stringify の V8 文字列長上限を超えるため
  * シリーズ単位で個別ファイルに出力する
  */
-function exportSeries(db, outDir) {
+export function exportSeries(db, outDir) {
   // タグを事前に全体マップ化（タグ行数は数万行程度でメモリに収まる）
   const tagsBySeriesId = new Map()
   for (const row of db
@@ -314,7 +314,7 @@ function exportSeries(db, outDir) {
   // エピソードはシリーズ単位で取得（全件一括ロードを避ける）
   const epStmt = db.prepare(
     `SELECT content_id, episode_no, title, view_counter, comment_counter, mylist_counter,
-            length_seconds, start_time, thumbnail_url
+            length_seconds, start_time, thumbnail_url, description
      FROM episodes WHERE series_id = ?
      ORDER BY COALESCE(episode_no, 9999), start_time`
   )
@@ -350,6 +350,7 @@ function exportSeries(db, outDir) {
         lengthSeconds: ep.length_seconds ?? null,
         startTime: ep.start_time,
         thumbnailUrl: ep.thumbnail_url,
+        description: ep.description ?? null,
       })),
     }
     writeFileSync(join(seriesDir, `${s.series_id}.json`), JSON.stringify(detail), 'utf-8')

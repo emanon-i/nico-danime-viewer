@@ -115,6 +115,14 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
     dmeta.appendChild(metaSpan({ icon: 'film', value: dur, label: `再生時間 ${dur}` }))
   }
   detail.appendChild(dmeta)
+  // 各話あらすじ（あれば・§51）。メタの下に読みやすく。
+  const desc = ep.description?.trim()
+  if (desc) {
+    const p = document.createElement('p')
+    p.className = 'episode-detail-desc'
+    p.textContent = desc
+    detail.appendChild(p)
+  }
   row.appendChild(detail)
 
   main.addEventListener('click', () => {

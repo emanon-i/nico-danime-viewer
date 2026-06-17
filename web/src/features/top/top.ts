@@ -294,8 +294,10 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
     <nav class="quick-access" data-section="quick-access" aria-label="クイックアクセス">
       <div class="quick-row quick-row-primary">
         <a href="?cours=current&amp;sort=hot" class="quick-btn">今期</a>
+        <a href="?cours=previous&amp;sort=hot" class="quick-btn">前期</a>
         <a href="?sort=views" class="quick-btn">人気</a>
         <a href="?sort=hot" class="quick-btn">Hot</a>
+        <a href="?screen=list&amp;fav=1" class="quick-btn">お気に入り</a>
       </div>
       <div class="quick-marquee" aria-label="タグから探す">
         <div class="quick-marquee-track"></div>

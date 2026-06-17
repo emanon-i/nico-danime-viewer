@@ -661,7 +661,15 @@ export function renderList(
   for (const t of state.tags) {
     addLinkChip(`タグ「${t}」`, { ...state, tags: state.tags.filter((x) => x !== t) })
   }
-  if (state.cours) addLinkChip(`クール「${state.cours}」`, { ...state, cours: '' })
+  if (state.cours) {
+    const coursLabel =
+      state.cours === 'current'
+        ? '今期'
+        : state.cours === 'previous'
+          ? '前期'
+          : `クール「${state.cours}」`
+    addLinkChip(coursLabel, { ...state, cours: '' })
+  }
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
   if (favFilter) addBtnChip('♥ お気に入り', onClearFav)
   if (unwatchedFilter) addBtnChip('✓ 未視聴', onClearUnwatched)

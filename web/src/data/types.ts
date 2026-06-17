@@ -122,6 +122,8 @@ export interface SeriesEpisode {
   lengthSeconds?: number | null
   startTime: string | null
   thumbnailUrl: string | null
+  /** 各話あらすじ（episodes.description・ドロワーに表示＝§51。旧 JSON では欠落） */
+  description?: string | null
 }
 
 export interface SeriesDetail {

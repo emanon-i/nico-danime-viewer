@@ -448,6 +448,7 @@
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
+    justify-content: safe center; /* 中央寄せ（§50）。はみ出す時は端が切れない safe */
     gap: var(--sp-2);
     /* はみ出しは横スワイプ（可視スクロールバー非表示） */
     overflow-x: auto;
@@ -880,7 +881,12 @@
 
   .card-caption {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    /* クラスタ間は十分な余白、クラスタ内(アイコン↔数字)は .meta の gap で近接（§52）。
+       塊ごとの区切りを明確にする。 */
+    column-gap: var(--sp-3);
+    row-gap: var(--sp-1);
     padding-inline: var(--sp-1);
 
     .meta {
@@ -2381,13 +2387,25 @@
     /* アコーディオン詳細（サムネ＋メタ） */
     .episode-detail {
       display: flex;
-      gap: var(--sp-4);
+      flex-wrap: wrap;
+      gap: var(--sp-3) var(--sp-4);
       align-items: flex-start;
       padding: 0 0 var(--sp-4) calc(2.5rem + var(--sp-3));
 
       &[hidden] {
         display: none;
       }
+    }
+
+    /* 各話あらすじ（§51）。メタ行の下に全幅で読みやすく。 */
+    .episode-detail-desc {
+      flex-basis: 100%;
+      margin: 0;
+      max-width: 60ch;
+      font-size: var(--text-l4);
+      line-height: 1.7;
+      color: var(--text-muted);
+      white-space: pre-wrap;
     }
 
     .episode-detail-thumb {

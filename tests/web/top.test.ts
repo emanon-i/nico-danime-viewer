@@ -101,11 +101,16 @@ describe('renderTop (F-0023)', () => {
     expect(heroInput).not.toBeNull()
   })
 
-  it('クイックアクセスは厳選3固定（今期/人気/Hot）＋ランダムタグ×2（データ時）', () => {
-    // データなし時は固定3ボタンのみ（ランダムタグはデータ供給時に追加）
+  it('クイックアクセスは固定5ボタン（今期/前期/人気/Hot/お気に入り）＝§50', () => {
     const btns = container.querySelectorAll('[data-section="quick-access"] .quick-btn')
-    expect(btns.length).toBe(3)
-    expect(Array.from(btns).map((b) => b.textContent)).toEqual(['今期', '人気', 'Hot'])
+    expect(btns.length).toBe(5)
+    expect(Array.from(btns).map((b) => b.textContent)).toEqual([
+      '今期',
+      '前期',
+      '人気',
+      'Hot',
+      'お気に入り',
+    ])
   })
 
   it('クイックアクセスは nav（サイトナビゲーション・ランドマーク）である', () => {
