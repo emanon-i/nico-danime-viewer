@@ -758,3 +758,17 @@ export function hiResThumb(url: string | null): string {
 | 47  | **`data:font` の大量失敗** → Vite の data URI インライン化を無効化（`assetsInlineLimit:0`）で全 woff2 を self ファイル化。CSP に `font-src 'self'` 明示                                   | `vite.config.ts`／`web/index.html`（CSP）。内蔵 CSS の `data:font` 46→0・実フォント適用・CSP 違反ゼロを確認                       |
 
 > **ピル方針(§49)** は検索トークン/サイドバータグ/クールチップ等すべてに統一適用。`min(20ch,100%)` で「20 文字程度まで全表示・超過は省略・列(100%)も超えない」を 1 ルールで担保。**ツールチップ**は単一 role=tooltip 要素を使い、表示中のみ aria-describedby で結ぶ。位置は `position:fixed`＋CSSOM 指定（CSP の style-src 'self' を維持）。**フォント**は self-host が必須（厳格 CSP では `data:` フォントは font-src に弾かれる）。
+
+## 24. 公開後フィードバック反映（v1.5・クイックアクセス/各話あらすじ/メタ間隔/新着是正）
+
+> **実装状況** 【実装済】。データ追加は per-series JSON の `episodes[].description`（build.sqlite から再 export・size 53M→168M）。
+
+| #   | 指摘 → 決定                                                                                                                                         | 実装                                                                                                                                                                                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 50  | クイックアクセスを**中央寄せ**＋**「前期」「お気に入り」追加**（今期/前期/人気/Hot/お気に入り）。前期＝前クール、お気に入り＝お気に入りフィルタ起動 | `top.ts`（`cours=previous`/`?fav=1`）／`filter.ts`（`previousCoursLabel`/`resolveCoursLabel`）／`main.ts`（fav=1 同期）／`breadcrumb.ts`・applied で「今期/前期」表示／CSS `justify-content: safe center` |
+| 51  | シリーズ詳細の各話ドロワーに**各話あらすじ**（episodes.description）を表示                                                                          | `export.mjs` `exportSeries`（description 追加）／`detail.ts` `.episode-detail-desc`／`types.ts`                                                                                                           |
+| 52  | カード下メタの**クラスタ間隔**を調整（アイコン↔数字は近接・塊間は十分な余白）                                                                       | CSS `.card-caption{column-gap:sp-3; row-gap:sp-1}`（内部 `.meta{gap:sp-1}`）                                                                                                                              |
+| 53  | カードに出す**日付の正体を特定** → `latestAt`（＝各シリーズの最新話の投稿時刻 MAX(episode startTime)）                                              | `cardMetric`（new 時 `[clock] formatRelativeTime(latestAt)`）                                                                                                                                             |
+| 54  | **「新着」順が実際に新着でない** → `seriesId` 順をやめ **latestAt 降順**に。表示日付(§53)とソート基準を一致                                         | `filter.ts` sortWorks `new`（latestAt 降順・タイブレーク seriesId）。latestAt は既存（ETL 追加不要）                                                                                                      |
+
+> **前期**は `cours=previous` keyword を `resolveCoursLabel` で実ラベル化（冬→前年秋ロールオーバー）。**お気に入り**は `?fav=1` で `favFilter` を起動し以後はメモリ状態が引き継ぐ（fav は従来どおり URL 非再現）。**新着(§54)** は latestAt（最新話 startTime の MAX・works.json 既存）で並べ、カードの日付表示と一致。**各話あらすじ(§51)** で per-series JSON が約 3 倍（最大 ~518KB/件）になるが、詳細表示時のみオンデマンド読込。
