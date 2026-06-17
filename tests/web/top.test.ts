@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { renderTop } from '../../web/src/features/top/top'
 import { card as createSeriesCard } from '../../web/src/components/card'
 import type { TopData } from '../../web/src/features/top/top'
-import type { RankingEntry, NewItem, Work } from '../../web/src/data/types'
+import type { RankingEntry, Work } from '../../web/src/data/types'
 
 const POPULAR_10: RankingEntry[] = Array.from({ length: 12 }, (_, i) => ({
   seriesId: i + 1,
@@ -26,28 +26,19 @@ const NEW_SERIES: Work[] = Array.from({ length: 3 }, (_, i) => ({
   relatedSeries: [],
 }))
 
-const NEW_EPISODES: NewItem[] = [
-  {
-    watchId: 'w1',
-    title: '最新話A',
-    pubDate: '2026-06-16T00:00:00Z',
-    resolvedContentId: 'so123',
-    resolutionStatus: 'resolved',
-    thumbnailUrl: 'https://nicovideo.cdn.nimg.jp/thumbnails/123/123.456',
-    episodeNo: 11,
-    viewCounter: 132,
-  },
-  {
-    watchId: 'w2',
-    title: '最新話B（未解決）',
-    pubDate: '2026-06-15T00:00:00Z',
-    resolvedContentId: null,
-    resolutionStatus: 'rss_only',
-    thumbnailUrl: null,
-    episodeNo: null,
-    viewCounter: null,
-  },
-]
+// 最近更新のあったシリーズ（§73・別列）
+const UPDATED_SERIES: Work[] = Array.from({ length: 3 }, (_, i) => ({
+  seriesId: 200 + i,
+  title: `更新シリーズ${i + 1}`,
+  thumbnailUrl: null,
+  descriptionFirst: null,
+  tags: [],
+  cours: null,
+  franchiseKey: null,
+  colKey: null,
+  episodeCount: 5 + i,
+  relatedSeries: [],
+}))
 
 const SAMPLE_DATA: TopData = {
   popular: POPULAR_10,
@@ -60,7 +51,7 @@ const SAMPLE_DATA: TopData = {
   })),
   cours: [{ cours: '2026-春', seriesIds: [1, 2, 3] }],
   newSeries: NEW_SERIES,
-  newEpisodes: NEW_EPISODES,
+  updatedSeries: UPDATED_SERIES,
 }
 
 describe('renderTop (F-0023)', () => {
@@ -222,87 +213,48 @@ describe('renderTop with data (F-0032)', () => {
     expect(cards[0].getAttribute('data-series-id')).toBe('1')
   })
 
-  it('test_new_two_kinds: 新着セクションに新着シリーズと最新の動画の2系統が出る', () => {
+  it('test_new_two_kinds: 新着セクションに「新規シリーズ」と「最近更新」の2列が出る（§73）', () => {
     renderTop(container, SAMPLE_DATA)
     const recent = container.querySelector('[data-section="recent"]')
     expect(recent?.querySelector('[data-subsection="new-series"]')).not.toBeNull()
-    expect(recent?.querySelector('[data-subsection="new-episodes"]')).not.toBeNull()
+    expect(recent?.querySelector('[data-subsection="updated-series"]')).not.toBeNull()
+    // 旧「最新の動画（個別エピソード）」列は廃止（§73/§74）
+    expect(recent?.querySelector('[data-subsection="new-episodes"]')).toBeNull()
   })
 
-  it('最新の動画は resolved のみ表示する', () => {
+  it('両列とも各列に「すべて見る」が1つずつ・別ソートへ飛ぶ（§73）', () => {
     renderTop(container, SAMPLE_DATA)
-    const epSec = container.querySelector('[data-subsection="new-episodes"]')
-    // 未解決(rss_only)は除外されるので 1件のみ
-    const items = epSec?.querySelectorAll('.recent-item')
-    expect(items?.length).toBe(1)
+    const newCol = container.querySelector('[data-subsection="new-series"]')
+    const updCol = container.querySelector('[data-subsection="updated-series"]')
+    // 新規→?sort=created / 最近更新→?sort=new
+    expect(newCol?.querySelector<HTMLAnchorElement>('.see-all')?.getAttribute('href')).toBe(
+      '?sort=created'
+    )
+    expect(updCol?.querySelector<HTMLAnchorElement>('.see-all')?.getAttribute('href')).toBe(
+      '?sort=new'
+    )
   })
 
-  it('最新の動画のサムネが thumbnailUrl から描画される（.L 昇格込み）', () => {
-    renderTop(container, SAMPLE_DATA)
-    const epSec = container.querySelector('[data-subsection="new-episodes"]')
-    const img = epSec?.querySelector<HTMLImageElement>('.recent-item .list-row-thumb img')
-    expect(img).not.toBeNull()
-    // 素サムネ URL は .L へ昇格される
-    expect(img?.getAttribute('src')).toBe('https://nicovideo.cdn.nimg.jp/thumbnails/123/123.456.L')
-  })
-
-  it('新着シリーズ行はシリーズ型（kind=series・[film]N話・本体=詳細・↗ で公式＝§24）', () => {
+  it('新規シリーズ列はシリーズ型（kind=series・[film]N話・本体=詳細・↗ で公式＝§24/§73）', () => {
     renderTop(container, SAMPLE_DATA)
     const row = container.querySelector('[data-subsection="new-series"] .recent-item.list-row')
     expect(row?.getAttribute('data-kind')).toBe('series')
     expect(row?.querySelector('.list-row-badge')?.textContent).toContain('シリーズ')
-    // メタはアイコン圧縮（[film]12話・「全」は省く＝§8.2）
     expect(row?.querySelector('.list-row-meta')?.textContent).toBe('12話')
-    expect(row?.querySelector('.list-row-meta .meta svg')).not.toBeNull()
-    // §24: 新着シリーズは本体クリック＝うちの詳細・↗ で公式シリーズ（外部）
     const body = row?.querySelector<HTMLAnchorElement>('.list-row-body')
     expect(body?.getAttribute('href')).toBe('?series=100')
     const ext = row?.querySelector<HTMLAnchorElement>('.list-row-external')
     expect(ext?.getAttribute('href')).toBe('https://www.nicovideo.jp/series/100')
-    expect(ext?.getAttribute('rel')).toContain('noopener')
   })
 
-  it('最新の動画行は各話型（kind=episode・第N話・本体が外部 watch・↗ なし）', () => {
+  it('最近更新列もシリーズ型（kind=series・本体=詳細・↗ で公式＝§73）', () => {
     renderTop(container, SAMPLE_DATA)
-    const row = container.querySelector('[data-subsection="new-episodes"] .recent-item.list-row')
-    expect(row?.getAttribute('data-kind')).toBe('episode')
-    expect(row?.querySelector('.list-row-badge')?.textContent).toBe('第11話')
-    // メタは [clock]投稿時間（強調）＋[play]再生数（アイコン圧縮・「再生」語は省く＝§8.2）
-    expect(row?.querySelector('.list-row-meta')?.textContent).toContain('132')
-    expect(row?.querySelector('.list-row-meta .meta-emphasis')).not.toBeNull()
-    // §11: 本体が外部 watch・↗ なし
-    expect(row?.querySelector('.list-row-external')).toBeNull()
+    const row = container.querySelector('[data-subsection="updated-series"] .recent-item.list-row')
+    expect(row?.getAttribute('data-kind')).toBe('series')
     const body = row?.querySelector<HTMLAnchorElement>('.list-row-body')
-    expect(body?.getAttribute('href')).toBe('https://www.nicovideo.jp/watch/so123')
-    expect(body?.getAttribute('target')).toBe('_blank')
-    expect(body?.getAttribute('rel')).toContain('noopener')
-  })
-
-  it('各話バッジはタイトルの「第N話」表記を優先（episode_no とズレても表示が一致）', () => {
-    const data: TopData = {
-      ...SAMPLE_DATA,
-      newSeries: NEW_SERIES.slice(0, 1),
-      newEpisodes: [
-        {
-          watchId: 'wx',
-          title: 'おそ松さん 第4期　第13話　「ザ・マツノテン」',
-          pubDate: '2026-06-16T00:00:00Z',
-          resolvedContentId: 'so999',
-          resolutionStatus: 'resolved',
-          thumbnailUrl: null,
-          episodeNo: 14, // nvapi はズレた番号
-          viewCounter: 31,
-        },
-      ],
-    }
-    renderTop(container, data)
-    const row = container.querySelector('[data-subsection="new-episodes"] .recent-item.list-row')
-    // バッジはタイトル表記の「第13話」（episode_no=14 ではない）
-    expect(row?.querySelector('.list-row-badge')?.textContent).toBe('第13話')
-    // 本文タイトルからは「第13話」が除去されている
-    const titleText = row?.querySelector('.list-row-title-text')?.textContent ?? ''
-    expect(titleText).not.toContain('第13話')
-    expect(titleText).toContain('おそ松さん')
+    expect(body?.getAttribute('href')).toBe('?series=200') // UPDATED_SERIES 先頭
+    const ext = row?.querySelector<HTMLAnchorElement>('.list-row-external')
+    expect(ext?.getAttribute('href')).toBe('https://www.nicovideo.jp/series/200')
   })
 
   it('test_top_tag_chip_navigates: タグチップが ?tag=... の一覧へリンクする', () => {

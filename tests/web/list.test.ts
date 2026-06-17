@@ -176,8 +176,11 @@ describe('renderList - フィルタ・ソートUI (F-0028/0029/0030/0031)', () =
       totalPages: 1,
     })
     const radios = container.querySelectorAll<HTMLInputElement>('input[name="sort"]')
-    expect(radios.length).toBe(5)
-    expect(Array.from(radios).map((r) => r.value)).toContain('comments')
+    // hot/views/new(最近更新)/created(新規)/comments/kana の 6 種（§72 で新規追加）
+    expect(radios.length).toBe(6)
+    const values = Array.from(radios).map((r) => r.value)
+    expect(values).toContain('comments')
+    expect(values).toContain('created')
     const checked = Array.from(radios).find((r) => r.checked)
     expect(checked?.value).toBe('views')
   })

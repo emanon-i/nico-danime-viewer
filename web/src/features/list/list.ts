@@ -22,7 +22,9 @@ function sortLabel(sort: SortKey): string {
     case 'views':
       return '累計再生数'
     case 'new':
-      return '新着'
+      return '最近更新'
+    case 'created':
+      return '新規'
     case 'kana':
       return '五十音順'
     case 'comments':
@@ -472,7 +474,7 @@ export function renderList(
   // 並び替え選択肢（CSS で 2 列に並べる＝§21）
   const sortGrid = document.createElement('div')
   sortGrid.className = 'sort-options'
-  ;(['hot', 'views', 'new', 'comments', 'kana'] as const).forEach((s) => {
+  ;(['hot', 'views', 'new', 'created', 'comments', 'kana'] as const).forEach((s) => {
     const label = document.createElement('label')
     const radio = document.createElement('input')
     radio.type = 'radio'

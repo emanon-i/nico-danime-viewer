@@ -1,7 +1,6 @@
-import type { RankingEntry, Tag, CoursGroup, Work, NewItem } from '../../data/types'
-import { seriesLink, watchLink } from '../../shared/deeplink'
+import type { RankingEntry, Tag, CoursGroup, Work } from '../../data/types'
+import { seriesLink } from '../../shared/deeplink'
 import { card } from '../../components/card'
-import { formatViews, formatRelativeTime } from '../../components/meta'
 import type { MetaSpec } from '../../components/meta'
 import { listRow } from '../../components/listRow'
 import { chip } from '../../components/chip'
@@ -16,8 +15,10 @@ export interface TopData {
   popularTags: string[]
   allTags: Tag[]
   cours: CoursGroup[]
+  /** 新規シリーズ＝firstAt（初話）降順（§73） */
   newSeries: Work[]
-  newEpisodes: NewItem[]
+  /** 最近更新のあったシリーズ＝latestAt（最新話）降順（§73） */
+  updatedSeries: Work[]
   /** seriesId → 各話数。TOP10 カードの [film] 話数表示に使う（works.json 由来） */
   episodeCounts?: Record<number, number>
 }
@@ -52,121 +53,66 @@ function populateTop10(
 }
 
 /**
- * 話タイトルから「第N話」ラベルを取り出してバッジ化し、本文タイトルからは除去する。
- * バッジはタイトル表記そのものを採用するため必ず一致する（nvapi の episode_no とは
- * 番号がずれることがあるので、タイトル優先・episode_no はフォールバック）。
+ * 「新着・更新」セクション（§73）。2 列とも**シリーズ型**：
+ *   左＝新規シリーズ（firstAt 降順）／右＝最近更新のあったシリーズ（latestAt 降順）。
+ * 各列に「すべて見る」を 1 つずつ（新規→?sort=created・最近更新→?sort=new）。
+ * 旧「最新の動画（個別エピソード）」列は廃止（§73/§74）。
  */
-function splitEpisodeLabel(
-  title: string,
-  episodeNo: number | null
-): { badge: string | null; title: string } {
-  const m = title.match(/第[0-9０-９]+話/)
-  if (m) {
-    const cleaned = title.replace(m[0], ' ').replace(/\s+/g, ' ').trim()
-    return { badge: m[0], title: cleaned }
-  }
-  if (episodeNo != null) return { badge: `第${episodeNo}話`, title }
-  return { badge: null, title }
-}
-
-function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: NewItem[]): void {
+function populateRecent(section: HTMLElement, newSeries: Work[], updatedSeries: Work[]): void {
   const list = section.querySelector<HTMLElement>('.recent-list')
   if (!list) return
   list.innerHTML = ''
 
-  // 解決済み（nvapi で so… に解決済み）を優先。1 件も無いときは rss_only でも
-  // フォールバック表示し「最新動画が常に出る」を担保（§37）。列は互いに独立させ、
-  // 片方が 0 でももう片方を巻き込んで空にしない（旧 Math.min 結合バグの除去）。
-  const resolvedEps = newEpisodes.filter(
-    (ep) => ep.resolutionStatus === 'resolved' && ep.resolvedContentId
-  )
-  const epsSource = resolvedEps.length > 0 ? resolvedEps : newEpisodes
-  // 各列の上限（独立）。両方データがあれば見た目を揃えるため同数に切り詰める。
   const MAX = 6
-  const seriesCount = Math.min(MAX, newSeries.length)
-  const epsCount = Math.min(MAX, epsSource.length)
-  const balanced = seriesCount > 0 && epsCount > 0 ? Math.min(seriesCount, epsCount) : 0
-  const seriesShow = balanced || seriesCount
-  const epsShow = balanced || epsCount
+  // 両列の件数を揃えて行ベースラインを合わせる（片方 0 なら相手の件数）
+  const nNew = Math.min(MAX, newSeries.length)
+  const nUpd = Math.min(MAX, updatedSeries.length)
+  const balanced = nNew > 0 && nUpd > 0 ? Math.min(nNew, nUpd) : 0
 
-  // 新着シリーズ（シリーズ型）: 本体クリック＝うちの作品詳細・↗ で公式シリーズ（§24）
-  const seriesSec = document.createElement('li')
-  seriesSec.dataset.subsection = 'new-series'
-  const seriesLabel = document.createElement('strong')
-  seriesLabel.textContent = '新着シリーズ'
-  seriesSec.appendChild(seriesLabel)
-  newSeries.slice(0, seriesShow).forEach((w) => {
-    // シリーズ型は「話数で語る」＝[film]N話（§9.3）
-    const metas: MetaSpec[] = [
-      { icon: 'film', value: `${w.episodeCount}話`, label: `全${w.episodeCount}話` },
-    ]
-    const row = listRow({
-      kind: 'series',
-      title: w.title,
-      href: `?series=${w.seriesId}`,
-      thumbnailUrl: w.thumbnailUrl,
-      badge: 'シリーズ',
-      metas,
-      externalHref: seriesLink(w.seriesId) ?? undefined,
-    })
-    row.classList.add('recent-item')
-    seriesSec.appendChild(row)
-  })
-  list.appendChild(seriesSec)
+  const buildColumn = (
+    subsection: string,
+    label: string,
+    seeAllSort: string,
+    items: Work[],
+    count: number
+  ): void => {
+    const col = document.createElement('li')
+    col.dataset.subsection = subsection
+    // 列ヘッダ＝ラベル＋すべて見る（各列 1 つ・§73）
+    const header = document.createElement('div')
+    header.className = 'recent-col-head'
+    const strong = document.createElement('strong')
+    strong.textContent = label
+    header.appendChild(strong)
+    const seeAll = document.createElement('a')
+    seeAll.className = 'see-all'
+    seeAll.href = `?sort=${seeAllSort}`
+    seeAll.textContent = 'すべて見る'
+    header.appendChild(seeAll)
+    col.appendChild(header)
 
-  // 最新の動画（各話型: 「第N話」バッジ＋話タイトル＋再生数/日付＋ ↗ 公式 watch）
-  const epSec = document.createElement('li')
-  epSec.dataset.subsection = 'new-episodes'
-  const epLabel = document.createElement('strong')
-  epLabel.textContent = '最新の動画'
-  epSec.appendChild(epLabel)
-  epsSource.slice(0, epsShow).forEach((ep) => {
-    // 解決済みは so… の watch、未解決(rss_only)は数値 watchId へフォールバック
-    const cid = ep.resolvedContentId ?? ep.watchId
-    const watchHref = ep.resolvedContentId
-      ? (watchLink(ep.resolvedContentId) ?? `https://www.nicovideo.jp/watch/${cid}`)
-      : `https://www.nicovideo.jp/watch/${ep.watchId}`
-    // 各話型は「新しさ（投稿時間）で語る」＝[clock]投稿時間（強調）＋[play]再生数
-    // ＋取れていれば [message]コメント・[bookmark]マイリス（§25）
-    const metas: MetaSpec[] = []
-    const rel = formatRelativeTime(ep.pubDate)
-    if (rel) metas.push({ icon: 'clock', value: rel, label: `投稿 ${rel}`, emphasize: true })
-    if (typeof ep.viewCounter === 'number') {
-      metas.push({
-        icon: 'play',
-        value: formatViews(ep.viewCounter),
-        label: `再生数 ${formatViews(ep.viewCounter)}`,
+    items.slice(0, count).forEach((w) => {
+      // シリーズ型は「話数で語る」＝[film]N話（§9.3）。本体クリック＝詳細・↗＝公式（§24）
+      const metas: MetaSpec[] = [
+        { icon: 'film', value: `${w.episodeCount}話`, label: `全${w.episodeCount}話` },
+      ]
+      const row = listRow({
+        kind: 'series',
+        title: w.title,
+        href: `?series=${w.seriesId}`,
+        thumbnailUrl: w.thumbnailUrl,
+        badge: 'シリーズ',
+        metas,
+        externalHref: seriesLink(w.seriesId) ?? undefined,
       })
-    }
-    if (typeof ep.commentCounter === 'number') {
-      metas.push({
-        icon: 'message',
-        value: formatViews(ep.commentCounter),
-        label: `コメント ${formatViews(ep.commentCounter)}`,
-      })
-    }
-    if (typeof ep.mylistCounter === 'number') {
-      metas.push({
-        icon: 'bookmark',
-        value: formatViews(ep.mylistCounter),
-        label: `マイリスト ${formatViews(ep.mylistCounter)}`,
-      })
-    }
-    const ep_label = splitEpisodeLabel(ep.title, ep.episodeNo)
-    // Top の各話行は本体が外部（公式 watch）＝行全体が外部・別途の ↗ は出さない（§11）
-    const row = listRow({
-      kind: 'episode',
-      title: ep_label.title,
-      href: watchHref,
-      thumbnailUrl: ep.thumbnailUrl,
-      external: true,
-      badge: ep_label.badge ?? undefined,
-      metas,
+      row.classList.add('recent-item')
+      col.appendChild(row)
     })
-    row.classList.add('recent-item')
-    epSec.appendChild(row)
-  })
-  list.appendChild(epSec)
+    list.appendChild(col)
+  }
+
+  buildColumn('new-series', '新規シリーズ', 'created', newSeries, balanced || nNew)
+  buildColumn('updated-series', '最近更新のあったシリーズ', 'new', updatedSeries, balanced || nUpd)
 }
 
 function coursButton(cg: CoursGroup): HTMLElement {
@@ -323,10 +269,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       <div class="card-rail top10-rail"></div>
     </section>
     <section class="recent" data-section="recent">
-      <div class="section-head">
-        <h2>最近追加・更新された作品</h2>
-        <a href="?sort=new" class="see-all">すべて見る</a>
-      </div>
+      <h2>新着・更新</h2>
       <ul class="recent-list"></ul>
     </section>
     <section class="cours-browse" data-section="cours">
@@ -392,7 +335,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
 
   const recentSection = container.querySelector<HTMLElement>('[data-section="recent"]')
   if (recentSection) {
-    populateRecent(recentSection, data.newSeries ?? [], data.newEpisodes ?? [])
+    populateRecent(recentSection, data.newSeries ?? [], data.updatedSeries ?? [])
   }
 
   const coursDiv = container.querySelector<HTMLElement>('.cours-buttons')

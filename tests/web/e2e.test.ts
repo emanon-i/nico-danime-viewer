@@ -90,7 +90,7 @@ const FIXTURE_TOP_DATA: TopData = {
     { cours: '2022-春', seriesIds: [103] },
   ],
   newSeries: FIXTURE_WORKS.slice(0, 2),
-  newEpisodes: [],
+  updatedSeries: FIXTURE_WORKS.slice(0, 2),
 }
 
 const FIXTURE_SERIES: SeriesDetail = {

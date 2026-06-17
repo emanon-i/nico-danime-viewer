@@ -1,4 +1,5 @@
-export type SortKey = 'hot' | 'views' | 'new' | 'kana' | 'comments'
+// new=最近更新(latestAt) / created=新規(firstAt)＝§72。new は URL 互換のため key を維持。
+export type SortKey = 'hot' | 'views' | 'new' | 'created' | 'kana' | 'comments'
 export type SortDir = 'asc' | 'desc'
 
 export interface ListState {
@@ -24,7 +25,7 @@ export type Screen =
   | { type: 'list'; state: ListState }
   | { type: 'detail'; seriesId: number }
 
-const VALID_SORTS: SortKey[] = ['hot', 'views', 'new', 'kana', 'comments']
+const VALID_SORTS: SortKey[] = ['hot', 'views', 'new', 'created', 'kana', 'comments']
 const LIST_PARAMS = ['q', 'row', 'tag', 'cours', 'sort', 'dir', 'page', 'size']
 
 export function parseScreen(params: URLSearchParams): Screen {

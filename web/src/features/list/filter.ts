@@ -125,10 +125,19 @@ function sortWorksDesc(
     })
   }
   if (sort === 'new') {
-    // 新着＝各シリーズの「最新話の投稿時刻」(latestAt = MAX(episode startTime)) 降順（§54）。
-    // カード表示の日付（cardMetric の latestAt）とソート基準を一致させる。
+    // 最近更新＝各シリーズの「最新話の投稿時刻」(latestAt = MAX(episode startTime)) 降順（§54/§72）。
     const t = (w: Work): number => {
       const v = w.latestAt ?? w.firstAt
+      const ms = v ? Date.parse(v) : NaN
+      return Number.isNaN(ms) ? -Infinity : ms
+    }
+    return [...works].sort((a, b) => t(b) - t(a) || b.seriesId - a.seriesId)
+  }
+  if (sort === 'created') {
+    // 新規＝各シリーズの「最古話の投稿時刻」(firstAt = MIN(episode startTime)) 降順（§72）。
+    // ＝シリーズが（支店に）新しくできた近似。カード表示の日付も firstAt に揃える。
+    const t = (w: Work): number => {
+      const v = w.firstAt ?? w.latestAt
       const ms = v ? Date.parse(v) : NaN
       return Number.isNaN(ms) ? -Infinity : ms
     }

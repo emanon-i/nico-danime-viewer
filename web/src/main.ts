@@ -115,24 +115,27 @@ function buildTopData(): TopData | undefined {
   // seriesId → 各話数（TOP10 カードの [film] 話数表示用）
   const episodeCounts: Record<number, number> = {}
   for (const w of worksArr) episodeCounts[w.seriesId] = w.episodeCount
-  // 新着シリーズ＝「最新追加/更新」順。latestAt（最終話公開時刻）降順。
-  // latestAt 欠落は firstAt → seriesId の順でフォールバックし、必ず最新順に並べる。
-  const newestKey = (w: (typeof worksArr)[number]): number => {
-    const t = w.latestAt ?? w.firstAt
-    if (t) {
-      const ms = Date.parse(t)
-      if (!Number.isNaN(ms)) return ms
-    }
-    return w.seriesId // 時刻が一切無くても seriesId で最新側に寄せる
+  // 空シェル（話数0・firstAt/latestAt 無し）は Top の新着・更新列に出さない（§59 と整合）。
+  const valid = worksArr.filter((w) => (w.episodeCount ?? 0) > 0)
+  // 時刻キー（ISO→ms・無効は -Infinity）。新規＝firstAt（初話）・最近更新＝latestAt（最新話）。
+  const ms = (v: string | null | undefined): number => {
+    const t = v ? Date.parse(v) : NaN
+    return Number.isNaN(t) ? -Infinity : t
   }
+  const byFirst = [...valid].sort(
+    (a, b) => ms(b.firstAt ?? b.latestAt) - ms(a.firstAt ?? a.latestAt) || b.seriesId - a.seriesId
+  )
+  const byLatest = [...valid].sort(
+    (a, b) => ms(b.latestAt ?? b.firstAt) - ms(a.latestAt ?? a.firstAt) || b.seriesId - a.seriesId
+  )
   return {
     popular: cache.ranking?.popular ?? [],
     hotTags: cache.tags?.topHotTags ?? [],
     popularTags: cache.tags?.topPopularTags ?? [],
     allTags: cache.tags?.tags ?? [],
     cours: cache.cours?.cours ?? [],
-    newSeries: [...worksArr].sort((a, b) => newestKey(b) - newestKey(a)).slice(0, 12),
-    newEpisodes: cache.newData?.items ?? [],
+    newSeries: byFirst.slice(0, 12), // 新規＝firstAt 降順（§73）
+    updatedSeries: byLatest.slice(0, 12), // 最近更新＝latestAt 降順（§73）
     episodeCounts,
   }
 }
@@ -377,8 +380,14 @@ async function render(): Promise<void> {
         return { icon: 'play', value: formatViews(v), label: `再生数 ${formatViews(v)}` }
       }
       if (screen.state.sort === 'new') {
+        // 最近更新＝最新話の投稿時刻
         const rel = w.latestAt ? formatRelativeTime(w.latestAt) : ''
-        return rel ? { icon: 'clock', value: rel, label: `投稿 ${rel}` } : null
+        return rel ? { icon: 'clock', value: rel, label: `最新話 ${rel}` } : null
+      }
+      if (screen.state.sort === 'created') {
+        // 新規＝最古話（初話）の投稿時刻＝ソート基準(firstAt)と表示日付を一致
+        const rel = w.firstAt ? formatRelativeTime(w.firstAt) : ''
+        return rel ? { icon: 'clock', value: rel, label: `初話 ${rel}` } : null
       }
       if (screen.state.sort === 'comments') {
         const c = w.commentTotal
