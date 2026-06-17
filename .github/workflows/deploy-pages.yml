@@ -1,7 +1,7 @@
 # GitHub Pages デプロイ: main の静的サイト（dist）を Pages に公開する。
-# - push to main（実装/データ更新が入った瞬間に反映）＋ 手動起動（workflow_dispatch）
-# - データは main にコミット済みの data/*.json を Vite ビルドが dist/ に同梱する
-#   （日次の鮮度更新は fetch-daily.yml が state ブランチ経由で別途デプロイする）
+# - push to main（コード変更時）＋ 手動起動（workflow_dispatch）
+# - データは state ブランチ（series/*.json / data/*.json）を復元してからビルドする。
+#   main には data/series/ を git 管理しないため（PH-0008 以降）、state ブランチが正本。
 # - Pages の source は「GitHub Actions」。最小権限・公式 action は SHA 固定。
 
 name: Deploy Pages
@@ -27,8 +27,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
+      - name: Checkout source (main)
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # state ブランチ（series/*.json / data/*.json）を _state/ に取得
+      # state が無い場合（初回やリセット後）は continue-on-error で素通し
+      - name: Checkout state branch (series data)
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: state
+          path: _state
+          fetch-depth: 1
+        continue-on-error: true
+
+      # state branch のデータ（series/*.json / data/*.json）を data/ に配置
+      # main には data/series/ が無いため、state ブランチが正本（PH-0008 §C）
+      - name: Restore data from state branch
+        run: |
+          if [ -d _state ]; then
+            cp -r _state/. data/ 2>/dev/null || true
+          fi
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
