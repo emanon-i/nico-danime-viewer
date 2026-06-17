@@ -100,6 +100,34 @@ describe('renderList (F-0024)', () => {
       renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
     ).not.toThrow()
   })
+
+  it('カード常時メタ＝話数・総再生回数・投稿日（マイリスは出さない・§93）', () => {
+    const work: Work = {
+      seriesId: 10,
+      title: 'メタ確認',
+      thumbnailUrl: null,
+      descriptionFirst: null,
+      tags: [],
+      cours: null,
+      franchiseKey: null,
+      colKey: 'sa',
+      episodeCount: 12,
+      latestAt: '2026-01-01T00:00:00+09:00',
+      totalViews: 3080000,
+      mylistFirst: 2707,
+      relatedSeries: [],
+    }
+    renderList(container, { state: BASE_STATE, works: [work], totalCount: 1, totalPages: 1 })
+    const cap = container.querySelector('.card-caption')
+    const labels = [...(cap?.querySelectorAll('.meta') ?? [])].map((e) =>
+      e.getAttribute('aria-label')
+    )
+    expect(labels.some((l) => l?.includes('全12話'))).toBe(true)
+    expect(labels.some((l) => l?.includes('総再生回数'))).toBe(true)
+    expect(labels.some((l) => l?.includes('投稿'))).toBe(true)
+    // マイリスは常時メタから外れた（§93）
+    expect(labels.some((l) => l?.includes('マイリスト'))).toBe(false)
+  })
 })
 
 describe('renderList - フィルタ・ソートUI (F-0028/0029/0030/0031)', () => {

@@ -32,6 +32,7 @@ import { formatViews, formatRelativeTime } from './components/meta'
 import type { MetaSpec } from './components/meta'
 import { initSettingsModal } from './features/shared/settings-modal'
 import { renderFooter } from './features/shared/footer'
+import { initVersionCheck } from './features/shared/version-check'
 import {
   loadWorks,
   loadRanking,
@@ -389,7 +390,6 @@ async function render(): Promise<void> {
     )
 
     // カード下キャプション＝選択中の並び替えに応じた指標（§5）
-    const viewMap = new Map((cache.ranking?.popular ?? []).map((r) => [r.seriesId, r.totalViews]))
     // 炎ティア（§64）: 全作品横断の percentile 閾値で hotScore をティア化。生スコア数値は出さない。
     const hotTiers = cache.ranking?.hotTiers
     const flameTier = (score: number): number => {
@@ -417,18 +417,10 @@ async function render(): Promise<void> {
           tooltip: '勢い＝直近の伸び（再生の勢いとの目安・正確な期間集計ではありません）',
         }
       }
-      if (screen.state.sort === 'views') {
-        // 累計再生数は works.json の totalViews（全作品・§79）を優先。旧 JSON 互換で
-        // 欠落時のみ ranking.popular（上位 200）にフォールバック。
-        const v = w.totalViews ?? viewMap.get(w.seriesId)
-        if (v == null || v <= 0) return null
-        return { icon: 'play', value: formatViews(v), label: `累計再生数 ${formatViews(v)}` }
-      }
-      if (screen.state.sort === 'new') {
-        // 最近更新＝最新話の投稿時刻
-        const rel = w.latestAt ? formatRelativeTime(w.latestAt) : ''
-        return rel ? { icon: 'clock', value: rel, label: `最新話 ${rel}` } : null
-      }
+      // views（総再生）・new（最近更新＝投稿日）は §93 の常時メタ 3 点に含まれるため、
+      // 連動メタとしては二重表示しない（null）。
+      if (screen.state.sort === 'views') return null
+      if (screen.state.sort === 'new') return null
       if (screen.state.sort === 'created') {
         // 新規＝最古話（初話）の投稿時刻＝ソート基準(firstAt)と表示日付を一致
         const rel = w.firstAt ? formatRelativeTime(w.firstAt) : ''
@@ -606,6 +598,8 @@ async function render(): Promise<void> {
 initTheme()
 // カスタムツールチップのグローバル配線（§46・1 回だけ）
 initTooltips()
+// 新バージョン検知＋更新バナー（§92・スマホでもハードリフレッシュ不要に）
+initVersionCheck()
 
 window.addEventListener('popstate', () => {
   isNavigation = true

@@ -4,7 +4,7 @@ import { buildListUrl, PAGE_SIZE_OPTIONS } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { card as createCard } from '../../components/card'
 import { icon } from '../../components/icon'
-import { metaSpan, formatViews } from '../../components/meta'
+import { metaSpan, formatViews, formatRelativeTime } from '../../components/meta'
 import type { MetaSpec } from '../../components/meta'
 import { progressiveReveal } from '../../components/reveal'
 import { coursList, toggleCours } from './filter'
@@ -796,9 +796,10 @@ export function renderList(
       const cell = document.createElement('div')
       cell.className = 'card-cell'
       cell.appendChild(createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref))
-      // カード外枠下のメタ。常時メタ（§31）＝[film]話数＋[bookmark]1話マイリス。
-      // 並び替え連動メタ（§32）＝現在の sort 値を Hot 風に強調。常時メタと icon が
-      // 重複する場合は出さない（二重表示の回避）。
+      // カード外枠下の常時メタ（§93）＝[film]話数 ＋ [play]総再生回数 ＋ [clock]投稿日(最新話)。
+      // この 3 点は常に出す。並び替え連動メタ（§32）は、現在の sort 値がこの 3 点に
+      // 含まれない場合だけ追加する（views=総再生 / new=投稿日 は二重表示しないため cardMetric が
+      // null を返す。created=初話 / comments / 平均系 / hot は別値なので追加）。
       const metas: MetaSpec[] = []
       if (work.episodeCount) {
         metas.push({
@@ -807,12 +808,16 @@ export function renderList(
           label: `全${work.episodeCount}話`,
         })
       }
-      if (typeof work.mylistFirst === 'number' && work.mylistFirst > 0) {
-        const v = formatViews(work.mylistFirst)
-        metas.push({ icon: 'bookmark', value: v, label: `1話マイリスト ${v}` })
+      if (typeof work.totalViews === 'number' && work.totalViews > 0) {
+        const v = formatViews(work.totalViews)
+        metas.push({ icon: 'play', value: v, label: `総再生回数 ${v}` })
+      }
+      if (work.latestAt) {
+        const rel = formatRelativeTime(work.latestAt)
+        if (rel) metas.push({ icon: 'clock', value: rel, label: `投稿 ${rel}` })
       }
       const metric = cardMetric?.(work)
-      if (metric && !metas.some((m) => m.icon === metric.icon)) {
+      if (metric) {
         metas.push({ ...metric, emphasize: true })
       }
       if (metas.length > 0) {

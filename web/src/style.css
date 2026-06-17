@@ -1923,6 +1923,62 @@
     }
   }
 
+  /* 更新バナー（§92）。新バージョン検知時に下部固定で控えめに表示。モバイルで見やすい位置。 */
+  .update-banner {
+    position: fixed;
+    z-index: 120;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--sp-3));
+    translate: -50% 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    max-width: calc(100vw - 2 * var(--sp-3));
+    padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+    font-size: var(--text-l4);
+  }
+  .update-banner-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .update-banner-reload {
+    flex: none;
+    padding: var(--sp-1) var(--sp-4);
+    border: none;
+    border-radius: var(--r-full);
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--accent-hover);
+    }
+  }
+  .update-banner-close {
+    flex: none;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: none;
+    border-radius: var(--r-full);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+  }
+
   /* もっと見る ▾ / 閉じる ▴ トグル（§26）。クール/タグ共通 */
   .reveal-more-btn,
   .reveal-less-btn {
