@@ -256,6 +256,16 @@ async function runHourly() {
   const meta = getMetaState(db)
   const now = new Date().toISOString()
 
+  // 空DBガード（§D 修正）：build.sqlite の cache miss 等で series が空なら、新着解決も
+  // export もできない（exportAll で空 JSON を state に上書きしてしまう）。何もせず即終了し、
+  // 復元済みの state JSON を保全する。次回 daily が cache を再生成すれば回復する。
+  const seriesCount = db.prepare('SELECT COUNT(*) AS c FROM series').get().c
+  if (seriesCount === 0) {
+    logger.warn('fetch', 'hourly: empty DB (sqlite cache miss?) → skip export/deploy', {})
+    db.close()
+    return
+  }
+
   // ── Phase D: RSS 新着 ────────────────────────────────────────────────────
   logger.info('fetch', 'phase D: RSS (hourly)')
   const rssResult = await fetchRss()
