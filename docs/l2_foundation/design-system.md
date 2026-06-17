@@ -740,3 +740,21 @@ export function hiResThumb(url: string | null): string {
 | 40         | **TOP10 カードを新着シリーズ(§v1.2-24)と統一**＝本体クリック=詳細・右上 ↗=公式（`externalWhole` 撤去）                                                                                   | `top.ts` `populateTop10`                                                                                                                     |
 
 > **複数タグ**は URL `tag` をカンマ区切りで保持（`tags:string[]`）。AND（すべて含む）。**第1話マイリス**は作品横断で比較しやすい人気の錨（合算 mylistTotal は話数で不公平になるため別途用意）。**マーキー**は同じタグ並びを 2 回敷き `translateX(-50%)` でシームレスループ。スクショは環境制約（外部 CDN 画像で network-idle にならず）で取得不可のため、DOM 実測（件数・座標・リンク先・aria）で検証。
+
+## 23. 公開後フィードバック反映（v1.4・並び/件数/ピル/広幅/アイコン/ツールチップ/フォント）
+
+> **実装状況** 【実装済】。データ変更なし（全てフロント/ビルド設定）。
+
+| #   | 指摘 → 決定                                                                                                                                                                               | 実装                                                                                                                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 41  | 並び替えに**昇順/降順の共通トグル**（項目を 2 倍にせず選択キーに作用・既定 降順）。適用中バーに方向反映                                                                                   | `router.ts`（`dir`）／`filter.ts`（既定 desc・asc は全反転）／`list.ts` `.sort-dir-toggle`・applied                               |
+| 42  | 1 ページ**表示件数を 24→48 に拡大**＋**件数セレクタ**（48/96/144）                                                                                                                        | `router.ts`（`size`・`PAGE_SIZE_OPTIONS`）／`filter.ts` paginate／`list.ts` `.list-size`                                          |
+| 43  | サイドバーの**長いタグが列外へはみ出す**のを解消＋列幅調整（タグ/クール/各フィルタが列内で破綻しない）                                                                                    | CSS `.filter-tag-item/.filter-cours-item`（§49 のピル方針を適用）。サイドバー 14rem                                               |
+| 44  | **超広幅でも列数を増やし横を活用**（HD↔UW で密度差）                                                                                                                                      | CSS `--content-max` 段階拡大（1280→1520→1800→2200）＋ `.list-grid` auto-fill（例 1440=4列→2560=9列）                              |
+| 45  | 視聴済みアイコンを **eye/eye-off → circle-check**（off=アウトライン/on=緑塗り＋チェック抜き）。「非表示」誤読を解消                                                                       | `icon.ts`（circle-check）／`card.ts`/`detail.ts`/`main.ts`／CSS `--watched`・`.card-watched.active`/`.btn-watched.active`         |
+| 46  | **カスタムツールチップ**（スマホ対応＋デザイン統一）。hover＋focus、タッチはタップ開閉・外側/Esc 閉、上下フリップ＋画面内クランプ、role=tooltip/aria-describedby。ネイティブ `title` 全廃 | `components/tooltip.ts`（`initTooltips`/`wireTruncationTooltips`）／info-btn を `data-tooltip` 化／CSS `.tooltip`（位置は CSSOM） |
+| 48  | 並び替えラベル「総コメント数」→「**コメント数**」＋ nowrap で改行解消。コメント数順は `commentTotal` 降順で動作                                                                           | `list.ts` `sortLabel`／CSS `.filter-sort label{white-space:nowrap}`                                                               |
+| 49  | **ピル共通方針**＝1 行・中身ぴったり・最大 ~20ch・超過は `…` 省略（はみ出し/内部改行/見切れ禁止）。省略時は全文をカスタムツールチップで                                                   | CSS `.tag-chip/.filter-tag-item/.filter-cours-item/.tag-pill{max-width:min(20ch,100%);text-overflow:ellipsis}`／`tooltip.ts`      |
+| 47  | **`data:font` の大量失敗** → Vite の data URI インライン化を無効化（`assetsInlineLimit:0`）で全 woff2 を self ファイル化。CSP に `font-src 'self'` 明示                                   | `vite.config.ts`／`web/index.html`（CSP）。内蔵 CSS の `data:font` 46→0・実フォント適用・CSP 違反ゼロを確認                       |
+
+> **ピル方針(§49)** は検索トークン/サイドバータグ/クールチップ等すべてに統一適用。`min(20ch,100%)` で「20 文字程度まで全表示・超過は省略・列(100%)も超えない」を 1 ルールで担保。**ツールチップ**は単一 role=tooltip 要素を使い、表示中のみ aria-describedby で結ぶ。位置は `position:fixed`＋CSSOM 指定（CSP の style-src 'self' を維持）。**フォント**は self-host が必須（厳格 CSP では `data:` フォントは font-src に弾かれる）。
