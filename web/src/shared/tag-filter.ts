@@ -16,3 +16,15 @@ export function isCoursTag(name: string): boolean {
 export function withoutCoursTagNames(names: string[]): string[] {
   return names.filter((n) => !isCoursTag(n))
 }
+
+/**
+ * タグ照合用の正規化（§82）。`?tag=` のデコード値と格納タグ（works.tags）を**同じ規則**で
+ * 突き合わせるための鍵。NFKC でトリム＋互換正規化（半角カナ ﾘｽﾞ↔リズ・全角括弧（）↔()・
+ * 互換記号）を吸収し、リンク生成（encodeURIComponent）／URL parse／格納形のどこかで
+ * 全半角・互換文字のズレがあっても確実に一致させる。表示やURL値そのものは変えない（照合専用）。
+ *
+ * 注: → (U+2192) や ≒ (U+2252) は NFKC でも不変＝そのまま比較される（元から一致する）。
+ */
+export function normalizeTagForMatch(name: string): string {
+  return name.normalize('NFKC').trim()
+}

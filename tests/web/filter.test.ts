@@ -108,6 +108,22 @@ describe('filterWorks (F-0028/0029/0030)', () => {
     expect(result.map((w) => w.seriesId).sort()).toEqual([1, 3])
   })
 
+  it('タグ照合は NFKC で半角/全角カナのズレを吸収する（§82）', () => {
+    const works: Work[] = [
+      { ...BASE_WORK, seriesId: 1, tags: ['2期→ﾘｽﾞ≒誓い移動用'] }, // 格納＝半角カナ
+      { ...BASE_WORK, seriesId: 2, tags: ['無関係'] },
+    ]
+    // URL 由来 state.tags が全角カナでも一致する
+    const r = filterWorks(works, { ...BASE_STATE, tags: ['2期→リズ≒誓い移動用'] })
+    expect(r.map((w) => w.seriesId)).toEqual([1])
+  })
+
+  it('タグ照合は全角/半角括弧のズレを吸収する（§82）', () => {
+    const works: Work[] = [{ ...BASE_WORK, seriesId: 1, tags: ['総集編（届け）'] }] // 全角括弧
+    const r = filterWorks(works, { ...BASE_STATE, tags: ['総集編(届け)'] }) // 半角括弧
+    expect(r.map((w) => w.seriesId)).toEqual([1])
+  })
+
   it('test_cours_filter: クール絞りが機能する', () => {
     const result = filterWorks(WORKS, { ...BASE_STATE, cours: '2026-春' })
     expect(result).toHaveLength(1)
@@ -187,6 +203,36 @@ describe('sortWorks (F-0031)', () => {
     }
     const result = sortWorks(WORKS, 'views', ranking).map((w) => w.seriesId)
     expect(result).toEqual([3, 1, 2])
+  })
+
+  it('avgViews ソートは 1 話あたり平均で並ぶ＝短尺高人気が累計順より上位（§86）', () => {
+    const w: Work[] = [
+      // 累計は多いが多話＝平均低
+      { ...BASE_WORK, seriesId: 1, totalViews: 1200, episodeCount: 12 }, // 平均 100
+      // 累計は少ないが少話＝平均高
+      { ...BASE_WORK, seriesId: 2, totalViews: 600, episodeCount: 2 }, // 平均 300
+      { ...BASE_WORK, seriesId: 3, totalViews: 300, episodeCount: 3 }, // 平均 100
+    ]
+    const byViews = sortWorks(w, 'views', null).map((x) => x.seriesId)
+    const byAvg = sortWorks(w, 'avgViews', null).map((x) => x.seriesId)
+    expect(byViews[0]).toBe(1) // 累計順は seriesId 1（1200）が先頭
+    expect(byAvg[0]).toBe(2) // 平均順は seriesId 2（平均300）が先頭＝別順序
+  })
+
+  it('avgComments ソートは 1 話あたり平均コメントで並ぶ（§86）', () => {
+    const w: Work[] = [
+      { ...BASE_WORK, seriesId: 1, commentTotal: 100, episodeCount: 10 }, // 平均 10
+      { ...BASE_WORK, seriesId: 2, commentTotal: 50, episodeCount: 1 }, // 平均 50
+    ]
+    expect(sortWorks(w, 'avgComments', null).map((x) => x.seriesId)).toEqual([2, 1])
+  })
+
+  it('avg ソートは話数 0 を 0 として扱う（除算ガード・§86）', () => {
+    const w: Work[] = [
+      { ...BASE_WORK, seriesId: 1, totalViews: 1000, episodeCount: 0 },
+      { ...BASE_WORK, seriesId: 2, totalViews: 10, episodeCount: 1 },
+    ]
+    expect(sortWorks(w, 'avgViews', null).map((x) => x.seriesId)).toEqual([2, 1])
   })
 
   it('views ソートは totalViews（全作品横断・§79）を ranking より優先する', () => {

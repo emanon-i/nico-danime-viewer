@@ -9,6 +9,7 @@
   },
   "scripts": {
     "fetch": "node scripts/fetch.mjs",
+    "backfill": "node scripts/backfill.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

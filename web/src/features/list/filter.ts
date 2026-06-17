@@ -1,5 +1,6 @@
 import type { Work, RankingJson } from '../../data/types'
 import type { ListState } from '../router'
+import { normalizeTagForMatch } from '../../shared/tag-filter'
 
 // 既定の 1 ページ表示件数（§42・切りのいい 50。選択 UI で 50/100/200）
 export const PAGE_SIZE = 50
@@ -7,6 +8,17 @@ export const PAGE_SIZE = 50
 // list.json の col_key は読みベースの五十音「行」char（あ/か/さ/た/な/は/ま/や/ら/わ）。
 // ローマ字ではなく日本語の行 char がそのまま入る（実データで確認）。
 const KANA_ROW_ORDER = ['あ', 'か', 'さ', 'た', 'な', 'は', 'ま', 'や', 'ら', 'わ']
+
+// 1 話あたり平均（§86・§81 と同一ロジック）。話数 0 は除算ガードで 0。
+// avg＝累計 ÷ episodeCount。長尺バイアスを外した「1 話あたり」の人気指標。
+export function avgViewsOf(w: Work): number {
+  const n = w.episodeCount ?? 0
+  return n > 0 ? (w.totalViews ?? 0) / n : 0
+}
+export function avgCommentsOf(w: Work): number {
+  const n = w.episodeCount ?? 0
+  return n > 0 ? (w.commentTotal ?? 0) / n : 0
+}
 
 /** colKey（＝行 char）が属する行のインデックスを返す。未知/null は Infinity */
 function kanaRowIndex(colKey: string | null): number {
@@ -72,8 +84,13 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
   }
 
   if (state.tags.length > 0) {
-    // 複数タグは AND（すべて含むものだけ）＝§35
-    result = result.filter((w) => state.tags.every((t) => w.tags.includes(t)))
+    // 複数タグは AND（すべて含むものだけ）＝§35。照合は NFKC 正規化で突き合わせ（§82）＝
+    // 半角カナ・全角括弧・互換文字のズレ（URL値 vs 格納タグ）を吸収して確実に一致させる。
+    const want = state.tags.map(normalizeTagForMatch)
+    result = result.filter((w) => {
+      const have = new Set(w.tags.map(normalizeTagForMatch))
+      return want.every((t) => have.has(t))
+    })
   }
 
   if (state.cours) {
@@ -153,6 +170,13 @@ function sortWorksDesc(
     return [...works].sort(
       (a, b) => (b.commentTotal ?? 0) - (a.commentTotal ?? 0) || a.seriesId - b.seriesId
     )
+  }
+  if (sort === 'avgViews') {
+    // 平均再生数＝累計再生数÷話数（§86）。長尺バイアスを外した 1 話あたり人気。
+    return [...works].sort((a, b) => avgViewsOf(b) - avgViewsOf(a) || a.seriesId - b.seriesId)
+  }
+  if (sort === 'avgComments') {
+    return [...works].sort((a, b) => avgCommentsOf(b) - avgCommentsOf(a) || a.seriesId - b.seriesId)
   }
   if (sort === 'kana') {
     return [...works].sort((a, b) => {

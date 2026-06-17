@@ -9,7 +9,13 @@ import { renderDetail } from './features/detail/detail'
 import { renderBreadcrumb } from './features/shared/breadcrumb'
 import { buildHeader } from './features/shared/header'
 import { initHeaderSearch } from './features/shared/search'
-import { filterWorks, sortWorks, paginateWorks } from './features/list/filter'
+import {
+  filterWorks,
+  sortWorks,
+  paginateWorks,
+  avgViewsOf,
+  avgCommentsOf,
+} from './features/list/filter'
 import {
   isFavorite,
   isWatched,
@@ -426,6 +432,25 @@ async function render(): Promise<void> {
         const c = w.commentTotal
         if (c == null || c <= 0) return null
         return { icon: 'message', value: formatViews(c), label: `総コメント ${formatViews(c)}` }
+      }
+      if (screen.state.sort === 'avgViews') {
+        // 平均再生数＝累計再生数÷話数（§86・§81 と同算出）。
+        const a = Math.round(avgViewsOf(w))
+        if (a <= 0) return null
+        return {
+          icon: 'play',
+          value: `平均 ${formatViews(a)}/話`,
+          label: `平均再生数 ${formatViews(a)}`,
+        }
+      }
+      if (screen.state.sort === 'avgComments') {
+        const a = Math.round(avgCommentsOf(w))
+        if (a <= 0) return null
+        return {
+          icon: 'message',
+          value: `平均 ${formatViews(a)}/話`,
+          label: `平均コメント数 ${formatViews(a)}`,
+        }
       }
       // kana（五十音）は数値指標を持たないので常時メタのみ
       return null

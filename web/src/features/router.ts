@@ -1,5 +1,14 @@
 // new=最近更新(latestAt) / created=新規(firstAt)＝§72。new は URL 互換のため key を維持。
-export type SortKey = 'hot' | 'views' | 'new' | 'created' | 'kana' | 'comments'
+// avgViews/avgComments=1話あたり平均（長尺バイアスを外した人気・§86）。
+export type SortKey =
+  | 'hot'
+  | 'views'
+  | 'new'
+  | 'created'
+  | 'kana'
+  | 'comments'
+  | 'avgViews'
+  | 'avgComments'
 export type SortDir = 'asc' | 'desc'
 
 export interface ListState {
@@ -29,7 +38,16 @@ export type Screen =
   | { type: 'list'; state: ListState }
   | { type: 'detail'; seriesId: number }
 
-const VALID_SORTS: SortKey[] = ['hot', 'views', 'new', 'created', 'kana', 'comments']
+const VALID_SORTS: SortKey[] = [
+  'hot',
+  'views',
+  'new',
+  'created',
+  'kana',
+  'comments',
+  'avgViews',
+  'avgComments',
+]
 const LIST_PARAMS = ['q', 'row', 'tag', 'cours', 'sort', 'dir', 'page', 'size', 'dur', 'year']
 
 export function parseScreen(params: URLSearchParams): Screen {

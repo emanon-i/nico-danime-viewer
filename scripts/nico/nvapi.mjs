@@ -49,6 +49,40 @@ export function mapNvapiItems(seriesId, items) {
 }
 
 /**
+ * nvapi items[] から bulkUpsertEpisodes 用の「各話フルレコード」を生成（§85 backfill）。
+ * snapshot で各話が取れていないシリーズを nvapi だけで埋めるための写像。
+ * 注: nvapi v2/series の item は tags を持たない → tags は null（タグは別途 snapshot 由来）。
+ * @param {number} seriesId
+ * @param {object[]} items - nvapi data.items[]
+ * @returns {object[]} bulkUpsertEpisodes に渡せる各話レコード
+ */
+export function mapNvapiEpisodes(seriesId, items) {
+  return items
+    .map((item, i) => {
+      const v = item.video ?? {}
+      const contentId = String(v.id ?? item.meta?.id ?? '')
+      if (!contentId) return null
+      const c = v.count ?? {}
+      return {
+        contentId,
+        seriesId,
+        episodeNo: item.meta?.order ?? i + 1,
+        title: v.title ?? null,
+        viewCounter: c.view ?? 0,
+        commentCounter: c.comment ?? 0,
+        likeCounter: c.like ?? 0,
+        mylistCounter: c.mylist ?? 0,
+        lengthSeconds: typeof v.duration === 'number' ? v.duration : null,
+        startTime: v.registeredAt ?? null,
+        thumbnailUrl: v.thumbnail?.url ?? null,
+        description: v.shortDescription ?? null,
+        tags: null, // nvapi は各話タグを提供しない（§85 既知の制約）
+      }
+    })
+    .filter(Boolean)
+}
+
+/**
  * 全シリーズを逐次 nvapi でシード取得（初回のみ）。
  * ToS 準拠: fetchWithToS が適応遅延・503バックオフを担う。
  * @param {number[]} seriesIds

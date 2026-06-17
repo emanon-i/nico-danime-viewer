@@ -54,6 +54,7 @@ import {
 import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
 import { exportAll } from './export/export.mjs'
+import { selfHealEmptySeries } from './backfill.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -442,6 +443,20 @@ async function main() {
   // E6: Sync series thumbnails from episodes
   syncSeriesThumbnails(db)
   logger.info('fetch', 'E6 thumbnails synced')
+
+  // E7: self-heal（任意・§85）。0話シリーズ（snapshot 取得漏れ）が残っていれば nvapi で
+  // reseed を試みる。nvapi 逐次取得で重くなりうるため既定 OFF＝--self-heal / NICO_SELF_HEAL=1
+  // で有効、--self-heal-limit= / NICO_SELF_HEAL_LIMIT= で 1 回の件数上限を絞れる。
+  if (CLI_ARGS.includes('--self-heal') || process.env.NICO_SELF_HEAL === '1') {
+    const limit =
+      Number(
+        CLI_ARGS.find((a) => a.startsWith('--self-heal-limit='))?.split('=')[1] ??
+          process.env.NICO_SELF_HEAL_LIMIT ??
+          0
+      ) || undefined
+    logger.info('fetch', 'E7 self-heal empty series', { limit: limit ?? 'all' })
+    await selfHealEmptySeries(db, { limit })
+  }
 
   // ── Phase F: Metrics（Hot score 再計算）────────────────────────────────────
   logger.info('fetch', 'phase F: metrics')
