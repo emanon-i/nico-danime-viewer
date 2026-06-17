@@ -36,6 +36,8 @@ concurrency:
 jobs:
   fetch-and-deploy:
     runs-on: ubuntu-latest
+    # 暴走・ロック長時間占有を防ぐ上限（フルでも閑散帯1回で収まる想定）
+    timeout-minutes: 90
 
     environment:
       name: github-pages
@@ -63,12 +65,16 @@ jobs:
             cp -r state/. src/data/ 2>/dev/null || true
           fi
 
-      # ── キャッシュ（高速化フォールバック・真実源ではない） ───────
+      # ── build.sqlite キャッシュ（DB 永続化＝重い再フェッチを避ける真の高速化）──
+      # key に run_id を含めて**毎回新規保存**し、restore-keys で**直近の DB を復元**する。
+      # これで snapshot version ゲートと nvapi 7日ガードが効き、2 回目以降は
+      # snapshot のフル再取得（version 変化時のみ）に縮む＝nvapi seed の ~1.5h を回避。
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: src/data/build.sqlite
-          key: sqlite-${{ runner.os }}-${{ hashFiles('src/scripts/**/*.mjs') }}
-          restore-keys: sqlite-${{ runner.os }}-
+          key: sqlite-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            sqlite-${{ runner.os }}-
 
       # ── Node / pnpm セットアップ ─────────────────────────────────
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9

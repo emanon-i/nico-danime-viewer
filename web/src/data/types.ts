@@ -135,7 +135,8 @@ export interface SeriesDetail {
 }
 
 export interface SeriesDetailJson {
-  lastUpdated: string
+  /** per-series JSON は冪等化のため lastUpdated を持たない（旧 JSON との互換で optional） */
+  lastUpdated?: string
   seriesId: number
   title: string
   thumbnailUrl: string | null

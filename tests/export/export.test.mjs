@@ -181,12 +181,22 @@ describe('exportAll (F-0020)', () => {
     exportAll(db, outDir, NOW)
     const data = readJson(outDir, 'series/1.json')
 
-    expect(data.lastUpdated).toBe(NOW)
+    // per-series JSON は冪等化のため lastUpdated を持たない（変更ファイルのみ diff 化）
+    expect(data.lastUpdated).toBeUndefined()
     expect(data.seriesId).toBe(1)
     expect(data.title).toBe('ゆるキャン△')
     expect(Array.isArray(data.episodes)).toBe(true)
     expect(data.episodes.length).toBeGreaterThan(0)
     expect(data.episodes[0]).toHaveProperty('contentId')
     expect(data.episodes[0]).toHaveProperty('title')
+  })
+
+  it('series/{id}.json は冪等（同一 DB から 2 回 export して同一バイト）= 変更分だけ commit 対象', () => {
+    exportAll(db, outDir, NOW)
+    const a = readFileSync(join(outDir, 'series/1.json'), 'utf-8')
+    // lastUpdated を変えても per-series は不変
+    exportAll(db, outDir, '2099-01-01T00:00:00Z')
+    const b = readFileSync(join(outDir, 'series/1.json'), 'utf-8')
+    expect(a).toBe(b)
   })
 })

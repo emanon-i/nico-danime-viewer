@@ -274,7 +274,7 @@ export function exportNew(db, outDir, lastUpdated) {
  * 全シリーズを 1 ファイルにまとめると JSON.stringify の V8 文字列長上限を超えるため
  * シリーズ単位で個別ファイルに出力する
  */
-function exportSeries(db, outDir, lastUpdated) {
+function exportSeries(db, outDir) {
   // タグを事前に全体マップ化（タグ行数は数万行程度でメモリに収まる）
   const tagsBySeriesId = new Map()
   for (const row of db
@@ -324,8 +324,10 @@ function exportSeries(db, outDir, lastUpdated) {
        FROM series s WHERE s.is_available = 1 ORDER BY s.series_id`
     )
     .iterate()) {
+    // 注: per-series JSON には lastUpdated を入れない（毎回バイト変化＝6,352 ファイルが
+    // 常に diff になり commit/lint-staged/state 保存が重くなるため）。更新時刻は works.json
+    // 等の代表 1 か所に集約する＝**内容が変わった series ファイルだけ** diff になる（冪等）。
     const detail = {
-      lastUpdated,
       seriesId: s.series_id,
       title: s.title,
       thumbnailUrl: s.thumbnail_url,
@@ -363,5 +365,5 @@ export function exportAll(db, outDir, lastUpdated) {
   exportCours(db, outDir, lastUpdated)
   exportKana(db, outDir, lastUpdated)
   exportNew(db, outDir, lastUpdated)
-  exportSeries(db, outDir, lastUpdated)
+  exportSeries(db, outDir)
 }

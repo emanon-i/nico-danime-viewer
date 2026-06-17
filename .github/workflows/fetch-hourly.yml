@@ -33,6 +33,8 @@ concurrency:
 jobs:
   fetch-rss:
     runs-on: ubuntu-latest
+    # RSS 取得は軽量。長時間化＝異常としてここで打ち切る
+    timeout-minutes: 20
 
     steps:
       # ── 状態復元 ────────────────────────────────────────────────

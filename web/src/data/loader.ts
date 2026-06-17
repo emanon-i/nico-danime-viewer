@@ -55,11 +55,8 @@ function isNewJson(d: unknown): d is NewJson {
 
 function isSeriesDetailJson(d: unknown): d is SeriesDetailJson {
   if (!isObj(d)) return false
-  return (
-    typeof d['lastUpdated'] === 'string' &&
-    typeof d['seriesId'] === 'number' &&
-    Array.isArray(d['episodes'])
-  )
+  // per-series JSON は lastUpdated を持たない（冪等化のため除去）。seriesId/episodes で判定。
+  return typeof d['seriesId'] === 'number' && Array.isArray(d['episodes'])
 }
 
 async function loadJson<T>(filename: string, guard: (d: unknown) => d is T): Promise<T> {
