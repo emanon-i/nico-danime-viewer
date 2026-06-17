@@ -11,11 +11,13 @@ dist/
 
 # --- fetch スクリプトの生成物 ---
 # SQLite ビルド DB・内部状態は中間生成物（再生成可能）なのでコミットしない。
-# 静的配信 JSON は初回シードとして data/ をコミット対象とする。
+# 静的配信 JSON（data/*.json）は初回シードとしてコミット対象とする。
+# data/series/ は 6352+ ファイルのため main ブランチ管理外（state ブランチ rsync で永続化）。
 /data/*.sqlite
 /data/*.sqlite-shm
 /data/*.sqlite-wal
 /data/state/
+/data/series/
 
 # --- OS / エディタ ---
 .DS_Store
