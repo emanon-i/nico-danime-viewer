@@ -20,12 +20,17 @@ describe('isStructuralTag（構造的定番タグ・§C）', () => {
     expect(isStructuralTag('神回避')).toBe(false)
   })
 
-  it('記念回・総集編・各話番号を構造タグと判定する', () => {
-    expect(isStructuralTag('記念回')).toBe(true)
-    expect(isStructuralTag('総集編')).toBe(true)
+  it('各話番号系を構造タグと判定する', () => {
     expect(isStructuralTag('第100話')).toBe(true)
     expect(isStructuralTag('100話')).toBe(true)
     expect(isStructuralTag('#12')).toBe(true)
+    expect(isStructuralTag('5話目')).toBe(true)
+  })
+
+  it('総集編系・記念回系は構造タグにしない＝残す（探せる facet・§C縮小）', () => {
+    expect(isStructuralTag('総集編')).toBe(false)
+    expect(isStructuralTag('総集編回')).toBe(false)
+    expect(isStructuralTag('記念回')).toBe(false)
   })
 
   it('内容タグ（水着回・ジャンル等）は構造タグにしない＝残す', () => {
