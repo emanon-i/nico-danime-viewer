@@ -7,7 +7,7 @@ import { listRow } from '../../components/listRow'
 import { chip } from '../../components/chip'
 import { icon } from '../../components/icon'
 import { progressiveReveal } from '../../components/reveal'
-import { initMarquee } from '../../components/marquee'
+import { initMarquee, initAutoScroll } from '../../components/marquee'
 import { buildHeader } from '../shared/header'
 
 export interface TopData {
@@ -223,33 +223,42 @@ function populateTags(
   // 人気のタグ＝人気TOP 上位作品の頻出タグ
   if (popularDiv) fillTagRow(popularDiv, '人気', popularTags.slice(0, 8))
 
-  // ランダム＝タグ辞書からサンプル（[🔀] で引き直し）
+  // ランダム＝タグ辞書からサンプル（[🔀] で引き直し）。行は自動横スクロール＋手動（§70）、
+  // ラベル＋シャッフルボタンは先頭に sticky 固定して連打可能に（§69）。
   if (randomDiv && shuffleBtn) {
     const allNames = discoveryTags(allTags).map((t) => t.name)
-    let currentSample = sampleTags(allNames, 5)
+    const SAMPLE = 16 // マーキーとして流れる十分な数（引き直しで再サンプル）
+    let currentSample = sampleTags(allNames, SAMPLE)
 
-    // ラベルを先頭に常設（チップ/シャッフルとは別に固定）
-    let labelEl = randomDiv.querySelector<HTMLElement>('.tag-section-label')
-    if (!labelEl) {
-      labelEl = document.createElement('span')
+    // 先頭固定（sticky）リード＝ラベル「ランダム」＋シャッフルボタン。スクロール/シャッフルで
+    // 位置がずれない＝同じ座標で連打できる（§69）。テンプレの shuffleBtn をここへ移動。
+    let lead = randomDiv.querySelector<HTMLElement>('.tag-random-lead')
+    if (!lead) {
+      lead = document.createElement('div')
+      lead.className = 'tag-random-lead'
+      const labelEl = document.createElement('span')
       labelEl.className = 'tag-section-label'
       labelEl.textContent = 'ランダム'
-      randomDiv.insertBefore(labelEl, randomDiv.firstChild)
+      lead.appendChild(labelEl)
+      lead.appendChild(shuffleBtn)
+      randomDiv.insertBefore(lead, randomDiv.firstChild)
     }
 
     const renderRandom = () => {
       randomDiv.querySelectorAll('.tag-chip').forEach((c) => c.remove())
-      currentSample.forEach((t) =>
-        randomDiv.insertBefore(chip(t, `?tag=${encodeURIComponent(t)}`), shuffleBtn)
-      )
+      for (const t of currentSample) {
+        randomDiv.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`))
+      }
+      randomDiv.scrollLeft = 0 // 引き直したら先頭から見せる（sticky ボタンは不動）
     }
 
     shuffleBtn.addEventListener('click', () => {
-      currentSample = sampleTags(allNames, 5)
+      currentSample = sampleTags(allNames, SAMPLE)
       renderRandom()
     })
 
     renderRandom()
+    initAutoScroll(randomDiv) // 自動横スクロール＋手動スクロール共存（§70）
   }
 
   // タグ一覧＝全タグを出現（作品）数の多い順。[もっと▾] でバッチ追加表示（§7）

@@ -79,3 +79,69 @@ export function initMarquee(viewport: HTMLElement, track: HTMLElement): void {
 
   raf = requestAnimationFrame(step)
 }
+
+/**
+ * 自動横スクロール（§70・ピンポン型）。track の複製を前提とせず、overflow-x スクロール
+ * コンテナの scrollLeft を rAF で進め、端で向きを反転（行ったり来たり）する。手動スクロール/
+ * スワイプと両立し、hover / pointer / touch / フォーカス / 操作中は一時停止して離すと再開、
+ * `prefers-reduced-motion: reduce` では自動送りなし（手動のみ）。スクロール範囲が無ければ無動作。
+ */
+export function initAutoScroll(viewport: HTMLElement): void {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const SPEED = 26 // px/sec
+  let interacting = false
+  let dir = 1
+  let last = 0
+  let raf = 0
+
+  const maxScroll = () => viewport.scrollWidth - viewport.clientWidth
+
+  const step = (ts: number) => {
+    if (!viewport.isConnected) {
+      cancelAnimationFrame(raf)
+      return
+    }
+    if (last === 0) last = ts
+    const dt = (ts - last) / 1000
+    last = ts
+    const max = maxScroll()
+    if (!reduce && !interacting && max > 1) {
+      viewport.scrollLeft += SPEED * dt * dir
+      if (viewport.scrollLeft >= max) {
+        viewport.scrollLeft = max
+        dir = -1 // 端で反転（ピンポン）
+      } else if (viewport.scrollLeft <= 0) {
+        viewport.scrollLeft = 0
+        dir = 1
+      }
+    }
+    raf = requestAnimationFrame(step)
+  }
+
+  const pause = () => {
+    interacting = true
+  }
+  const resume = () => {
+    interacting = false
+  }
+  viewport.addEventListener('pointerenter', pause)
+  viewport.addEventListener('pointerleave', resume)
+  viewport.addEventListener('pointerdown', pause)
+  window.addEventListener('pointerup', resume)
+  viewport.addEventListener('touchstart', pause, { passive: true })
+  viewport.addEventListener('touchend', resume)
+  viewport.addEventListener('focusin', pause)
+  viewport.addEventListener('focusout', resume)
+  viewport.addEventListener(
+    'wheel',
+    (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        viewport.scrollLeft += e.deltaY
+        e.preventDefault()
+      }
+    },
+    { passive: false }
+  )
+
+  raf = requestAnimationFrame(step)
+}

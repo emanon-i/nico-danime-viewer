@@ -977,11 +977,49 @@
   .tag-random .shuffle-btn {
     width: 1.875rem;
     height: 1.875rem;
+    flex-shrink: 0;
 
     svg {
       width: 0.9rem;
       height: 0.9rem;
     }
+  }
+
+  /* ランダム行（§69/§70）: 1 行で自動＋手動横スクロール。リード(ラベル＋シャッフル)を
+     先頭に sticky 固定して位置不動・連打可能に。チップは縮まず流れる。 */
+  .tag-random {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+    position: relative;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tag-chip {
+      flex-shrink: 0;
+    }
+  }
+
+  .tag-random-lead {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    /* チップが背後に流れても隠れるよう背景で覆う＋右端を少しフェード */
+    padding-right: var(--sp-2);
+    background: linear-gradient(
+      to right,
+      var(--bg) 0,
+      var(--bg) calc(100% - var(--sp-2)),
+      transparent
+    );
   }
 
   /* 定番タグの [もっと▾] */
