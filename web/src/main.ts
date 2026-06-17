@@ -27,7 +27,7 @@ import {
 import { initTheme, toggleTheme, getTheme } from './features/shared/theme'
 import { icon } from './components/icon'
 import { initTooltips, wireTruncationTooltips } from './components/tooltip'
-import { isCoursTag, withoutCoursTagNames } from './shared/tag-filter'
+import { isHiddenTag, withoutHiddenTagNames } from './shared/tag-filter'
 import { formatViews, formatRelativeTime } from './components/meta'
 import type { MetaSpec } from './components/meta'
 import { initSettingsModal } from './features/shared/settings-modal'
@@ -132,11 +132,12 @@ async function ensureData(): Promise<void> {
       loadCours(),
       loadNew(),
     ])
-    // クール由来タグ（「2026年春アニメ」等）はタグ UI から除外（§68）。クール絞り込みで扱う。
+    // UI 非表示タグを除外（§68 クール由来＋§C 構造的定番＝最終回/神回/総集編/各話番号）。
+    // クール絞り込みは別 UI、構造タグはノイズ。データ（works.tags/tags.json）は保持。
     if (tags) {
-      tags.tags = tags.tags.filter((t) => !isCoursTag(t.name))
-      tags.topHotTags = withoutCoursTagNames(tags.topHotTags)
-      tags.topPopularTags = withoutCoursTagNames(tags.topPopularTags)
+      tags.tags = tags.tags.filter((t) => !isHiddenTag(t.name))
+      tags.topHotTags = withoutHiddenTagNames(tags.topHotTags)
+      tags.topPopularTags = withoutHiddenTagNames(tags.topPopularTags)
     }
     cache = { works, ranking, tags, cours, newData }
   } catch {

@@ -5,7 +5,7 @@ import { icon } from '../../components/icon'
 import { hiResThumb } from '../../components/card'
 import { metaSpan, formatViews, formatRelativeTime, formatDuration } from '../../components/meta'
 import { buildDisclosure } from '../../components/disclosure'
-import { isCoursTag } from '../../shared/tag-filter'
+import { isHiddenTag } from '../../shared/tag-filter'
 
 /**
  * タグチップ（`.tag-chip`）を生成。クリックで `?tag=` のタグフィルタへ遷移（§82）。
@@ -139,7 +139,7 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
   // 各話タグ（§77）。メタと説明の間。クール由来タグ（「2026年春アニメ」等・§68）は
   // 各話でも除外。除外後 0 件なら行ごと出さない。チップ作法はタグUI全体に統一（1行ピル20ch・
   // 超過は … 省略＋ツールチップ・クリックで ?tag= へ）。
-  const epTags = (ep.tags ?? []).filter((tag) => !isCoursTag(tag))
+  const epTags = (ep.tags ?? []).filter((tag) => !isHiddenTag(tag))
   if (epTags.length > 0) {
     const tagsRow = document.createElement('div')
     tagsRow.className = 'episode-detail-tags'
@@ -220,7 +220,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   const tagsDiv = document.createElement('div')
   tagsDiv.className = 'detail-tags'
   // クール由来タグ（「2026年春アニメ」等）はチップに出さない（§68）
-  series.tags.filter((tag) => !isCoursTag(tag)).forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
+  series.tags.filter((tag) => !isHiddenTag(tag)).forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
   infoDiv.appendChild(tagsDiv)
 
   // シリーズメタ＝[film]話数 ＋ [message]総コメント ＋ [bookmark]総マイリス（§18）。

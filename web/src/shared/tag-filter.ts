@@ -12,9 +12,34 @@ export function isCoursTag(name: string): boolean {
   return COURS_TAG.test(name)
 }
 
+/**
+ * 構造的な定番タグ（§C）。全話 union（§A）で混ざる「内容を特徴づけない episode-meta」を
+ * UI の候補・チップから隠す（データ＝works.tags/tags.json は保持）。
+ * 対象: 最終回系（最終回/いい最終回だった/N期最終回…）・神回系（神回/超神回/約束された神回…・
+ * ただし「神回避」は否定先読みで除外しない）・記念回・総集編系・各話番号（第N話/N話/#N/N話目）。
+ * 非対象（残す）: 水着回・お風呂/温泉・SF/ファンタジー等のジャンル＝「内容タグ」。
+ * 注: DF/クール跨りでは構造タグとジャンルを分離できない（ジャンルが最も普遍）ため、
+ * 統計閾値ではなく意味ベースの少数キュレーションで判定する。
+ */
+const STRUCTURAL_TAG = /最終回|神回(?!避)|記念回|総集編|^第?\d+話$|^#\d+$|^\d+話目$/u
+
+export function isStructuralTag(name: string): boolean {
+  return STRUCTURAL_TAG.test(name)
+}
+
+/** UI のタグ候補・チップから隠すタグ＝クール由来（§68）＋構造的定番（§C）。データは消さない。 */
+export function isHiddenTag(name: string): boolean {
+  return isCoursTag(name) || isStructuralTag(name)
+}
+
 /** クール由来タグを除いたタグ名配列を返す。 */
 export function withoutCoursTagNames(names: string[]): string[] {
   return names.filter((n) => !isCoursTag(n))
+}
+
+/** UI 非表示タグ（クール由来＋構造的定番）を除いたタグ名配列を返す（§C）。 */
+export function withoutHiddenTagNames(names: string[]): string[] {
+  return names.filter((n) => !isHiddenTag(n))
 }
 
 /**
