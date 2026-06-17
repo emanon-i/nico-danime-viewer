@@ -51,12 +51,14 @@ export function resolveCoursLabel(cours: string): string {
 export interface FilterOpts {
   favIds?: Set<number>
   watchedIds?: Set<number>
+  /** 空シェル（episodeCount 0）も一覧に含めるか（§63・既定 false＝除外）。 */
+  includeEmpty?: boolean
 }
 
 export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts): Work[] {
-  // 実体に解決できない空シェル（話数 0＝サムネ/最新話/初出すべて欠落）は一覧から除外（§59）。
-  // 「新着・古い順」で先頭に並んでいた壊れた項目はこれ。有効な作品だけを並べる。
-  let result = works.filter((w) => (w.episodeCount ?? 0) > 0)
+  // 実体に解決できない空シェル（話数 0＝サムネ/最新話/初出すべて欠落）は既定で除外（§59）。
+  // トグル（§63・includeEmpty）が ON のときは保持したまま表示する（データは消さない）。
+  let result = opts?.includeEmpty ? works : works.filter((w) => (w.episodeCount ?? 0) > 0)
 
   if (state.q) {
     const q = state.q.toLowerCase()

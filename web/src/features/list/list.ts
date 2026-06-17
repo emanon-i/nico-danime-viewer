@@ -374,11 +374,14 @@ export function renderList(
     data?: ListData
     favFilter?: boolean
     unwatchedFilter?: boolean
+    /** 空シェル（中身のない項目）も表示するか（§63・既定 false） */
+    showEmptyFilter?: boolean
     /** 選択中の並び替えに応じたカード下キャプション指標（Hot＝[flame]数値・新着＝[clock]投稿時間 等・§5） */
     cardMetric?: (work: Work) => MetaSpec | null
     /** お気に入り/未視聴フィルタ解除（適用中バーの [×]・§16） */
     onClearFav?: () => void
     onClearUnwatched?: () => void
+    onClearShowEmpty?: () => void
     /** 再生時間（離散スナップ・上限なし可）/ 投稿年 のレンジ絞り込み（§23・停止点インデックス方式） */
     sliders?: { duration: SliderSpec; year: SliderSpec }
     /** タグ・トークン検索の確定時に呼ぶ遷移（§35）。未指定時はプレーン入力にフォールバック */
@@ -393,9 +396,11 @@ export function renderList(
     data,
     favFilter = false,
     unwatchedFilter = false,
+    showEmptyFilter = false,
     cardMetric,
     onClearFav,
     onClearUnwatched,
+    onClearShowEmpty,
     sliders,
     onSearch,
   } = options
@@ -579,8 +584,17 @@ export function renderList(
   unwatchedCb.checked = unwatchedFilter
   unwatchedLabel.appendChild(unwatchedCb)
   unwatchedLabel.appendChild(document.createTextNode(' ✓ 未視聴'))
+  // 中身のない項目（空シェル）も表示するトグル（§63・既定 OFF＝非表示）
+  const emptyLabel = document.createElement('label')
+  const emptyCb = document.createElement('input')
+  emptyCb.type = 'checkbox'
+  emptyCb.name = 'empty'
+  emptyCb.checked = showEmptyFilter
+  emptyLabel.appendChild(emptyCb)
+  emptyLabel.appendChild(document.createTextNode(' 中身のない項目も表示'))
   markSection.appendChild(favLabel)
   markSection.appendChild(unwatchedLabel)
+  markSection.appendChild(emptyLabel)
   filterDiv.appendChild(markSection)
 
   // ── 再生時間（離散スナップ・上限なし可）／投稿年 レンジ絞り込み（§23）──────────
@@ -673,6 +687,7 @@ export function renderList(
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
   if (favFilter) addBtnChip('♥ お気に入り', onClearFav)
   if (unwatchedFilter) addBtnChip('✓ 未視聴', onClearUnwatched)
+  if (showEmptyFilter) addBtnChip('中身のない項目も表示', onClearShowEmpty)
   if (sliders) {
     for (const spec of [sliders.duration, sliders.year]) {
       const lastIdx = spec.stops.length - 1

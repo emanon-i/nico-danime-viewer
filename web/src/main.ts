@@ -56,6 +56,8 @@ let cache: {
 // お気に入り/未視聴フィルタの状態（インメモリ・URLに出さない）
 let favFilter = false
 let unwatchedFilter = false
+// 空シェル（中身のない項目）も表示するか（§63・既定 OFF＝非表示・インメモリ）
+let showEmptyFilter = false
 // 再生時間／投稿年 レンジ＝停止点インデックス [loIdx, hiIdx]（インメモリ・null=絞り込みなし）
 let durIdx: [number, number] | null = null
 let yearIdx: [number, number] | null = null
@@ -277,7 +279,11 @@ async function render(): Promise<void> {
     const allWorks = cache.works?.works ?? []
     const favIds = favFilter ? new Set(getFavoriteIds()) : undefined
     const watchedIds = unwatchedFilter ? new Set(getWatchedIds()) : undefined
-    let filtered = filterWorks(allWorks, screen.state, { favIds, watchedIds })
+    let filtered = filterWorks(allWorks, screen.state, {
+      favIds,
+      watchedIds,
+      includeEmpty: showEmptyFilter,
+    })
 
     // 投稿年の停止点（データの最小〜最大年・10 年ごとに目盛り）
     const years = allWorks.map(workYear).filter((y): y is number => y != null)
@@ -362,6 +368,7 @@ async function render(): Promise<void> {
       },
       favFilter,
       unwatchedFilter,
+      showEmptyFilter,
       cardMetric,
       onClearFav: () => {
         favFilter = false
@@ -369,6 +376,10 @@ async function render(): Promise<void> {
       },
       onClearUnwatched: () => {
         unwatchedFilter = false
+        void render()
+      },
+      onClearShowEmpty: () => {
+        showEmptyFilter = false
         void render()
       },
       onSearch: (next) => navigate(buildListUrl(next)),
@@ -420,6 +431,7 @@ async function render(): Promise<void> {
 
     const favCb = app.querySelector<HTMLInputElement>('input[name="fav"]')
     const unwatchedCb = app.querySelector<HTMLInputElement>('input[name="unwatched"]')
+    const emptyCb = app.querySelector<HTMLInputElement>('input[name="empty"]')
     if (favCb) {
       favCb.checked = favFilter
       favCb.addEventListener('change', () => {
@@ -431,6 +443,13 @@ async function render(): Promise<void> {
       unwatchedCb.checked = unwatchedFilter
       unwatchedCb.addEventListener('change', () => {
         unwatchedFilter = unwatchedCb.checked
+        void render()
+      })
+    }
+    if (emptyCb) {
+      emptyCb.checked = showEmptyFilter
+      emptyCb.addEventListener('change', () => {
+        showEmptyFilter = emptyCb.checked
         void render()
       })
     }

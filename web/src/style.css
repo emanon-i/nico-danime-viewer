@@ -2457,8 +2457,11 @@
     .detail-overview > summary::marker {
       content: '';
     }
-    .detail-overview > :not(summary) {
-      display: block; /* UA の details:not([open]) 非表示を上書きして常時表示 */
+    /* UA の `details:not([open]) > :not(summary){display:none}`（詳細度 0,1,2）を
+       上書きするため `:not([open])` を足して詳細度を 0,2,1 に上げる（§62 回帰修正）。 */
+    .detail-overview:not([open]) > :not(summary),
+    .detail-overview[open] > :not(summary) {
+      display: block;
     }
   }
 
