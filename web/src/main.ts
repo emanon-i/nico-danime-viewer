@@ -330,14 +330,33 @@ async function render(): Promise<void> {
     )
 
     // カード下キャプション＝選択中の並び替えに応じた指標（§5）
-    const hotMap = new Map((cache.ranking?.hot ?? []).map((r) => [r.seriesId, r.hotScore]))
     const viewMap = new Map((cache.ranking?.popular ?? []).map((r) => [r.seriesId, r.totalViews]))
+    // 炎ティア（§64）: 全作品横断の percentile 閾値で hotScore をティア化。生スコア数値は出さない。
+    const hotTiers = cache.ranking?.hotTiers
+    const flameTier = (score: number): number => {
+      if (!hotTiers || score <= 0) return 0
+      if (score >= hotTiers.t3) return 3 // 上位1%
+      if (score >= hotTiers.t2) return 2 // 上位5%
+      if (score >= hotTiers.t1) return 1 // 上位10%
+      return 0
+    }
+    const TIER_LABEL = [
+      '',
+      '勢いあり（上位10%）',
+      '勢い強い（上位5%）',
+      '今いちばん勢いがある（上位1%）',
+    ]
     const cardMetric = (w: Work): MetaSpec | null => {
       if (screen.state.sort === 'hot') {
-        const s = hotMap.get(w.seriesId)
-        if (s == null || s <= 0) return null
-        const v = String(Math.round(s * 1000)) // 0〜1 のブレンド値を「それっぽい」整数に
-        return { icon: 'flame', value: v, label: `Hot ${v}` }
+        const n = flameTier(w.hotScore ?? 0)
+        if (n === 0) return null
+        return {
+          icon: 'flame',
+          value: '',
+          label: TIER_LABEL[n],
+          flames: n,
+          tooltip: '勢い＝直近の伸び（再生の勢いとの目安・正確な期間集計ではありません）',
+        }
       }
       if (screen.state.sort === 'views') {
         const v = viewMap.get(w.seriesId)

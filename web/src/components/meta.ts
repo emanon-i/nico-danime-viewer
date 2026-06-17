@@ -14,6 +14,10 @@ export interface MetaSpec {
   label: string
   /** 強調（各話行の投稿時間など。--text／weight 500 で他メタより目立たせる） */
   emphasize?: boolean
+  /** 炎ティア（§64）。1〜3 を指定すると icon/value の代わりに flame×N を描画する */
+  flames?: number
+  /** カスタムツールチップ（§46）の説明文。指定時は data-tooltip を付与 */
+  tooltip?: string
 }
 
 /**
@@ -24,6 +28,14 @@ export function metaSpan(spec: MetaSpec): HTMLElement {
   const el = document.createElement('span')
   el.className = 'meta' + (spec.emphasize ? ' meta-emphasis' : '')
   el.setAttribute('aria-label', spec.label)
+  if (spec.tooltip) el.dataset.tooltip = spec.tooltip
+  // 炎ティア: 数値を見せず flame×N を描画（§64）
+  if (spec.flames && spec.flames > 0) {
+    el.classList.add('flame-tier')
+    el.dataset.tier = String(spec.flames)
+    for (let i = 0; i < spec.flames; i++) el.appendChild(icon('flame', 12))
+    return el
+  }
   el.appendChild(icon(spec.icon, 12))
   const v = document.createElement('span')
   v.className = 'meta-val'

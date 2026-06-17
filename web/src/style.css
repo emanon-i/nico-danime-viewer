@@ -166,6 +166,8 @@
     --heart: oklch(0.62 0.21 25);
     /* 視聴済み ON の緑（circle-check 塗り＝§45・♥赤と並びで意味が一目） */
     --watched: oklch(0.62 0.15 155);
+    /* 炎ティアの暖色（§64・勢いを一目で） */
+    --flame: oklch(0.7 0.19 45);
 
     /* カード比率: 16:9。素サムネは 4:3(360×270) だが中身は 16:9 映像を
        上下黒帯でレターボックスした焼き込み。16:9 cover で黒帯(上下各 1/8)を
@@ -364,6 +366,18 @@
       width: 0.85em;
       height: 0.85em;
       flex-shrink: 0;
+    }
+  }
+
+  /* 炎ティア（§64）。生スコア数値の代わりに flame×N を暖色で。塗りで勢いを強調。 */
+  .meta.flame-tier {
+    gap: 0.05em;
+    color: var(--flame, oklch(0.7 0.19 45));
+    cursor: default;
+
+    svg {
+      fill: currentColor;
+      stroke: currentColor;
     }
   }
 
@@ -867,7 +881,8 @@
     row-gap: var(--sp-1);
     padding-inline: var(--sp-1);
 
-    .meta {
+    /* 炎ティアは暖色を保つ（§64）。それ以外のメタはミュート。 */
+    .meta:not(.flame-tier) {
       color: var(--text-muted);
     }
   }

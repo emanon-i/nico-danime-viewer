@@ -31,6 +31,8 @@ export interface Work {
   mylistFirst?: number
   /** シリーズ合算再生時間（秒）。平均話長＝durationTotal/episodeCount で再生時間絞り込みに使う */
   durationTotal?: number
+  /** Hot 生スコア（0..1）。炎ティア（§64）を ranking.hotTiers と突合して算出する */
+  hotScore?: number
   relatedSeries: RelatedSeries[]
 }
 
@@ -47,10 +49,18 @@ export interface RankingEntry {
   hotScore: number | null
 }
 
+/** 炎ティア閾値（§64・全作品横断 percentile の hot_score 値）。t1=上位10% t2=上位5% t3=上位1% */
+export interface HotTiers {
+  t1: number
+  t2: number
+  t3: number
+}
+
 export interface RankingJson {
   lastUpdated: string
   hot: RankingEntry[]
   popular: RankingEntry[]
+  hotTiers?: HotTiers
 }
 
 export interface Tag {

@@ -27,7 +27,8 @@ export function exportWorks(db, outDir, lastUpdated) {
               (SELECT e.mylist_counter FROM episodes e WHERE e.series_id = s.series_id
                  ORDER BY (e.episode_no IS NULL), e.episode_no ASC, e.start_time ASC, e.content_id ASC
                  LIMIT 1) AS mylist_first,
-              (SELECT COALESCE(SUM(e.length_seconds),0) FROM episodes e WHERE e.series_id = s.series_id) AS duration_total
+              (SELECT COALESCE(SUM(e.length_seconds),0) FROM episodes e WHERE e.series_id = s.series_id) AS duration_total,
+              (SELECT m.hot_score FROM series_metrics m WHERE m.series_id = s.series_id) AS hot_score
        FROM series s
        WHERE s.is_available = 1
        ORDER BY s.series_id`
@@ -84,6 +85,7 @@ export function exportWorks(db, outDir, lastUpdated) {
     mylistTotal: s.mylist_total ?? 0,
     mylistFirst: s.mylist_first ?? 0,
     durationTotal: s.duration_total ?? 0,
+    hotScore: s.hot_score ?? 0, // 炎ティア算出用（§64・ranking.hotTiers と突合）
     relatedSeries: relatedBySeries.get(s.series_id) ?? [],
   }))
 
@@ -93,7 +95,7 @@ export function exportWorks(db, outDir, lastUpdated) {
 /**
  * ranking.json（hot / popular）
  */
-function exportRanking(db, outDir, lastUpdated) {
+export function exportRanking(db, outDir, lastUpdated) {
   const hotRows = db
     .prepare(
       `SELECT s.series_id, s.title, s.thumbnail_url,
@@ -131,10 +133,26 @@ function exportRanking(db, outDir, lastUpdated) {
     hotScore: r.hot_score,
   })
 
+  // 炎ティア閾値（§64・全作品横断の percentile）。分布が右偏のため順位ベース。
+  // t1=上位10%(p90) / t2=上位5%(p95) / t3=上位1%(p99) の hot_score 値。
+  const scores = db
+    .prepare(
+      `SELECT COALESCE(m.hot_score, 0) AS hs
+       FROM series s LEFT JOIN series_metrics m ON s.series_id = m.series_id
+       WHERE s.is_available = 1
+       ORDER BY hs ASC`
+    )
+    .all()
+    .map((r) => r.hs)
+  const pct = (p) =>
+    scores.length ? scores[Math.min(scores.length - 1, Math.floor(p * scores.length))] : 0
+  const hotTiers = { t1: pct(0.9), t2: pct(0.95), t3: pct(0.99) }
+
   writeJson(outDir, 'ranking.json', {
     lastUpdated,
     hot: hotRows.map(toEntry),
     popular: popularRows.map(toEntry),
+    hotTiers,
   })
 }
 
