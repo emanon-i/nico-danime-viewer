@@ -4,6 +4,7 @@ import { buildDetailUrl } from '../router'
 import { icon } from '../../components/icon'
 import { hiResThumb } from '../../components/card'
 import { metaSpan, formatViews, formatRelativeTime, formatDuration } from '../../components/meta'
+import { buildDisclosure } from '../../components/disclosure'
 
 /**
  * 各話行を生成する。
@@ -268,15 +269,12 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     const synopsis = document.createElement('section')
     synopsis.className = 'detail-synopsis'
     synopsis.dataset.section = 'synopsis'
-    const detailsEl = document.createElement('details')
-    detailsEl.className = 'detail-overview'
-    const summary = document.createElement('summary')
-    summary.textContent = 'あらすじ'
-    detailsEl.appendChild(summary)
+    // UA `<details>` に依存しない自前ディスクロージャ（§62 堅牢化）。本文は常に DOM に
+    // 存在し、開閉は class でのみ制御（デスクトップ既定=開 / モバイル既定=閉）。
     const p = document.createElement('p')
+    p.className = 'detail-overview-body'
     p.textContent = series.descriptionFirst
-    detailsEl.appendChild(p)
-    synopsis.appendChild(detailsEl)
+    synopsis.appendChild(buildDisclosure('あらすじ', p))
     container.appendChild(synopsis)
   }
 

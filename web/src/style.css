@@ -2433,51 +2433,48 @@
     padding: 0 var(--gutter) var(--sp-5);
   }
 
-  /* あらすじ本文（折りたたみ。ラベル＝summary「あらすじ」） */
-  .detail-overview {
-    margin-top: 0;
+  /* あらすじ＝自前ディスクロージャ（§62 堅牢化・UA `<details>` 非依存）。開閉は
+     `.disclosure.open` クラスだけで決まり、CSS の詳細度勝負をしない。既定状態（デスク
+     トップ=開 / モバイル=閉）は JS（matchMedia）が class で制御する。 */
+  .disclosure-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: 0;
+    margin-bottom: var(--sp-2);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: var(--text-l3);
+    font-weight: 700;
+    color: var(--text);
 
-    summary {
-      cursor: pointer;
-      font-size: var(--text-l3);
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: var(--sp-2);
-    }
-
-    p {
-      margin-top: var(--sp-2);
-      font-size: var(--text-l3);
-      color: var(--text-muted);
-      line-height: 1.6;
-      /* 改行保持（§56）＋文節折返し（§57） */
-      white-space: pre-line;
-      overflow-wrap: anywhere;
-      word-break: auto-phrase;
+    /* 開いている間は ▸ を ▾ 方向に回す（視覚的な開閉表現） */
+    svg {
+      transition: transform 0.15s;
     }
   }
+  .disclosure.open > .disclosure-toggle svg {
+    transform: rotate(90deg);
+  }
 
-  /* あらすじ既定状態を画面幅で分岐（§55）。デスクトップ=常時展開（summary は静的見出し
-     扱い・content 常時表示）／モバイル=折りたたみ（<details> 既定 closed）。
-     JS は open 属性を触らないので状態の齟齬は出ない。 */
-  @media (min-width: 768px) {
-    .detail-overview > summary {
-      pointer-events: none;
-      list-style: none;
-      cursor: default;
-    }
-    .detail-overview > summary::-webkit-details-marker {
-      display: none;
-    }
-    .detail-overview > summary::marker {
-      content: '';
-    }
-    /* UA の `details:not([open]) > :not(summary){display:none}`（詳細度 0,1,2）を
-       上書きするため `:not([open])` を足して詳細度を 0,2,1 に上げる（§62 回帰修正）。 */
-    .detail-overview:not([open]) > :not(summary),
-    .detail-overview[open] > :not(summary) {
-      display: block;
-    }
+  /* 本文は常に DOM に存在。閉時は class で非表示（UA に依存しない決定論的制御）。 */
+  .disclosure-body {
+    display: none;
+  }
+  .disclosure.open > .disclosure-body {
+    display: block;
+  }
+
+  .detail-overview-body {
+    margin: 0;
+    font-size: var(--text-l3);
+    color: var(--text-muted);
+    line-height: 1.6;
+    /* 改行保持（§56）＋文節折返し（§57） */
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    word-break: auto-phrase;
   }
 
   .detail-marks {
