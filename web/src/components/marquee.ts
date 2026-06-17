@@ -8,6 +8,51 @@
  * - track は同じ並びを 2 回敷いてある前提＝半分送ったら戻してシームレスにループ。
  * - CSP: 位置は scrollLeft（CSSOM 相当）で操作し inline style 属性を使わない。
  */
+/**
+ * 自動送り中のマーキーでも「タップで確実にチップへ遷移」させる（§94）。指がほぼ動かない
+ * タップは、横スクロール可能コンテナのスクロールジェスチャ判定に吸われて click が発火しない
+ * ことがある（特に内容が動いている時）。そこで touchend を見て、移動が小さければタップと
+ * みなし、対象アンカーへ明示遷移する（ゴーストクリックは preventDefault で抑止＝二重遷移防止）。
+ * スワイプ（移動大）は素通し＝手動スクロールと両立。アンカー以外（シャッフルボタン等）は不介入。
+ */
+function wireTapNavigation(viewport: HTMLElement): void {
+  let sx = 0
+  let sy = 0
+  let moved = false
+  viewport.addEventListener(
+    'touchstart',
+    (e) => {
+      const t = e.touches[0]
+      if (!t) return
+      sx = t.clientX
+      sy = t.clientY
+      moved = false
+    },
+    { passive: true }
+  )
+  viewport.addEventListener(
+    'touchmove',
+    (e) => {
+      const t = e.touches[0]
+      if (!t) return
+      if (Math.abs(t.clientX - sx) > 8 || Math.abs(t.clientY - sy) > 8) moved = true
+    },
+    { passive: true }
+  )
+  viewport.addEventListener(
+    'touchend',
+    (e) => {
+      if (moved) return // スワイプ＝スクロール意図 → 遷移しない
+      const target = e.target instanceof Element ? e.target : null
+      const a = target?.closest('a[href]') as HTMLAnchorElement | null
+      if (!a) return // アンカー以外（ボタン等）は素のタップに任せる
+      e.preventDefault() // 後続のゴーストクリックを抑止（二重遷移防止）
+      location.href = a.href
+    },
+    { passive: false }
+  )
+}
+
 export function initMarquee(viewport: HTMLElement, track: HTMLElement): void {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
   const SPEED = 28 // px/sec
@@ -77,6 +122,7 @@ export function initMarquee(viewport: HTMLElement, track: HTMLElement): void {
     }
   })
 
+  wireTapNavigation(viewport) // 自動送り中でもタップで確実に遷移（§94）
   raf = requestAnimationFrame(step)
 }
 
@@ -143,5 +189,6 @@ export function initAutoScroll(viewport: HTMLElement): void {
     { passive: false }
   )
 
+  wireTapNavigation(viewport) // 自動送り中でもタップで確実に遷移（§94）
   raf = requestAnimationFrame(step)
 }
