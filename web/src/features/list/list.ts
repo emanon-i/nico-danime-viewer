@@ -19,7 +19,7 @@ function sortLabel(sort: SortKey): string {
     case 'hot':
       return 'Hot'
     case 'views':
-      return '再生数(累計)'
+      return '累計再生数'
     case 'new':
       return '新着'
     case 'kana':
@@ -104,10 +104,14 @@ function rangeSlider(opts: {
     ticks = document.createElement('div')
     ticks.className = 'range-ticks'
     opts.stops.forEach((s, i) => {
+      if (!s.tick) return // ラベルの無い停止点は描かない（年スライダーの中間など）
       const t = document.createElement('span')
       t.className = 'range-tick'
+      // 両端ラベルは枠外にはみ出さないよう内側寄せ（左端=左寄せ／右端=右寄せ）
+      if (i === 0) t.classList.add('range-tick-first')
+      else if (i === last) t.classList.add('range-tick-last')
       t.style.setProperty('--at', `${pct(i)}%`)
-      t.textContent = s.tick ?? ''
+      t.textContent = s.tick
       ticks!.appendChild(t)
     })
   }
@@ -469,7 +473,7 @@ export function renderList(
   const prevBtn = document.createElement('a')
   prevBtn.className = 'pagination-prev'
   prevBtn.dataset.nav = 'prev'
-  prevBtn.textContent = '← 前'
+  prevBtn.textContent = '前へ'
   if (state.page > 1) {
     prevBtn.href = buildListUrl({ ...state, page: state.page - 1 })
   } else {
@@ -483,7 +487,7 @@ export function renderList(
   const nextBtn = document.createElement('a')
   nextBtn.className = 'pagination-next'
   nextBtn.dataset.nav = 'next'
-  nextBtn.textContent = '次 →'
+  nextBtn.textContent = '次へ'
   if (state.page < totalPages) {
     nextBtn.href = buildListUrl({ ...state, page: state.page + 1 })
   } else {

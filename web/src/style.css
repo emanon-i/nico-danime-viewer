@@ -463,11 +463,10 @@
   }
 
   /* ── セクション共通 ──────────────────────────────── */
-  /* :not(.hero) … ヒーロー(検索)には下罫線を引かない。検索→クイックアクセスは
-     線で区切らず自然につなげる（spec: 検索バーとクイックアクセスの間に divider を出さない）。 */
+  /* セクション間は罫線でなく余白で区切る（§38「余白に意味」）。
+     罫線を多用せず、上下パディングの空白でリズムを作る。 */
   section[data-section]:not(.hero) {
-    padding: clamp(var(--sp-5), 4vw, var(--sp-7)) var(--gutter);
-    border-bottom: 1px solid var(--border);
+    padding: clamp(var(--sp-6), 5vw, var(--sp-8)) var(--gutter);
 
     & > h2 {
       display: flex;
@@ -1303,9 +1302,6 @@
     font-size: var(--text-l3);
     color: var(--accent);
 
-    &::after {
-      content: '→';
-    }
     &:hover {
       color: var(--accent-hover);
       text-decoration: underline;
@@ -1607,13 +1603,16 @@
       -webkit-appearance: none;
       appearance: none;
 
+      /* runnable-track を視覚トラックと同じ 4px に揃え、つまみを負 margin で
+         そのバー中心に乗せる（=上下中央）。height:100% だと描画系によりつまみが
+         下にずれることがあるため、細バー基準で決定論的に中央化する。 */
       &::-webkit-slider-runnable-track {
-        height: 100%;
+        height: 4px;
         background: transparent;
         border: none;
       }
       &::-moz-range-track {
-        height: 100%;
+        height: 4px;
         background: transparent;
         border: none;
       }
@@ -1623,6 +1622,8 @@
         appearance: none;
         width: var(--range-thumb);
         height: var(--range-thumb);
+        /* 4px トラック中心に 1.05rem つまみを乗せる: (4px - thumb)/2 */
+        margin-top: calc((4px - var(--range-thumb)) / 2);
         border-radius: var(--r-full);
         background: var(--accent);
         border: 2px solid var(--bg);
@@ -1663,6 +1664,13 @@
       font-size: 0.625rem;
       color: var(--text-muted);
       white-space: nowrap;
+    }
+    /* 両端は枠外にはみ出さないよう内側へ寄せる（クリップ防止） */
+    .range-tick-first {
+      translate: 0 0;
+    }
+    .range-tick-last {
+      translate: -100% 0;
     }
 
     .range-readout {
@@ -2249,9 +2257,6 @@
     gap: var(--sp-1);
     color: var(--accent);
 
-    &::after {
-      content: '→';
-    }
     &:hover {
       color: var(--accent-hover);
       text-decoration: underline;

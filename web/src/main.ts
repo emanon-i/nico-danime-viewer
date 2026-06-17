@@ -105,13 +105,23 @@ function buildTopData(): TopData | undefined {
   // seriesId → 各話数（TOP10 カードの [film] 話数表示用）
   const episodeCounts: Record<number, number> = {}
   for (const w of worksArr) episodeCounts[w.seriesId] = w.episodeCount
+  // 新着シリーズ＝「最新追加/更新」順。latestAt（最終話公開時刻）降順。
+  // latestAt 欠落は firstAt → seriesId の順でフォールバックし、必ず最新順に並べる。
+  const newestKey = (w: (typeof worksArr)[number]): number => {
+    const t = w.latestAt ?? w.firstAt
+    if (t) {
+      const ms = Date.parse(t)
+      if (!Number.isNaN(ms)) return ms
+    }
+    return w.seriesId // 時刻が一切無くても seriesId で最新側に寄せる
+  }
   return {
     popular: cache.ranking?.popular ?? [],
     hotTags: cache.tags?.topHotTags ?? [],
     popularTags: cache.tags?.topPopularTags ?? [],
     allTags: cache.tags?.tags ?? [],
     cours: cache.cours?.cours ?? [],
-    newSeries: [...worksArr].sort((a, b) => b.seriesId - a.seriesId).slice(0, 10),
+    newSeries: [...worksArr].sort((a, b) => newestKey(b) - newestKey(a)).slice(0, 12),
     newEpisodes: cache.newData?.items ?? [],
     episodeCounts,
   }

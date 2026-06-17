@@ -229,7 +229,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     offLink.target = '_blank'
     offLink.rel = 'noopener noreferrer'
     offLink.appendChild(icon('play', 16))
-    offLink.appendChild(document.createTextNode('公式シリーズページ →'))
+    offLink.appendChild(document.createTextNode('公式シリーズページ'))
     infoDiv.appendChild(offLink)
   }
 
@@ -305,7 +305,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
       link.className = 'related-series-link'
       link.dataset.action = 'related-series'
       link.href = buildDetailUrl(r.seriesId)
-      link.textContent = `${r.title} →`
+      link.textContent = r.title
       list.appendChild(link)
     })
     relatedSection.appendChild(list)

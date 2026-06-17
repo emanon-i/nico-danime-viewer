@@ -39,19 +39,12 @@ function populateTop10(
   popular.slice(0, 10).forEach((entry, i) => {
     const href = seriesLink(entry.seriesId) ?? ''
     rail.appendChild(
-      // Top のカードは外部（公式）へ直行＝カード全体が外部リンク・別途の ↗ は出さない（§11）
-      card(
-        entry.seriesId,
-        entry.title,
-        entry.thumbnailUrl,
-        href,
-        {
-          rank: i + 1,
-          views: entry.totalViews,
-          episodeCount: episodeCounts?.[entry.seriesId],
-        },
-        { externalWhole: true }
-      )
+      // Top のシリーズ系カードは全て統一: 本体クリック＝うちの作品詳細・右上 ↗ で公式（§24/§40）
+      card(entry.seriesId, entry.title, entry.thumbnailUrl, href, {
+        rank: i + 1,
+        views: entry.totalViews,
+        episodeCount: episodeCounts?.[entry.seriesId],
+      })
     )
   })
 }
@@ -79,11 +72,20 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   if (!list) return
   list.innerHTML = ''
 
+  // 解決済み（nvapi で so… に解決済み）を優先。1 件も無いときは rss_only でも
+  // フォールバック表示し「最新動画が常に出る」を担保（§37）。列は互いに独立させ、
+  // 片方が 0 でももう片方を巻き込んで空にしない（旧 Math.min 結合バグの除去）。
   const resolvedEps = newEpisodes.filter(
     (ep) => ep.resolutionStatus === 'resolved' && ep.resolvedContentId
   )
-  // 横並び 2 列の整列のため、両列の件数を揃える（最大 5）
-  const count = Math.min(5, newSeries.length, resolvedEps.length)
+  const epsSource = resolvedEps.length > 0 ? resolvedEps : newEpisodes
+  // 各列の上限（独立）。両方データがあれば見た目を揃えるため同数に切り詰める。
+  const MAX = 6
+  const seriesCount = Math.min(MAX, newSeries.length)
+  const epsCount = Math.min(MAX, epsSource.length)
+  const balanced = seriesCount > 0 && epsCount > 0 ? Math.min(seriesCount, epsCount) : 0
+  const seriesShow = balanced || seriesCount
+  const epsShow = balanced || epsCount
 
   // 新着シリーズ（シリーズ型）: 本体クリック＝うちの作品詳細・↗ で公式シリーズ（§24）
   const seriesSec = document.createElement('li')
@@ -91,7 +93,7 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   const seriesLabel = document.createElement('strong')
   seriesLabel.textContent = '新着シリーズ'
   seriesSec.appendChild(seriesLabel)
-  newSeries.slice(0, count).forEach((w) => {
+  newSeries.slice(0, seriesShow).forEach((w) => {
     // シリーズ型は「話数で語る」＝[film]N話（§9.3）
     const metas: MetaSpec[] = [
       { icon: 'film', value: `${w.episodeCount}話`, label: `全${w.episodeCount}話` },
@@ -116,9 +118,12 @@ function populateRecent(section: HTMLElement, newSeries: Work[], newEpisodes: Ne
   const epLabel = document.createElement('strong')
   epLabel.textContent = '最新の動画'
   epSec.appendChild(epLabel)
-  resolvedEps.slice(0, count).forEach((ep) => {
-    const cid = ep.resolvedContentId as string
-    const watchHref = watchLink(cid) ?? `https://www.nicovideo.jp/watch/${cid}`
+  epsSource.slice(0, epsShow).forEach((ep) => {
+    // 解決済みは so… の watch、未解決(rss_only)は数値 watchId へフォールバック
+    const cid = ep.resolvedContentId ?? ep.watchId
+    const watchHref = ep.resolvedContentId
+      ? (watchLink(ep.resolvedContentId) ?? `https://www.nicovideo.jp/watch/${cid}`)
+      : `https://www.nicovideo.jp/watch/${ep.watchId}`
     // 各話型は「新しさ（投稿時間）で語る」＝[clock]投稿時間（強調）＋[play]再生数
     // ＋取れていれば [message]コメント・[bookmark]マイリス（§25）
     const metas: MetaSpec[] = []
@@ -322,7 +327,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
         <input type="search" class="hero-search-input"
                placeholder="作品・タグで検索…" aria-label="作品・タグで検索">
       </div>
-      <a href="?screen=list" class="btn-primary hero-browse-btn">一覧で探す →</a>
+      <a href="?screen=list" class="btn-primary hero-browse-btn">一覧で探す</a>
     </section>
     <nav class="quick-access" data-section="quick-access" aria-label="クイックアクセス">
       <a href="?cours=current&amp;sort=hot" class="quick-btn">今期</a>
