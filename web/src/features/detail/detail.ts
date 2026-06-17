@@ -115,15 +115,20 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
     const dur = formatDuration(ep.lengthSeconds)
     dmeta.appendChild(metaSpan({ icon: 'film', value: dur, label: `再生時間 ${dur}` }))
   }
-  detail.appendChild(dmeta)
+  // 右カラム＝「メタ（上）→ 説明（下）」を縦スタック（§61・flex-wrap 依存をやめ決定論的に）。
+  // サムネは左、この main がその右で縦並び＝desc は必ず meta の下に来る。
+  const rightCol = document.createElement('div')
+  rightCol.className = 'episode-detail-main'
+  rightCol.appendChild(dmeta)
   // 各話あらすじ（あれば・§51）。メタの下に読みやすく。
   const desc = ep.description?.trim()
   if (desc) {
     const p = document.createElement('p')
     p.className = 'episode-detail-desc'
     p.textContent = desc
-    detail.appendChild(p)
+    rightCol.appendChild(p)
   }
+  detail.appendChild(rightCol)
   row.appendChild(detail)
 
   main.addEventListener('click', () => {

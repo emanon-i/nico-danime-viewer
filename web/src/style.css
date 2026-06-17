@@ -2377,7 +2377,7 @@
       }
     }
 
-    /* アコーディオン詳細（サムネ＋メタ） */
+    /* アコーディオン詳細＝サムネ（左）｜右カラム（メタ→説明の縦スタック）の 2 列。 */
     .episode-detail {
       display: flex;
       flex-wrap: wrap;
@@ -2390,11 +2390,19 @@
       }
     }
 
-    /* 各話あらすじ（§51）。メタ行の下に全幅で読みやすく。 */
+    /* 右カラム：メタ（上）→ 説明（下）を縦に積む（§61・flex-wrap 依存をやめ決定論的に）。 */
+    .episode-detail-main {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-2);
+      flex: 1 1 16rem; /* サムネの右で残り幅を取る。狭ければ折り返してサムネ下へ */
+      min-width: 0;
+    }
+
+    /* 各話あらすじ（§51）。メタの“下”に読みやすく（右カラム内で縦積み）。 */
     .episode-detail-desc {
-      flex-basis: 100%;
       margin: 0;
-      max-width: 60ch;
+      max-width: 64ch;
       font-size: var(--text-l4);
       line-height: 1.7;
       color: var(--text-muted);
@@ -2422,7 +2430,6 @@
       display: flex;
       flex-wrap: wrap;
       gap: var(--sp-3);
-      padding-top: var(--sp-1);
     }
   }
 
