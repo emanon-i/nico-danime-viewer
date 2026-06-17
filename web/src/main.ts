@@ -59,9 +59,8 @@ let favFilter = false
 let unwatchedFilter = false
 // 空シェル（中身のない項目）も表示するか（§63・既定 OFF＝非表示・インメモリ）
 let showEmptyFilter = false
-// 再生時間／投稿年 レンジ＝停止点インデックス [loIdx, hiIdx]（インメモリ・null=絞り込みなし）
-let durIdx: [number, number] | null = null
-let yearIdx: [number, number] | null = null
+// 再生時間／投稿年 レンジは URL 状態（state.dur / state.year）で保持する（§78）。
+// ＝ページ移動（フルリロード）でも復元される。インメモリの保持変数は持たない。
 
 // 再生時間の停止点（離散スナップ・§23）。value=分（0=下限なし／Infinity=上限なし）
 const DURATION_STOPS: RangeStop[] = [
@@ -73,6 +72,32 @@ const DURATION_STOPS: RangeStop[] = [
   { value: 120, label: '2時間', tick: '2時間' },
   { value: Infinity, label: '上限なし', tick: '∞' },
 ]
+
+// レンジ絞り込みの URL 表現（§78）。停止点インデックス範囲を value ベースの "lo-hi" に
+// 直す（開放端＝先頭/末尾は省略）。データの停止点数が変わっても頑健。全域なら ''（＝絞り込みなし）。
+function serializeRange(lo: number, hi: number, stops: RangeStop[]): string {
+  const last = stops.length - 1
+  if (lo <= 0 && hi >= last) return ''
+  const loStr = lo <= 0 ? '' : String(stops[lo].value)
+  const hiStr = hi >= last ? '' : String(stops[hi].value)
+  return `${loStr}-${hiStr}`
+}
+// URL の "lo-hi" を停止点インデックス範囲に戻す。該当 value の停止点を探し、無ければ開放端。
+// 全域/空なら null（絞り込み非適用）。値は非負（年・分）なので indexOf('-') で安全に分割できる。
+function parseRange(raw: string, stops: RangeStop[]): [number, number] | null {
+  if (!raw) return null
+  const dash = raw.indexOf('-')
+  if (dash < 0) return null
+  const last = stops.length - 1
+  const idxOf = (s: string, fallback: number): number => {
+    if (s === '') return fallback
+    const i = stops.findIndex((st) => st.value === Number(s))
+    return i >= 0 ? i : fallback
+  }
+  const lo = idxOf(raw.slice(0, dash), 0)
+  const hi = idxOf(raw.slice(dash + 1), last)
+  return lo <= 0 && hi >= last ? null : [lo, hi]
+}
 
 /** 作品の平均話長（分・端数四捨五入）。不明は null */
 function avgMinutes(w: Work): number | null {
@@ -301,11 +326,12 @@ async function render(): Promise<void> {
       includeEmpty: showEmptyFilter,
     })
 
-    // 投稿年の停止点（データの最小〜最大年・10 年ごとに目盛り）
+    // 投稿年の停止点。両端に「下限なし／上限なし」（§80・再生時間と同作法）。
+    // 中央はデータの最小〜最大年、10 年ごとに目盛り。
     const years = allWorks.map(workYear).filter((y): y is number => y != null)
     const minYear = years.length > 0 ? Math.min(...years) : 2000
     const maxYear = years.length > 0 ? Math.max(...years) : new Date().getFullYear()
-    const YEAR_STOPS: RangeStop[] = []
+    const YEAR_STOPS: RangeStop[] = [{ value: -Infinity, label: '下限なし', tick: 'なし' }]
     for (let y = minYear; y <= maxYear; y++) {
       YEAR_STOPS.push({
         value: y,
@@ -313,8 +339,13 @@ async function render(): Promise<void> {
         tick: y === minYear || y === maxYear || y % 10 === 0 ? `${y}` : undefined,
       })
     }
+    YEAR_STOPS.push({ value: Infinity, label: '上限なし', tick: '∞' })
     const durLast = DURATION_STOPS.length - 1
     const yearLast = YEAR_STOPS.length - 1
+
+    // レンジ絞り込みは URL 状態（state.dur / state.year）から復元（§78）。停止点 value で表現。
+    const durIdx = parseRange(screen.state.dur, DURATION_STOPS)
+    const yearIdx = parseRange(screen.state.year, YEAR_STOPS)
 
     // 再生時間レンジ（停止点→分。0=下限なし／Infinity=上限なし＝§23）
     if (durIdx) {
@@ -328,10 +359,10 @@ async function render(): Promise<void> {
         return true
       })
     }
-    // 投稿年レンジ
+    // 投稿年レンジ（停止点 value→年。-Infinity=下限なし／Infinity=上限なし＝§80）
     if (yearIdx) {
-      const loY = YEAR_STOPS[yearIdx[0]]?.value ?? minYear
-      const hiY = YEAR_STOPS[yearIdx[1]]?.value ?? maxYear
+      const loY = YEAR_STOPS[yearIdx[0]].value
+      const hiY = YEAR_STOPS[yearIdx[1]].value
       filtered = filtered.filter((w) => {
         const y = workYear(w)
         return y != null && y >= loY && y <= hiY
@@ -375,9 +406,11 @@ async function render(): Promise<void> {
         }
       }
       if (screen.state.sort === 'views') {
-        const v = viewMap.get(w.seriesId)
-        if (v == null) return null
-        return { icon: 'play', value: formatViews(v), label: `再生数 ${formatViews(v)}` }
+        // 累計再生数は works.json の totalViews（全作品・§79）を優先。旧 JSON 互換で
+        // 欠落時のみ ranking.popular（上位 200）にフォールバック。
+        const v = w.totalViews ?? viewMap.get(w.seriesId)
+        if (v == null || v <= 0) return null
+        return { icon: 'play', value: formatViews(v), label: `累計再生数 ${formatViews(v)}` }
       }
       if (screen.state.sort === 'new') {
         // 最近更新＝最新話の投稿時刻
@@ -431,8 +464,14 @@ async function render(): Promise<void> {
           lowerIdx: durIdx?.[0] ?? 0,
           upperIdx: durIdx?.[1] ?? durLast,
           onChange: (lo, hi) => {
-            durIdx = lo === 0 && hi === durLast ? null : [lo, hi]
-            void render()
+            // URL 状態を更新（§78）。ページ移動でも保持される。1 ページ目に戻す。
+            navigate(
+              buildListUrl({
+                ...screen.state,
+                dur: serializeRange(lo, hi, DURATION_STOPS),
+                page: 1,
+              })
+            )
           },
         },
         year: {
@@ -441,8 +480,9 @@ async function render(): Promise<void> {
           lowerIdx: yearIdx?.[0] ?? 0,
           upperIdx: yearIdx?.[1] ?? yearLast,
           onChange: (lo, hi) => {
-            yearIdx = lo === 0 && hi === yearLast ? null : [lo, hi]
-            void render()
+            navigate(
+              buildListUrl({ ...screen.state, year: serializeRange(lo, hi, YEAR_STOPS), page: 1 })
+            )
           },
         },
       },

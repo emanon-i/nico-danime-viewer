@@ -5,7 +5,18 @@ import type { Screen } from '../../web/src/features/router'
 
 const LIST_SCREEN: Screen = {
   type: 'list',
-  state: { q: '', row: '', tags: [], cours: '', sort: 'hot', dir: 'desc', size: 48, page: 1 },
+  state: {
+    q: '',
+    row: '',
+    tags: [],
+    cours: '',
+    sort: 'hot',
+    dir: 'desc',
+    size: 48,
+    page: 1,
+    dur: '',
+    year: '',
+  },
 }
 
 describe('renderBreadcrumb (F-0033)', () => {

@@ -116,11 +116,17 @@ function sortWorksDesc(
       return ai !== bi ? ai - bi : a.seriesId - b.seriesId
     })
   }
-  if (sort === 'views' && ranking) {
-    const order = new Map(ranking.popular.map((r, i) => [r.seriesId, i]))
+  if (sort === 'views') {
+    // 累計再生数（works.json の totalViews・全作品横断・§79）降順。旧 JSON 互換で
+    // totalViews 欠落時のみ ranking.popular の順位にフォールバック。
+    const order = ranking ? new Map(ranking.popular.map((r, i) => [r.seriesId, i])) : null
+    const tv = (w: Work): number | null => (typeof w.totalViews === 'number' ? w.totalViews : null)
+    if (works.some((w) => tv(w) != null)) {
+      return [...works].sort((a, b) => (tv(b) ?? 0) - (tv(a) ?? 0) || a.seriesId - b.seriesId)
+    }
     return [...works].sort((a, b) => {
-      const ai = order.get(a.seriesId) ?? Infinity
-      const bi = order.get(b.seriesId) ?? Infinity
+      const ai = order?.get(a.seriesId) ?? Infinity
+      const bi = order?.get(b.seriesId) ?? Infinity
       return ai !== bi ? ai - bi : a.seriesId - b.seriesId
     })
   }

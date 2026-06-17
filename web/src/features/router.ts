@@ -14,6 +14,10 @@ export interface ListState {
   page: number
   /** 1ページ表示件数（選択 UI＝§42）。既定 PAGE_SIZE。0/未指定は既定にフォールバック。 */
   size: number
+  /** 再生時間レンジ（§78）。停止点 value ベースの "lo-hi"（開放端は省略）。''=絞り込みなし。 */
+  dur: string
+  /** 投稿年レンジ（§78）。停止点 value ベースの "lo-hi"（開放端は省略）。''=絞り込みなし。 */
+  year: string
 }
 
 /** 表示件数の選択肢（§42・切りのいい丸い数字）。既定＝先頭=50。 */
@@ -26,7 +30,7 @@ export type Screen =
   | { type: 'detail'; seriesId: number }
 
 const VALID_SORTS: SortKey[] = ['hot', 'views', 'new', 'created', 'kana', 'comments']
-const LIST_PARAMS = ['q', 'row', 'tag', 'cours', 'sort', 'dir', 'page', 'size']
+const LIST_PARAMS = ['q', 'row', 'tag', 'cours', 'sort', 'dir', 'page', 'size', 'dur', 'year']
 
 export function parseScreen(params: URLSearchParams): Screen {
   const seriesParam = params.get('series')
@@ -54,6 +58,8 @@ export function parseScreen(params: URLSearchParams): Screen {
         dir: params.get('dir') === 'asc' ? 'asc' : 'desc',
         page: Math.max(1, parseInt(params.get('page') ?? '1', 10)),
         size: normalizeSize(params.get('size')),
+        dur: params.get('dur') ?? '',
+        year: params.get('year') ?? '',
       },
     }
   }
@@ -77,6 +83,8 @@ export function buildListUrl(state: Partial<ListState>): string {
   if (state.dir === 'asc') p.set('dir', 'asc')
   if (state.page && state.page > 1) p.set('page', String(state.page))
   if (state.size && state.size !== DEFAULT_PAGE_SIZE) p.set('size', String(state.size))
+  if (state.dur) p.set('dur', state.dur)
+  if (state.year) p.set('year', state.year)
   const s = p.toString()
   return '?' + (s || 'screen=list')
 }

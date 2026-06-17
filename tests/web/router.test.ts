@@ -84,6 +84,8 @@ describe('test_history_navigation (F-0022)', () => {
       size: 48,
       page: 2,
       row: 'さ',
+      dur: '',
+      year: '',
     }
     const url = buildListUrl(state)
     const restored = parseScreen(new URLSearchParams(url.slice(1)))
@@ -95,6 +97,28 @@ describe('test_history_navigation (F-0022)', () => {
     expect(restored.state.sort).toBe(state.sort)
     expect(restored.state.page).toBe(state.page)
     expect(restored.state.row).toBe(state.row)
+  })
+
+  it('dur / year レンジが URL でラウンドトリップする（§78）', () => {
+    const state: ListState = {
+      q: '',
+      row: '',
+      tags: [],
+      cours: '',
+      sort: 'hot',
+      dir: 'desc',
+      size: 48,
+      page: 1,
+      dur: '5-30',
+      year: '2015-',
+    }
+    const url = buildListUrl(state)
+    expect(url).toContain('dur=5-30')
+    expect(url).toContain('year=2015-')
+    const restored = parseScreen(new URLSearchParams(url.slice(1)))
+    if (restored.type !== 'list') throw new Error('not list')
+    expect(restored.state.dur).toBe('5-30')
+    expect(restored.state.year).toBe('2015-')
   })
 
   it('buildDetailUrl → parseScreen で detail 画面に遷移する', () => {

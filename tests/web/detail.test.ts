@@ -98,9 +98,60 @@ describe('renderDetail (F-0025)', () => {
 
   it('タグチップが一覧のタグ絞りへリンクする', () => {
     renderDetail(container, SERIES)
-    const tagChips = container.querySelectorAll('.tag-chip')
+    const tagChips = container.querySelectorAll('.detail-tags .tag-chip')
     expect(tagChips.length).toBe(2)
     const firstHref = tagChips[0].getAttribute('href')
     expect(firstHref).toContain('tag=')
+  })
+
+  it('各話ドロワーに各話タグがチップ表示され、クール由来タグは除外される（§77）', () => {
+    const withEpTags: SeriesDetail = {
+      ...SERIES,
+      episodes: [
+        {
+          ...SERIES.episodes[0],
+          description: '各話あらすじ本文',
+          tags: ['監督名', 'アクション/バトル', '2006年春アニメ'],
+        },
+        SERIES.episodes[1],
+      ],
+    }
+    renderDetail(container, withEpTags)
+    const tagsRow = container.querySelector('.episode-detail-tags')
+    expect(tagsRow).not.toBeNull()
+    const chips = [...tagsRow!.querySelectorAll('.tag-chip')].map((c) => c.textContent)
+    // クールタグ「2006年春アニメ」は除外され、残り 2 件のみ
+    expect(chips).toEqual(['監督名', 'アクション/バトル'])
+    // クリックで ?tag= へ
+    expect(tagsRow!.querySelector('.tag-chip')?.getAttribute('href')).toContain('tag=')
+  })
+
+  it('各話タグが全てクール由来なら tags 行を出さない（§77）', () => {
+    const onlyCours: SeriesDetail = {
+      ...SERIES,
+      episodes: [
+        { ...SERIES.episodes[0], tags: ['2006年春アニメ', '2007年冬アニメ'] },
+        SERIES.episodes[1],
+      ],
+    }
+    renderDetail(container, onlyCours)
+    expect(container.querySelector('.episode-detail-tags')).toBeNull()
+  })
+
+  it('シリーズメタに 1 話あたり平均（再生数・コメント）が表示される（§81）', () => {
+    const withCounts: SeriesDetail = {
+      ...SERIES,
+      episodes: [
+        { ...SERIES.episodes[0], viewCounter: 1000, commentCounter: 40 },
+        { ...SERIES.episodes[1], viewCounter: 800, commentCounter: 20 },
+      ],
+    }
+    renderDetail(container, withCounts)
+    const labels = [...container.querySelectorAll('.detail-series-meta .meta')].map((e) =>
+      e.getAttribute('aria-label')
+    )
+    // 平均再生数 = round((1000+800)/2)=900、平均コメント = round((40+20)/2)=30
+    expect(labels.some((l) => l?.includes('平均再生数') && l?.includes('900'))).toBe(true)
+    expect(labels.some((l) => l?.includes('平均コメント数') && l?.includes('30'))).toBe(true)
   })
 })

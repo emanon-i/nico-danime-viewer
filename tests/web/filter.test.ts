@@ -33,6 +33,8 @@ const BASE_STATE: ListState = {
   dir: 'desc',
   size: 48,
   page: 1,
+  dur: '',
+  year: '',
 }
 
 const BASE_RANKING: RankingJson = {
@@ -185,6 +187,21 @@ describe('sortWorks (F-0031)', () => {
     }
     const result = sortWorks(WORKS, 'views', ranking).map((w) => w.seriesId)
     expect(result).toEqual([3, 1, 2])
+  })
+
+  it('views ソートは totalViews（全作品横断・§79）を ranking より優先する', () => {
+    const worksWithViews: Work[] = [
+      { ...BASE_WORK, seriesId: 3, totalViews: 50 },
+      { ...BASE_WORK, seriesId: 1, totalViews: 999 }, // ranking 外でも totalViews 最大なら先頭
+      { ...BASE_WORK, seriesId: 2, totalViews: 200 },
+    ]
+    // ranking.popular は別順だが totalViews が優先される
+    const ranking: RankingJson = {
+      ...BASE_RANKING,
+      popular: [{ seriesId: 3, title: '', thumbnailUrl: null, totalViews: 50, hotScore: null }],
+    }
+    const result = sortWorks(worksWithViews, 'views', ranking).map((w) => w.seriesId)
+    expect(result).toEqual([1, 2, 3])
   })
 
   it('test_sort_options_deterministic: new ソートは seriesId 降順', () => {

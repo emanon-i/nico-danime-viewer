@@ -4,6 +4,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { stripHtml } from '../etl/series.mjs'
+import { processEpisodeTags } from '../etl/tags.mjs'
 
 /** JSON ファイルに書き出す（配信用のためインデントなし） */
 function writeJson(outDir, filename, data) {
@@ -28,6 +29,7 @@ export function exportWorks(db, outDir, lastUpdated) {
                  ORDER BY (e.episode_no IS NULL), e.episode_no ASC, e.start_time ASC, e.content_id ASC
                  LIMIT 1) AS mylist_first,
               (SELECT COALESCE(SUM(e.length_seconds),0) FROM episodes e WHERE e.series_id = s.series_id) AS duration_total,
+              (SELECT COALESCE(SUM(e.view_counter),0) FROM episodes e WHERE e.series_id = s.series_id) AS total_views,
               (SELECT m.hot_score FROM series_metrics m WHERE m.series_id = s.series_id) AS hot_score
        FROM series s
        WHERE s.is_available = 1
@@ -85,6 +87,7 @@ export function exportWorks(db, outDir, lastUpdated) {
     mylistTotal: s.mylist_total ?? 0,
     mylistFirst: s.mylist_first ?? 0,
     durationTotal: s.duration_total ?? 0,
+    totalViews: s.total_views ?? 0, // 累計再生数（全話合算・§79 カードメタ/並び替え用）
     hotScore: s.hot_score ?? 0, // 炎ティア算出用（§64・ranking.hotTiers と突合）
     relatedSeries: relatedBySeries.get(s.series_id) ?? [],
   }))
@@ -333,7 +336,7 @@ export function exportSeries(db, outDir) {
   // エピソードはシリーズ単位で取得（全件一括ロードを避ける）
   const epStmt = db.prepare(
     `SELECT content_id, episode_no, title, view_counter, comment_counter, mylist_counter,
-            length_seconds, start_time, thumbnail_url, description
+            length_seconds, start_time, thumbnail_url, description, tags
      FROM episodes WHERE series_id = ?
      ORDER BY COALESCE(episode_no, 9999), start_time`
   )
@@ -371,6 +374,9 @@ export function exportSeries(db, outDir) {
         thumbnailUrl: ep.thumbnail_url,
         // <br> を改行に・他 HTML/実体参照は除去（§56・XSS 安全。descriptionFirst と同処理）
         description: stripHtml(ep.description) || null,
+        // 各話タグ（正規化済み・§77。dアニメストア/アニメ/第1話・作品名タグは除外。
+        // クールタグの除外は表示時に isCoursTag で行う）
+        tags: processEpisodeTags(ep.tags, s.title).map((t) => t.name),
       })),
     }
     writeFileSync(join(seriesDir, `${s.series_id}.json`), JSON.stringify(detail), 'utf-8')

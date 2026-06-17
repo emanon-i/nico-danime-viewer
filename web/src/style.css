@@ -1638,6 +1638,12 @@
     color: var(--text);
     font-size: var(--text-l3);
 
+    /* type=search（§83）のネイティブ × はトークンUIと作法が異なるため非表示。
+       クリアは末尾 Backspace でピル/クエリを外す既存導線に集約する。 */
+    &::-webkit-search-cancel-button {
+      appearance: none;
+    }
+
     &:focus {
       outline: none;
     }
@@ -2533,6 +2539,13 @@
       display: flex;
       flex-wrap: wrap;
       gap: var(--sp-3);
+    }
+
+    /* 各話タグ（§77）。メタと説明の間。チップは折り返し・タグUI全体の作法に統一。 */
+    .episode-detail-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
     }
   }
 

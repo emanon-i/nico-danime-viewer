@@ -13,6 +13,8 @@ const BASE_STATE: ListState = {
   dir: 'desc',
   size: 48,
   page: 1,
+  dur: '',
+  year: '',
 }
 
 const SAMPLE_WORKS: Work[] = [

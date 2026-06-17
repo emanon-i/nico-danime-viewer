@@ -31,6 +31,8 @@ export interface Work {
   mylistFirst?: number
   /** シリーズ合算再生時間（秒）。平均話長＝durationTotal/episodeCount で再生時間絞り込みに使う */
   durationTotal?: number
+  /** 累計再生数（全話合算・§79）。カードの累計再生数メタ・views 並び替えに使う（旧 JSON では欠落） */
+  totalViews?: number
   /** Hot 生スコア（0..1）。炎ティア（§64）を ranking.hotTiers と突合して算出する */
   hotScore?: number
   relatedSeries: RelatedSeries[]
@@ -134,6 +136,8 @@ export interface SeriesEpisode {
   thumbnailUrl: string | null
   /** 各話あらすじ（episodes.description・ドロワーに表示＝§51。旧 JSON では欠落） */
   description?: string | null
+  /** 各話タグ（正規化済み・§77。ドロワーのメタと説明の間に表示。クールタグ除外は表示時。旧 JSON では欠落） */
+  tags?: string[]
 }
 
 export interface SeriesDetail {

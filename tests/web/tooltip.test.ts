@@ -16,6 +16,8 @@ const BASE_STATE: ListState = {
   dir: 'desc',
   size: 48,
   page: 1,
+  dur: '',
+  year: '',
 }
 
 const SERIES: SeriesDetail = {

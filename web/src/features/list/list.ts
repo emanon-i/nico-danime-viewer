@@ -219,7 +219,11 @@ function buildTagSearch(
   }
 
   const input = document.createElement('input')
-  input.type = 'text'
+  // type=search＋enterKeyHint=search で、モバイルのソフトキーボードに「次へ」ではなく
+  // 「検索」アクションを出す（§83）。text のままだと確定でフォーカスが次要素＝件数 select に
+  // 飛んでしまう。Top のヒーロー検索（type=search）と同作法に揃える。
+  input.type = 'search'
+  input.enterKeyHint = 'search'
   input.className = 'tag-search-input'
   input.autocomplete = 'off'
   input.setAttribute('role', 'combobox')

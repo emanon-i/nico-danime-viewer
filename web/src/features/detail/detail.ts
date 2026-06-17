@@ -8,6 +8,21 @@ import { buildDisclosure } from '../../components/disclosure'
 import { isCoursTag } from '../../shared/tag-filter'
 
 /**
+ * タグチップ（`.tag-chip`）を生成。クリックで `?tag=` のタグフィルタへ遷移（§82）。
+ * 20ch を超えるラベルは CSS で … 省略され、全文ツールチップを直付けする（§77：
+ * ドロワー内チップは初期 hidden で wireTruncationTooltips が計測できないため、
+ * 文字数で判定して data-tooltip を確定的に付与する）。
+ */
+function tagChip(tag: string): HTMLAnchorElement {
+  const chip = document.createElement('a')
+  chip.className = 'tag-chip'
+  chip.href = '?tag=' + encodeURIComponent(tag)
+  chip.textContent = tag
+  if ([...tag].length > 20) chip.dataset.tooltip = tag
+  return chip
+}
+
+/**
  * 各話行を生成する。
  * - 主クリック（行本体ボタン）→ 各話詳細をインライン展開（アコーディオン・§13 項目13）
  * - 副 ↗（external-link）→ 公式 watch（外部・別タブ・§12 で ▶ から ↗ へ変更）
@@ -121,6 +136,16 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
   const rightCol = document.createElement('div')
   rightCol.className = 'episode-detail-main'
   rightCol.appendChild(dmeta)
+  // 各話タグ（§77）。メタと説明の間。クール由来タグ（「2026年春アニメ」等・§68）は
+  // 各話でも除外。除外後 0 件なら行ごと出さない。チップ作法はタグUI全体に統一（1行ピル20ch・
+  // 超過は … 省略＋ツールチップ・クリックで ?tag= へ）。
+  const epTags = (ep.tags ?? []).filter((tag) => !isCoursTag(tag))
+  if (epTags.length > 0) {
+    const tagsRow = document.createElement('div')
+    tagsRow.className = 'episode-detail-tags'
+    epTags.forEach((tag) => tagsRow.appendChild(tagChip(tag)))
+    rightCol.appendChild(tagsRow)
+  }
   // 各話あらすじ（あれば・§51）。メタの下に読みやすく。
   const desc = ep.description?.trim()
   if (desc) {
@@ -195,20 +220,14 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   const tagsDiv = document.createElement('div')
   tagsDiv.className = 'detail-tags'
   // クール由来タグ（「2026年春アニメ」等）はチップに出さない（§68）
-  series.tags
-    .filter((tag) => !isCoursTag(tag))
-    .forEach((tag) => {
-      const chip = document.createElement('a')
-      chip.className = 'tag-chip'
-      chip.href = '?tag=' + encodeURIComponent(tag)
-      chip.textContent = tag
-      tagsDiv.appendChild(chip)
-    })
+  series.tags.filter((tag) => !isCoursTag(tag)).forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
   infoDiv.appendChild(tagsDiv)
 
   // シリーズメタ＝[film]話数 ＋ [message]総コメント ＋ [bookmark]総マイリス（§18）。
   // 総再生数は出さない（各話ドロワーで見られるため冗長＝§17）。
   if (series.episodes.length > 0) {
+    const epCount = series.episodes.length
+    const sumViews = series.episodes.reduce((a, e) => a + (e.viewCounter ?? 0), 0)
     const sumComment = series.episodes.reduce((a, e) => a + (e.commentCounter ?? 0), 0)
     const sumMylist = series.episodes.reduce((a, e) => a + (e.mylistCounter ?? 0), 0)
     const metaRow = document.createElement('div')
@@ -216,8 +235,8 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     metaRow.appendChild(
       metaSpan({
         icon: 'film',
-        value: `${series.episodes.length}話`,
-        label: `全${series.episodes.length}話`,
+        value: `${epCount}話`,
+        label: `全${epCount}話`,
       })
     )
     if (sumComment > 0)
@@ -236,6 +255,27 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
           label: `総マイリスト ${formatViews(sumMylist)}`,
         })
       )
+    // ビューア独自メタ（§81）：1 話あたり平均。総数（上）と区別できるよう「平均 …/話」表記。
+    if (sumViews > 0) {
+      const avgViews = Math.round(sumViews / epCount)
+      metaRow.appendChild(
+        metaSpan({
+          icon: 'play',
+          value: `平均 ${formatViews(avgViews)}/話`,
+          label: `1話あたり平均再生数 ${formatViews(avgViews)}`,
+        })
+      )
+    }
+    if (sumComment > 0) {
+      const avgComment = Math.round(sumComment / epCount)
+      metaRow.appendChild(
+        metaSpan({
+          icon: 'message',
+          value: `平均 ${formatViews(avgComment)}/話`,
+          label: `1話あたり平均コメント数 ${formatViews(avgComment)}`,
+        })
+      )
+    }
     infoDiv.appendChild(metaRow)
   }
 
