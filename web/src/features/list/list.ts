@@ -1,6 +1,6 @@
 import type { Work, Tag, CoursGroup } from '../../data/types'
 import type { ListState } from '../router'
-import { buildListUrl } from '../router'
+import { buildListUrl, PAGE_SIZE_OPTIONS } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { card as createCard } from '../../components/card'
 import { icon } from '../../components/icon'
@@ -26,7 +26,7 @@ function sortLabel(sort: SortKey): string {
     case 'kana':
       return '五十音順'
     case 'comments':
-      return '総コメント数'
+      return 'コメント数'
   }
 }
 
@@ -459,7 +459,7 @@ export function renderList(
   const sortInfo = document.createElement('button')
   sortInfo.className = 'info-btn'
   sortInfo.setAttribute('aria-label', '並び替えについて')
-  sortInfo.title =
+  sortInfo.dataset.tooltip =
     'Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／累計再生数順＝全期間の定番'
   sortInfo.appendChild(icon('info', 14))
   sortH3.appendChild(sortInfo)
@@ -479,6 +479,19 @@ export function renderList(
     sortGrid.appendChild(label)
   })
   sortSection.appendChild(sortGrid)
+
+  // 並び替え方向の共通トグル（§41）。選択中キーに対して 1 つだけ・既定 降順。
+  const dirToggle = document.createElement('button')
+  dirToggle.type = 'button'
+  dirToggle.className = 'sort-dir-toggle'
+  dirToggle.dataset.part = 'sort-dir'
+  dirToggle.setAttribute('aria-pressed', state.dir === 'asc' ? 'true' : 'false')
+  dirToggle.textContent = state.dir === 'asc' ? '昇順 ▲' : '降順 ▼'
+  dirToggle.setAttribute(
+    'aria-label',
+    `並び順の方向: 現在 ${state.dir === 'asc' ? '昇順' : '降順'}（押すと切替）`
+  )
+  sortSection.appendChild(dirToggle)
   filterDiv.appendChild(sortSection)
 
   // タグフィルタ（フラット1系統・別 facet なし）
@@ -609,7 +622,8 @@ export function renderList(
 
   const sortChip = document.createElement('span')
   sortChip.className = 'applied-chip applied-sort'
-  sortChip.textContent = `${sortLabel(state.sort)}順`
+  // 並び替えキー＋方向を反映（§41）。五十音は方向語が不自然なので順序の昇降のみ付す。
+  sortChip.textContent = `${sortLabel(state.sort)}・${state.dir === 'asc' ? '昇順' : '降順'}`
   applied.appendChild(sortChip)
 
   const addLinkChip = (label: string, removeState: Partial<ListState>) => {
@@ -661,6 +675,23 @@ export function renderList(
       }
     }
   }
+
+  // 表示件数セレクタ（§42）。選択中＝state.size。変更で 1 ページ目から再描画。
+  const sizeWrap = document.createElement('label')
+  sizeWrap.className = 'list-size'
+  sizeWrap.appendChild(document.createTextNode('表示件数 '))
+  const sizeSelect = document.createElement('select')
+  sizeSelect.className = 'list-size-select'
+  sizeSelect.dataset.part = 'size'
+  for (const opt of PAGE_SIZE_OPTIONS) {
+    const o = document.createElement('option')
+    o.value = String(opt)
+    o.textContent = `${opt}件`
+    if (opt === state.size) o.selected = true
+    sizeSelect.appendChild(o)
+  }
+  sizeWrap.appendChild(sizeSelect)
+  applied.appendChild(sizeWrap)
 
   results.appendChild(applied)
 

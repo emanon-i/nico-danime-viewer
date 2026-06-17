@@ -1,7 +1,8 @@
 import type { Work, RankingJson } from '../../data/types'
 import type { ListState } from '../router'
 
-export const PAGE_SIZE = 24
+// 既定の 1 ページ表示件数（§42 で 24→48 に拡大・選択 UI あり）
+export const PAGE_SIZE = 48
 
 // list.json の col_key は読みベースの五十音「行」char（あ/か/さ/た/な/は/ま/や/ら/わ）。
 // ローマ字ではなく日本語の行 char がそのまま入る（実データで確認）。
@@ -72,6 +73,17 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
 export function sortWorks(
   works: Work[],
   sort: ListState['sort'],
+  ranking: RankingJson | null,
+  dir: ListState['dir'] = 'desc'
+): Work[] {
+  const sorted = sortWorksDesc(works, sort, ranking)
+  // 既定（desc）＝best-first。asc は共通トグルで全反転（§41）。
+  return dir === 'asc' ? sorted.reverse() : sorted
+}
+
+function sortWorksDesc(
+  works: Work[],
+  sort: ListState['sort'],
   ranking: RankingJson | null
 ): Work[] {
   if (sort === 'hot' && ranking) {
@@ -111,11 +123,13 @@ export function sortWorks(
 
 export function paginateWorks(
   works: Work[],
-  page: number
+  page: number,
+  size: number = PAGE_SIZE
 ): { items: Work[]; totalCount: number; totalPages: number } {
+  const per = size > 0 ? size : PAGE_SIZE
   const totalCount = works.length
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(totalCount / per))
   const safePage = Math.max(1, Math.min(page, totalPages))
-  const start = (safePage - 1) * PAGE_SIZE
-  return { items: works.slice(start, start + PAGE_SIZE), totalCount, totalPages }
+  const start = (safePage - 1) * per
+  return { items: works.slice(start, start + per), totalCount, totalPages }
 }

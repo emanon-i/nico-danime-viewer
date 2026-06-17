@@ -164,6 +164,8 @@
 
     /* ♥ お気に入り ON の赤（テーマ非依存・ダーク/ライト両方で視認＝§20） */
     --heart: oklch(0.62 0.21 25);
+    /* 視聴済み ON の緑（circle-check 塗り＝§45・♥赤と並びで意味が一目） */
+    --watched: oklch(0.62 0.15 155);
 
     /* カード比率: 16:9。素サムネは 4:3(360×270) だが中身は 16:9 映像を
        上下黒帯でレターボックスした焼き込み。16:9 cover で黒帯(上下各 1/8)を
@@ -229,6 +231,24 @@
   :root {
     --content-max: 1280px;
     --gutter: clamp(var(--sp-4), 5vw, var(--sp-8));
+  }
+
+  /* 超広幅では最大幅を段階的に広げ、横を持て余さない（§44）。
+     auto-fill のカードグリッドは幅増加に応じて自動で列数が増える。 */
+  @media (min-width: 1600px) {
+    :root {
+      --content-max: 1520px;
+    }
+  }
+  @media (min-width: 1920px) {
+    :root {
+      --content-max: 1800px;
+    }
+  }
+  @media (min-width: 2400px) {
+    :root {
+      --content-max: 2200px;
+    }
   }
 
   /* ── Skip Link（§17.4）─────────────────────────────
@@ -799,12 +819,16 @@
       }
     }
 
-    /* 見た ON＝eye を accent で塗り（off の eye-off と形/塗りで一目・§20） */
+    /* 見た ON＝circle-check を緑で塗り（off=アウトライン・§45）。丸を塗り、
+       チェックは背景色で抜く＝「済」が一目。 */
     .card-watched.active {
-      color: var(--accent);
-      svg {
-        fill: color-mix(in oklch, var(--accent) 30%, transparent);
-        stroke: var(--accent);
+      color: var(--watched);
+      svg circle {
+        fill: var(--watched);
+        stroke: var(--watched);
+      }
+      svg path {
+        stroke: var(--bg);
       }
     }
   }
@@ -904,8 +928,11 @@
   /* ── タグチップ ──────────────────────────────────── */
   .tag-chip {
     display: inline-block;
-    /* 中身に応じて伸びる・省略しない・上限は広めに（§28） */
-    max-width: 22rem;
+    /* ピル共通方針（§49）: 1 行・中身ぴったりに伸びる・最大 ~20ch、超えたら … 省略。
+       コンテナ(100%)も超えない。はみ出し/内部改行/見切れは禁止。 */
+    max-width: min(20ch, 100%);
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding: var(--sp-1) var(--sp-3);
     border: 1px solid var(--border);
     border-radius: var(--r-full);
@@ -1474,7 +1501,8 @@
     border-radius: var(--r-full);
     font-size: var(--text-l4);
     color: var(--text);
-    max-width: 14rem;
+    /* ピル共通方針（§49）: 中身ぴったり・最大 ~20ch・超過はラベルを … 省略 */
+    max-width: min(20ch, 100%);
   }
 
   .tag-pill-label {
@@ -1644,6 +1672,10 @@
   .filter-tag-item,
   .filter-cours-item {
     display: inline-block;
+    /* ピル共通方針（§49）: 1 行・最大 ~20ch・列幅(100%)も超えない・超過は … 省略 */
+    max-width: min(20ch, 100%);
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding: var(--sp-1) var(--sp-3);
     border: 1px solid var(--border);
     border-radius: var(--r-full);
@@ -1664,7 +1696,7 @@
     }
   }
 
-  /* 並び替えラジオ＝1 項目 1 行・十分なスペーシング（§8） */
+  /* 並び替えラジオ＝1 項目 1 行・十分なスペーシング（§8）。ラベルは折り返さない（§48） */
   .filter-sort label {
     display: flex;
     align-items: center;
@@ -1673,6 +1705,7 @@
     font-size: var(--text-l4);
     color: var(--text-muted);
     cursor: pointer;
+    white-space: nowrap;
 
     input[type='radio'] {
       accent-color: var(--accent);
@@ -1712,6 +1745,74 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--sp-1) var(--sp-3);
+  }
+
+  /* 並び替え方向の共通トグル（§41）。選択キーに対して 1 つ・既定 降順。 */
+  .sort-dir-toggle {
+    margin-top: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--text-l4);
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--text);
+      border-color: var(--text-muted);
+    }
+    &[aria-pressed='true'] {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+  }
+
+  /* 表示件数セレクタ（§42）。適用中バー右側に配置。 */
+  .list-size {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    margin-left: auto;
+    font-size: var(--text-l4);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .list-size-select {
+    padding: 0.15rem var(--sp-2);
+    font-size: var(--text-l4);
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  /* ── カスタムツールチップ（§46）。位置は JS が CSSOM で設定（CSP 準拠）。 */
+  .tooltip {
+    position: fixed;
+    z-index: 100;
+    max-width: min(22rem, calc(100vw - 1rem));
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.22);
+    font-size: var(--text-l4);
+    line-height: 1.5;
+    white-space: normal;
+    pointer-events: none;
+
+    &[hidden] {
+      display: none;
+    }
   }
 
   /* もっと見る ▾ / 閉じる ▴ トグル（§26）。クール/タグ共通 */
@@ -2159,8 +2260,15 @@
     }
   }
   .btn-watched.active {
-    color: var(--accent);
-    border-color: var(--accent);
+    color: var(--watched);
+    border-color: var(--watched);
+    svg circle {
+      fill: var(--watched);
+      stroke: var(--watched);
+    }
+    svg path {
+      stroke: var(--bg);
+    }
   }
 
   .detail-episodes,

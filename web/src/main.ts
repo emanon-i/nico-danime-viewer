@@ -20,6 +20,7 @@ import {
 } from './features/shared/user-state'
 import { initTheme, toggleTheme, getTheme } from './features/shared/theme'
 import { icon } from './components/icon'
+import { initTooltips, wireTruncationTooltips } from './components/tooltip'
 import { formatViews, formatRelativeTime } from './components/meta'
 import type { MetaSpec } from './components/meta'
 import { initSettingsModal } from './features/shared/settings-modal'
@@ -127,10 +128,10 @@ function buildTopData(): TopData | undefined {
   }
 }
 
-/** 「見た」ボタンの状態を反映（on=eye / off=eye-off・塗り/形で一目・§20）。アイコンサイズ可変 */
+/** 「見た」ボタンの状態を反映（circle-check・on=塗り/off=アウトラインは CSS の .active で・§45）。 */
 function setWatchedState(btn: HTMLElement, on: boolean, size = 16): void {
   btn.classList.toggle('active', on)
-  btn.replaceChildren(icon(on ? 'eye' : 'eye-off', size))
+  btn.replaceChildren(icon('circle-check', size))
 }
 
 /** カードの ♥/見た ボタンを localStorage と同期させる */
@@ -310,8 +311,12 @@ async function render(): Promise<void> {
       })
     }
 
-    const sorted = sortWorks(filtered, screen.state.sort, cache.ranking ?? null)
-    const { items, totalCount, totalPages } = paginateWorks(sorted, screen.state.page)
+    const sorted = sortWorks(filtered, screen.state.sort, cache.ranking ?? null, screen.state.dir)
+    const { items, totalCount, totalPages } = paginateWorks(
+      sorted,
+      screen.state.page,
+      screen.state.size
+    )
 
     // カード下キャプション＝選択中の並び替えに応じた指標（§5）
     const hotMap = new Map((cache.ranking?.hot ?? []).map((r) => [r.seriesId, r.hotScore]))
@@ -395,6 +400,19 @@ async function render(): Promise<void> {
       })
     })
 
+    // 並び替え方向トグル（§41）。現在キーに対し dir を反転、1 ページ目から。
+    const dirToggle = app.querySelector<HTMLElement>('[data-part="sort-dir"]')
+    dirToggle?.addEventListener('click', () => {
+      const nextDir = screen.state.dir === 'asc' ? 'desc' : 'asc'
+      navigate(buildListUrl({ ...screen.state, dir: nextDir, page: 1 }))
+    })
+
+    // 表示件数セレクタ（§42）。件数変更で 1 ページ目から再描画。
+    const sizeSelect = app.querySelector<HTMLSelectElement>('[data-part="size"]')
+    sizeSelect?.addEventListener('change', () => {
+      navigate(buildListUrl({ ...screen.state, size: Number(sizeSelect.value), page: 1 }))
+    })
+
     const favCb = app.querySelector<HTMLInputElement>('input[name="fav"]')
     const unwatchedCb = app.querySelector<HTMLInputElement>('input[name="unwatched"]')
     if (favCb) {
@@ -440,11 +458,16 @@ async function render(): Promise<void> {
   // 全ページ共通フッター（情報＝出典・更新・リポジトリ）を最後に置く（§10）
   app.appendChild(renderFooter({ lastUpdated: cache.ranking?.lastUpdated ?? null }))
 
+  // 省略されたピル（タグ/クール/検索トークン）に全文ツールチップを付ける（§46/§49）
+  wireTruncationTooltips(app)
+
   focusMainIfNavigation()
 }
 
 // テーマを最初に適用（FOUC を防ぐ）
 initTheme()
+// カスタムツールチップのグローバル配線（§46・1 回だけ）
+initTooltips()
 
 window.addEventListener('popstate', () => {
   isNavigation = true

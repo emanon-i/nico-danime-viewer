@@ -66,7 +66,7 @@ describe('buildListUrl (F-0022)', () => {
   })
 
   it('デフォルト値は省略される（hot ソート・1ページ目）', () => {
-    const url = buildListUrl({ sort: 'hot', page: 1 })
+    const url = buildListUrl({ sort: 'hot', dir: 'desc', size: 48, page: 1 })
     const params = new URLSearchParams(url.slice(1))
     expect(params.has('sort')).toBe(false)
     expect(params.has('page')).toBe(false)
@@ -80,6 +80,8 @@ describe('test_history_navigation (F-0022)', () => {
       tags: ['bar'],
       cours: '2026春',
       sort: 'views',
+      dir: 'desc',
+      size: 48,
       page: 2,
       row: 'さ',
     }

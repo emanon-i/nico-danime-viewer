@@ -24,7 +24,16 @@ const BASE_WORK: Work = {
   relatedSeries: [],
 }
 
-const BASE_STATE: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
+const BASE_STATE: ListState = {
+  q: '',
+  row: '',
+  tags: [],
+  cours: '',
+  sort: 'hot',
+  dir: 'desc',
+  size: 48,
+  page: 1,
+}
 
 const BASE_RANKING: RankingJson = {
   lastUpdated: '2026-06-16T00:00:00Z',

@@ -4,7 +4,16 @@ import { renderList } from '../../web/src/features/list/list'
 import type { Work } from '../../web/src/data/types'
 import type { ListState } from '../../web/src/features/router'
 
-const BASE_STATE: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
+const BASE_STATE: ListState = {
+  q: '',
+  row: '',
+  tags: [],
+  cours: '',
+  sort: 'hot',
+  dir: 'desc',
+  size: 48,
+  page: 1,
+}
 
 const SAMPLE_WORKS: Work[] = [
   {

@@ -7,7 +7,16 @@ import type { ListState } from '../../web/src/features/router'
 import { card as createSeriesCard } from '../../web/src/components/card'
 import type { SeriesDetail } from '../../web/src/data/types'
 
-const BASE_STATE: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
+const BASE_STATE: ListState = {
+  q: '',
+  row: '',
+  tags: [],
+  cours: '',
+  sort: 'hot',
+  dir: 'desc',
+  size: 48,
+  page: 1,
+}
 
 const SERIES: SeriesDetail = {
   seriesId: 1,
@@ -97,7 +106,7 @@ describe('F-0037: ⓘ ツールチップ（各画面1か所集約）', () => {
   it('test_info_tooltip_copy: トップ画面の ⓘ に利用者向け文言が含まれる（screens.md 指定）', () => {
     renderTop(container)
     const infoBtn = container.querySelector('.info-btn')
-    const title = infoBtn?.getAttribute('title') ?? ''
+    const title = infoBtn?.getAttribute('data-tooltip') ?? ''
     expect(title).toContain('Hot')
     expect(title).toContain('人気TOP')
     expect(title).toContain('目安')
@@ -106,7 +115,7 @@ describe('F-0037: ⓘ ツールチップ（各画面1か所集約）', () => {
   it('test_info_tooltip_copy: 一覧の ⓘ に利用者向け文言が含まれる（screens.md 指定）', () => {
     renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
     const infoBtn = container.querySelector('.info-btn')
-    const title = infoBtn?.getAttribute('title') ?? ''
+    const title = infoBtn?.getAttribute('data-tooltip') ?? ''
     expect(title).toContain('Hot')
     expect(title).toContain('目安')
   })
@@ -114,7 +123,7 @@ describe('F-0037: ⓘ ツールチップ（各画面1か所集約）', () => {
   it('test_info_tooltip_copy: 詳細画面の ⓘ に利用者向け文言が含まれる（screens.md 指定）', () => {
     renderDetail(container, SERIES)
     const infoBtn = container.querySelector('.info-btn')
-    const title = infoBtn?.getAttribute('title') ?? ''
+    const title = infoBtn?.getAttribute('data-tooltip') ?? ''
     expect(title).toContain('第1話のあらすじ')
     expect(title).toContain('ニコニコ')
   })

@@ -175,7 +175,16 @@ describe('F-0047: 総合/E2E テスト', () => {
     })
 
     it('一覧画面が作品グリッドを描画する', () => {
-      const state: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
+      const state: ListState = {
+        q: '',
+        row: '',
+        tags: [],
+        cours: '',
+        sort: 'hot',
+        dir: 'desc',
+        size: 48,
+        page: 1,
+      }
       renderList(container, {
         state,
         works: FIXTURE_WORKS,
@@ -213,6 +222,8 @@ describe('F-0047: 総合/E2E テスト', () => {
         tags: [],
         cours: '',
         sort: 'hot',
+        dir: 'desc',
+        size: 48,
         page: 1,
       }
       const url = buildListUrl(original)
@@ -231,6 +242,8 @@ describe('F-0047: 総合/E2E テスト', () => {
         tags: ['日常'],
         cours: '2022-秋',
         sort: 'views',
+        dir: 'desc',
+        size: 48,
         page: 2,
       }
       const url = buildListUrl(original)
@@ -292,6 +305,8 @@ describe('F-0047: 総合/E2E テスト', () => {
         tags: [],
         cours: '',
         sort: 'hot',
+        dir: 'desc',
+        size: 48,
         page: 1,
       }
       renderList(container, { state, works: [], totalCount: 0, totalPages: 1 })

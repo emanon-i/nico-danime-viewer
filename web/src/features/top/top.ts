@@ -304,7 +304,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
     <section class="top10" data-section="top10">
       <div class="section-head">
         <h2>人気シリーズ TOP10
-          <button class="info-btn" aria-label="Hot と人気TOP の違いについて" title="Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／人気TOP＝全期間の累計再生数による定番ランキング"></button>
+          <button class="info-btn" aria-label="Hot と人気TOP の違いについて" data-tooltip="Hot＝今の勢い（再生数と公開からの日数からの目安・正確な期間集計ではありません）／人気TOP＝全期間の累計再生数による定番ランキング"></button>
         </h2>
         <a href="?sort=views" class="see-all">すべて見る</a>
       </div>

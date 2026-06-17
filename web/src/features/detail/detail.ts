@@ -171,7 +171,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   const infoBtn = document.createElement('button')
   infoBtn.className = 'info-btn'
   infoBtn.setAttribute('aria-label', '主要メタの要点について')
-  infoBtn.title =
+  infoBtn.dataset.tooltip =
     '概要は第1話のあらすじを表示しています。タグ・再生数・各話・クールはニコニコの公開情報より'
   infoBtn.appendChild(icon('info', 14))
   h1.appendChild(infoBtn)
@@ -244,8 +244,8 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   const watchedBtn = document.createElement('button')
   watchedBtn.className = 'btn-watched'
   watchedBtn.setAttribute('aria-label', '見た')
-  // アイコン（eye/eye-off）と active 状態は main.ts wireDetailMarks が設定する（§20）
-  watchedBtn.appendChild(icon('eye-off', 16))
+  // アイコン（circle-check）と active 状態は main.ts wireDetailMarks が設定する（§45）
+  watchedBtn.appendChild(icon('circle-check', 16))
   watchedBtn.appendChild(document.createTextNode('見た'))
   marksDiv.appendChild(watchedBtn)
   infoDiv.appendChild(marksDiv)

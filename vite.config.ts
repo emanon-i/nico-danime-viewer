@@ -61,6 +61,9 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     emptyOutDir: true,
+    // フォント等を data: URI にインライン化しない（厳格 CSP は font-src(=default-src 'self')
+    // で data: を不許可 → インライン woff が全ブロックされるため）。実ファイル配信に統一。
+    assetsInlineLimit: 0,
   },
   plugins: [dataPlugin],
 })

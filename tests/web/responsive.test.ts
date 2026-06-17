@@ -4,7 +4,16 @@ import { renderTop } from '../../web/src/features/top/top'
 import { renderList } from '../../web/src/features/list/list'
 import type { ListState } from '../../web/src/features/router'
 
-const BASE_STATE: ListState = { q: '', row: '', tags: [], cours: '', sort: 'hot', page: 1 }
+const BASE_STATE: ListState = {
+  q: '',
+  row: '',
+  tags: [],
+  cours: '',
+  sort: 'hot',
+  dir: 'desc',
+  size: 48,
+  page: 1,
+}
 
 describe('F-0038: レスポンシブ構造', () => {
   let container: HTMLDivElement
