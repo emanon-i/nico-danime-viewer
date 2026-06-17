@@ -497,7 +497,7 @@ export function renderList(
     `並び順の方向: 現在 ${state.dir === 'asc' ? '昇順' : '降順'}（押すと切替）`
   )
   sortSection.appendChild(dirToggle)
-  filterDiv.appendChild(sortSection)
+  // ※ filterDiv への追加は末尾でまとめて順序制御（§66）
 
   // タグフィルタ（フラット1系統・別 facet なし）
   const tagsSection = document.createElement('div')
@@ -535,7 +535,7 @@ export function renderList(
     })
     tagsSection.appendChild(tagList)
   }
-  filterDiv.appendChild(tagsSection)
+  // ※ filterDiv への追加は末尾でまとめて順序制御（§66）
 
   // クールフィルタ
   const coursSection = document.createElement('div')
@@ -566,7 +566,7 @@ export function renderList(
     })
     coursSection.appendChild(coursList)
   }
-  filterDiv.appendChild(coursSection)
+  // ※ filterDiv への追加は末尾でまとめて順序制御（§66）
 
   const markSection = document.createElement('div')
   markSection.className = 'filter-mark'
@@ -584,33 +584,30 @@ export function renderList(
   unwatchedCb.checked = unwatchedFilter
   unwatchedLabel.appendChild(unwatchedCb)
   unwatchedLabel.appendChild(document.createTextNode(' ✓ 未視聴'))
-  // 中身のない項目（空シェル）も表示するトグル（§63・既定 OFF＝非表示）
-  const emptyLabel = document.createElement('label')
-  const emptyCb = document.createElement('input')
-  emptyCb.type = 'checkbox'
-  emptyCb.name = 'empty'
-  emptyCb.checked = showEmptyFilter
-  emptyLabel.appendChild(emptyCb)
-  emptyLabel.appendChild(document.createTextNode(' 中身のない項目も表示'))
+  // 「取得できていないシリーズも表示」(§63/§67) は設定(⚙)へ移動したのでサイドバーには出さない。
   markSection.appendChild(favLabel)
   markSection.appendChild(unwatchedLabel)
-  markSection.appendChild(emptyLabel)
-  filterDiv.appendChild(markSection)
 
-  // ── 再生時間（離散スナップ・上限なし可）／投稿年 レンジ絞り込み（§23）──────────
-  if (sliders) {
-    for (const spec of [sliders.duration, sliders.year]) {
-      filterDiv.appendChild(
-        rangeSlider({
-          label: spec.name,
-          stops: spec.stops,
-          lowerIdx: spec.lowerIdx,
-          upperIdx: spec.upperIdx,
-          onChange: spec.onChange,
-        })
-      )
-    }
-  }
+  // ── 再生時間／投稿年 レンジ絞り込み（§23）。個別に並べ替えできるよう要素化（§66）──
+  const mkSlider = (spec: SliderSpec): HTMLElement =>
+    rangeSlider({
+      label: spec.name,
+      stops: spec.stops,
+      lowerIdx: spec.lowerIdx,
+      upperIdx: spec.upperIdx,
+      onChange: spec.onChange,
+    })
+  const durationSlider = sliders ? mkSlider(sliders.duration) : null
+  const yearSlider = sliders ? mkSlider(sliders.year) : null
+
+  // サイドバーのセクション順（§66）: 並び替え → マーク(お気に入り/未視聴) → 再生時間 →
+  // 投稿年 → クール → タグ。
+  filterDiv.appendChild(sortSection)
+  filterDiv.appendChild(markSection)
+  if (durationSlider) filterDiv.appendChild(durationSlider)
+  if (yearSlider) filterDiv.appendChild(yearSlider)
+  filterDiv.appendChild(coursSection)
+  filterDiv.appendChild(tagsSection)
 
   body.appendChild(filterDiv)
 
@@ -687,7 +684,7 @@ export function renderList(
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
   if (favFilter) addBtnChip('♥ お気に入り', onClearFav)
   if (unwatchedFilter) addBtnChip('✓ 未視聴', onClearUnwatched)
-  if (showEmptyFilter) addBtnChip('中身のない項目も表示', onClearShowEmpty)
+  if (showEmptyFilter) addBtnChip('取得できていないシリーズも表示', onClearShowEmpty)
   if (sliders) {
     for (const spec of [sliders.duration, sliders.year]) {
       const lastIdx = spec.stops.length - 1

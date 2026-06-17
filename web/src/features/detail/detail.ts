@@ -5,6 +5,7 @@ import { icon } from '../../components/icon'
 import { hiResThumb } from '../../components/card'
 import { metaSpan, formatViews, formatRelativeTime, formatDuration } from '../../components/meta'
 import { buildDisclosure } from '../../components/disclosure'
+import { isCoursTag } from '../../shared/tag-filter'
 
 /**
  * 各話行を生成する。
@@ -193,13 +194,16 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
 
   const tagsDiv = document.createElement('div')
   tagsDiv.className = 'detail-tags'
-  series.tags.forEach((tag) => {
-    const chip = document.createElement('a')
-    chip.className = 'tag-chip'
-    chip.href = '?tag=' + encodeURIComponent(tag)
-    chip.textContent = tag
-    tagsDiv.appendChild(chip)
-  })
+  // クール由来タグ（「2026年春アニメ」等）はチップに出さない（§68）
+  series.tags
+    .filter((tag) => !isCoursTag(tag))
+    .forEach((tag) => {
+      const chip = document.createElement('a')
+      chip.className = 'tag-chip'
+      chip.href = '?tag=' + encodeURIComponent(tag)
+      chip.textContent = tag
+      tagsDiv.appendChild(chip)
+    })
   infoDiv.appendChild(tagsDiv)
 
   // シリーズメタ＝[film]話数 ＋ [message]総コメント ＋ [bookmark]総マイリス（§18）。

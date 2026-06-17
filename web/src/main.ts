@@ -21,6 +21,7 @@ import {
 import { initTheme, toggleTheme, getTheme } from './features/shared/theme'
 import { icon } from './components/icon'
 import { initTooltips, wireTruncationTooltips } from './components/tooltip'
+import { isCoursTag, withoutCoursTagNames } from './shared/tag-filter'
 import { formatViews, formatRelativeTime } from './components/meta'
 import type { MetaSpec } from './components/meta'
 import { initSettingsModal } from './features/shared/settings-modal'
@@ -96,6 +97,12 @@ async function ensureData(): Promise<void> {
       loadCours(),
       loadNew(),
     ])
+    // クール由来タグ（「2026年春アニメ」等）はタグ UI から除外（§68）。クール絞り込みで扱う。
+    if (tags) {
+      tags.tags = tags.tags.filter((t) => !isCoursTag(t.name))
+      tags.topHotTags = withoutCoursTagNames(tags.topHotTags)
+      tags.topPopularTags = withoutCoursTagNames(tags.topPopularTags)
+    }
     cache = { works, ranking, tags, cours, newData }
   } catch {
     // データ未生成の場合はスケルトンのまま続行
@@ -227,6 +234,12 @@ function wireHeaderControls(): void {
     initSettingsModal(settingsBtn, app, {
       lastUpdated: cache.ranking?.lastUpdated ?? null,
       onRerender: () => void render(),
+      // 「取得できていないシリーズも表示」トグル（§67・空シェル表示）
+      showEmpty: showEmptyFilter,
+      onToggleEmpty: (on) => {
+        showEmptyFilter = on
+        void render()
+      },
     })
   }
 }
@@ -450,7 +463,6 @@ async function render(): Promise<void> {
 
     const favCb = app.querySelector<HTMLInputElement>('input[name="fav"]')
     const unwatchedCb = app.querySelector<HTMLInputElement>('input[name="unwatched"]')
-    const emptyCb = app.querySelector<HTMLInputElement>('input[name="empty"]')
     if (favCb) {
       favCb.checked = favFilter
       favCb.addEventListener('change', () => {
@@ -465,13 +477,7 @@ async function render(): Promise<void> {
         void render()
       })
     }
-    if (emptyCb) {
-      emptyCb.checked = showEmptyFilter
-      emptyCb.addEventListener('change', () => {
-        showEmptyFilter = emptyCb.checked
-        void render()
-      })
-    }
+    // 「取得できていないシリーズも表示」(§67) は設定(⚙)モーダルへ移動（下記 initSettingsModal）。
 
     wireHeaderControls()
     wireCards(app)

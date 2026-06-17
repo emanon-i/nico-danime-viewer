@@ -5,6 +5,10 @@ export interface SettingsModalOptions {
   repoUrl?: string | null
   lastUpdated?: string | null
   onRerender?: () => void
+  /** 「取得できていないシリーズも表示」トグルの現在値（§67） */
+  showEmpty?: boolean
+  /** 同トグル変更時のコールバック（§67） */
+  onToggleEmpty?: (on: boolean) => void
 }
 
 function createModal(): HTMLElement {
@@ -30,6 +34,23 @@ function createModal(): HTMLElement {
   const settingsH2 = document.createElement('h2')
   settingsH2.textContent = '設定'
   settingsSection.appendChild(settingsH2)
+
+  // 「取得できていないシリーズも表示」トグルスイッチ（§67・既定 OFF＝非表示）
+  const emptyToggleLabel = document.createElement('label')
+  emptyToggleLabel.className = 'settings-toggle'
+  const emptyToggle = document.createElement('input')
+  emptyToggle.type = 'checkbox'
+  emptyToggle.className = 'settings-empty-toggle'
+  emptyToggle.setAttribute('role', 'switch')
+  const emptyTrack = document.createElement('span')
+  emptyTrack.className = 'settings-toggle-track'
+  const emptyText = document.createElement('span')
+  emptyText.className = 'settings-toggle-text'
+  emptyText.textContent = '取得できていないシリーズも表示'
+  emptyToggleLabel.appendChild(emptyToggle)
+  emptyToggleLabel.appendChild(emptyTrack)
+  emptyToggleLabel.appendChild(emptyText)
+  settingsSection.appendChild(emptyToggleLabel)
 
   const exportBtn = document.createElement('button')
   exportBtn.className = 'settings-export-btn'
@@ -129,6 +150,17 @@ export function initSettingsModal(
       }
     }
     document.addEventListener('keydown', onKeydown)
+
+    // 「取得できていないシリーズも表示」トグル（§67）
+    const emptyToggle = modal.querySelector<HTMLInputElement>('.settings-empty-toggle')
+    if (emptyToggle) {
+      emptyToggle.checked = options.showEmpty ?? false
+      emptyToggle.setAttribute('aria-checked', emptyToggle.checked ? 'true' : 'false')
+      emptyToggle.addEventListener('change', () => {
+        emptyToggle.setAttribute('aria-checked', emptyToggle.checked ? 'true' : 'false')
+        options.onToggleEmpty?.(emptyToggle.checked)
+      })
+    }
 
     // エクスポートボタン
     modal.querySelector('.settings-export-btn')?.addEventListener('click', () => {

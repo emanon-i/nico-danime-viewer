@@ -1357,6 +1357,55 @@
     }
   }
 
+  /* 「取得できていないシリーズも表示」トグルスイッチ（§67） */
+  .settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+    cursor: pointer;
+    font-size: var(--text-l3);
+    color: var(--text);
+  }
+  .settings-empty-toggle {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .settings-toggle-track {
+    position: relative;
+    flex: 0 0 auto;
+    width: 2.5rem;
+    height: 1.4rem;
+    border-radius: var(--r-full);
+    background: var(--border);
+    transition: background 0.15s;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: calc(1.4rem - 4px);
+      height: calc(1.4rem - 4px);
+      border-radius: var(--r-full);
+      background: var(--bg);
+      transition: translate 0.15s;
+    }
+  }
+  .settings-empty-toggle:checked + .settings-toggle-track {
+    background: var(--accent);
+
+    &::after {
+      translate: calc(2.5rem - 1.4rem) 0;
+    }
+  }
+  .settings-empty-toggle:focus-visible + .settings-toggle-track {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
   .settings-export-btn,
   .settings-import-label,
   .settings-clear-btn {
@@ -1592,7 +1641,8 @@
     padding: var(--sp-3) var(--gutter) var(--sp-5);
 
     @media (min-width: 768px) {
-      grid-template-columns: 14rem minmax(0, 1fr);
+      /* サイドバーを拡幅（§65・14rem→17rem）。タグピル(最大20ch)/クールチップに余裕。 */
+      grid-template-columns: 17rem minmax(0, 1fr);
       align-items: start;
     }
   }
