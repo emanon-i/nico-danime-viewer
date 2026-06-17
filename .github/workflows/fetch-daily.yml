@@ -21,6 +21,11 @@ on:
         type: choice
         options:
           - full
+      force_seed:
+        description: 'nvapi seed を強制（7日ガード無視・部分DBの各話を全紐付けに戻す・§G）'
+        required: false
+        default: false
+        type: boolean
 
 # 最小権限
 permissions:
@@ -101,11 +106,14 @@ jobs:
           NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
 
       # ── Snapshot フル取得（期間分割・逐次・レート遵守・503 バックオフ） ─
+      # force_seed=true 時は NICO_FORCE_SEED=1 で nvapi seed を強制し、各話の series 紐付けを
+      # 全件やり直す（部分 cache を即フル＝ep>0 6299 に戻す・§G）。
       - name: Full snapshot fetch
         working-directory: src
         run: node scripts/fetch.mjs --mode=full
         env:
           NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
+          NICO_FORCE_SEED: ${{ inputs.force_seed && '1' || '0' }}
 
       # ── ビルド（CSP meta 含む）・data/ を dist/ に配置 ──────────
       - name: Build static site
