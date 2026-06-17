@@ -70,16 +70,16 @@ jobs:
             cp -r state/. src/data/ 2>/dev/null || true
           fi
 
-      # ── build.sqlite キャッシュ（DB 永続化＝重い再フェッチを避ける真の高速化）──
-      # key に run_id を含めて**毎回新規保存**し、restore-keys で**直近の DB を復元**する。
-      # これで snapshot version ゲートと nvapi 7日ガードが効き、2 回目以降は
-      # snapshot のフル再取得（version 変化時のみ）に縮む＝nvapi seed の ~1.5h を回避。
+      # ── build.sqlite キャッシュ（DB 永続化＝完全DBの真実源・§G）──────────────
+      # **daily だけが完全DBを保存する**専用名前空間 `sqlite-daily-<os>-<run_id>`。hourly は
+      # この系を restore 専用で読む（書き戻さない）ため、痩せた hourly DB が混ざって縮小が
+      # 連鎖する事故が起きない。restore-keys で直近の daily 完全DBを復元する。
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: src/data/build.sqlite
-          key: sqlite-${{ runner.os }}-${{ github.run_id }}
+          key: sqlite-daily-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            sqlite-${{ runner.os }}-
+            sqlite-daily-${{ runner.os }}-
 
       # ── Node / pnpm セットアップ ─────────────────────────────────
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -96,12 +96,13 @@ jobs:
         working-directory: src
         run: pnpm install --frozen-lockfile
 
-      # ── version ゲート: snapshot API バージョン確認 ──────────────
-      # バージョンが変わった場合は早期終了してアラートを発出
+      # ── version ゲート: snapshot API バージョン確認（参考ログ）──────────────
+      # 一時的な HTTP 403/5xx で daily 全体を落とさない（continue-on-error: true）。
+      # 実際のスキーマ破壊は後段の snapshot assert が捕捉するため、ここは情報取得に留める。
       - name: Version gate
         working-directory: src
         run: node scripts/fetch.mjs --check-version
-        continue-on-error: false
+        continue-on-error: true
         env:
           NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
 
