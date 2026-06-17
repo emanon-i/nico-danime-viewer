@@ -1,8 +1,8 @@
 import type { Work, RankingJson } from '../../data/types'
 import type { ListState } from '../router'
 
-// 既定の 1 ページ表示件数（§42 で 24→48 に拡大・選択 UI あり）
-export const PAGE_SIZE = 48
+// 既定の 1 ページ表示件数（§42・切りのいい 50。選択 UI で 50/100/200）
+export const PAGE_SIZE = 50
 
 // list.json の col_key は読みベースの五十音「行」char（あ/か/さ/た/な/は/ま/や/ら/わ）。
 // ローマ字ではなく日本語の行 char がそのまま入る（実データで確認）。

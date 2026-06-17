@@ -262,7 +262,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     const detailsEl = document.createElement('details')
     detailsEl.className = 'detail-overview'
     const summary = document.createElement('summary')
-    summary.textContent = '▸ 第1話のあらすじ'
+    summary.textContent = '第1話のあらすじ'
     detailsEl.appendChild(summary)
     const p = document.createElement('p')
     p.textContent = series.descriptionFirst

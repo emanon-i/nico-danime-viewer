@@ -250,7 +250,9 @@ describe('filterWorks - favIds/watchedIds (F-0034)', () => {
 })
 
 describe('paginateWorks', () => {
-  const works: Work[] = Array.from({ length: 50 }, (_, i) => ({
+  // PAGE_SIZE 変更に追従するよう件数は PAGE_SIZE 相対（2 ページ目が必ず存在する数）
+  const TOTAL = PAGE_SIZE + 10
+  const works: Work[] = Array.from({ length: TOTAL }, (_, i) => ({
     ...BASE_WORK,
     seriesId: i + 1,
     title: `作品${i + 1}`,
@@ -260,8 +262,8 @@ describe('paginateWorks', () => {
     const { items, totalCount, totalPages } = paginateWorks(works, 1)
     expect(items).toHaveLength(PAGE_SIZE)
     expect(items[0].seriesId).toBe(1)
-    expect(totalCount).toBe(50)
-    expect(totalPages).toBe(Math.ceil(50 / PAGE_SIZE))
+    expect(totalCount).toBe(TOTAL)
+    expect(totalPages).toBe(Math.ceil(TOTAL / PAGE_SIZE))
   })
 
   it('2ページ目は PAGE_SIZE 番以降', () => {

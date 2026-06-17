@@ -15,8 +15,8 @@ export interface ListState {
   size: number
 }
 
-/** 表示件数の選択肢（§42）。既定＝先頭。 */
-export const PAGE_SIZE_OPTIONS = [48, 96, 144] as const
+/** 表示件数の選択肢（§42・切りのいい丸い数字）。既定＝先頭=50。 */
+export const PAGE_SIZE_OPTIONS = [50, 100, 200] as const
 export const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0]
 
 export type Screen =

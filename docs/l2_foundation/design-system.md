@@ -772,3 +772,16 @@ export function hiResThumb(url: string | null): string {
 | 54  | **「新着」順が実際に新着でない** → `seriesId` 順をやめ **latestAt 降順**に。表示日付(§53)とソート基準を一致                                         | `filter.ts` sortWorks `new`（latestAt 降順・タイブレーク seriesId）。latestAt は既存（ETL 追加不要）                                                                                                      |
 
 > **前期**は `cours=previous` keyword を `resolveCoursLabel` で実ラベル化（冬→前年秋ロールオーバー）。**お気に入り**は `?fav=1` で `favFilter` を起動し以後はメモリ状態が引き継ぐ（fav は従来どおり URL 非再現）。**新着(§54)** は latestAt（最新話 startTime の MAX・works.json 既存）で並べ、カードの日付表示と一致。**各話あらすじ(§51)** で per-series JSON が約 3 倍（最大 ~518KB/件）になるが、詳細表示時のみオンデマンド読込。
+
+## 25. 公開後フィードバック反映（v1.6・表示件数値/あらすじ展開/改行/折返し）
+
+> **実装状況** 【実装済】。データは per-series JSON の `episodes[].description` を `stripHtml` 適用に更新（再 export）。
+
+| #   | 指摘 → 決定                                                                                                              | 実装                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 42′ | 表示件数を**切りのいい 50/100/200**（既定 50）に変更（旧 48/96/144）                                                     | `router.ts` `PAGE_SIZE_OPTIONS=[50,100,200]`／`filter.ts` `PAGE_SIZE=50`                                                      |
+| 55  | あらすじ既定状態を**画面幅で分岐**＝デスクトップ常時展開／モバイル折りたたみ。JS は open 属性を触らず齟齬なし            | CSS `@media(min-width:768px)`で `.detail-overview` の summary を静的化＋ content 常時表示。モバイルは `<details>` 既定 closed |
+| 56  | 説明文の**改行が消える** → 原因＝`description` が生 HTML（`<br><br>`）。`stripHtml` で `<br>`→`\n`・タグ除去（XSS 安全） | `export.mjs`（episode description に `stripHtml`）／CSS `.episode-detail-desc`/`.detail-overview p{white-space:pre-line}`     |
+| 57  | 説明文に **`word-break: auto-phrase`**（日本語の文節折返し）＋ `overflow-wrap: anywhere` フォールバック                  | CSS（説明文要素）。Chrome/FF で有効・Safari は未対応で通常折返しに落ちる（Safari 専用対応はしない）                           |
+
+> **55** は `<details>` の open 属性を JS で操作せず、CSS のメディアクエリだけで既定の見え方を切替（デスクトップは summary を `pointer-events:none`＋マーカー非表示の静的見出しにし、`:not(summary)` を `display:block` で常時表示）。**56** の改行は **ETL 段階で `<br>`→`\n`** に正規化（生 HTML 挿入はせず `textContent`＋`white-space:pre-line` で安全に改行表示）。**57** は素の `word-break: auto-phrase`＋`overflow-wrap` のみ（凝った Safari 対応なし）。

@@ -3,6 +3,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { stripHtml } from '../etl/series.mjs'
 
 /** JSON ファイルに書き出す（配信用のためインデントなし） */
 function writeJson(outDir, filename, data) {
@@ -350,7 +351,8 @@ export function exportSeries(db, outDir) {
         lengthSeconds: ep.length_seconds ?? null,
         startTime: ep.start_time,
         thumbnailUrl: ep.thumbnail_url,
-        description: ep.description ?? null,
+        // <br> を改行に・他 HTML/実体参照は除去（§56・XSS 安全。descriptionFirst と同処理）
+        description: stripHtml(ep.description) || null,
       })),
     }
     writeFileSync(join(seriesDir, `${s.series_id}.json`), JSON.stringify(detail), 'utf-8')
