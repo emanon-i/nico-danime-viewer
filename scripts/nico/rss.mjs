@@ -112,9 +112,11 @@ export function assertRssOk(items, channelTitle) {
  * @param {{ watchId: string, title: string, pubDate: string }[]} rssItems
  */
 export function resolveRssItems(db) {
+  // unresolved に加え rss_only も再解決対象に含める（§D）。後から episodes が追加（nvapi 解決/
+  // snapshot 回収）されると、以前 rss_only だった新着が contentId に解決できるようになるため。
   const unresolved = db
     .prepare(
-      `SELECT watch_id, title, pub_date FROM rss_items WHERE resolution_status = 'unresolved'`
+      `SELECT watch_id, title, pub_date FROM rss_items WHERE resolution_status IN ('unresolved', 'rss_only')`
     )
     .all()
 

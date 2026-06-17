@@ -4,7 +4,7 @@
 // 環境変数:
 //   NICO_USER_AGENT  問い合わせ先を含む UA 文字列（省略可・デフォルト値あり）
 
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -54,7 +54,7 @@ import {
 import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
 import { exportAll } from './export/export.mjs'
-import { selfHealEmptySeries } from './backfill.mjs'
+import { selfHealEmptySeries, backfillSeries } from './backfill.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -292,11 +292,70 @@ async function runHourly() {
     logger.info('fetch', 'RSS 304 not modified, skipping')
   }
 
-  // ── Phase G: Export（new.json のみ） ─────────────────────────────────────
+  // ── Phase D2: 新規動画の即時解決（§D・新着の毎時ライブ反映）────────────────
+  // まだ episode に解決できていない新着(rss_only)を、既存シリーズに title 前方一致で
+  // 対応付け → そのシリーズだけ nvapi v2/series を取得して各話を挿入（§85 backfillSeries 流用）。
+  // ＝新規話が再生数/投稿時間/サムネ/シリーズ紐付き付きで DB に入る。新規シリーズや舞台等で
+  // 対応シリーズが無いものは rss_only 据え置き（日次 full の snapshot で回収）。
+  let insertedEpisodes = 0
+  const targetSeries = matchRssOnlyToSeries(db)
+  if (targetSeries.length > 0) {
+    logger.info('fetch', 'phase D2: resolve new episodes via nvapi', {
+      series: targetSeries.length,
+    })
+    const stats = await backfillSeries(db, targetSeries, { dryRun: false })
+    insertedEpisodes = stats.episodes
+    if (insertedEpisodes > 0) {
+      syncSeriesThumbnails(db)
+      syncSeriesTimestamps(db)
+      resolveRssItems(db) // 挿入後に再解決＝rss_only→resolved（サムネ/再生数付き新着に）
+    }
+    logger.info('fetch', 'phase D2 done', { ...stats })
+  }
+
+  // ── Phase G: Export ──────────────────────────────────────────────────────
   createIndexes(db)
   logger.info('fetch', 'phase G: export (hourly)')
   exportAll(db, DATA_DIR, now)
-  logger.info('fetch', 'hourly done', { now })
+
+  // デプロイ判定フラグ（§D churn 対策）：新規話を挿入したときだけライブへ反映する。
+  // 新規が無い時間は state 保存のみ＝デプロイ skip。ワークフローがこのファイル有無で分岐。
+  if (insertedEpisodes > 0) {
+    writeFileSync(join(DATA_DIR, '.deploy-needed'), `${insertedEpisodes}\n`)
+  }
+  logger.info('fetch', 'hourly done', { now, insertedEpisodes })
+}
+
+/**
+ * 未解決(rss_only)の新着 RSS を、既存シリーズに title 前方一致（最長一致）で対応付ける（§D）。
+ * RSS title は「<シリーズ名> 第N話 <サブタイトル>」形式。先頭がどの series.title で始まるかで判定。
+ * @param {import('better-sqlite3').Database} db
+ * @returns {number[]} 重複除去した対応シリーズ id
+ */
+function matchRssOnlyToSeries(db) {
+  const norm = (s) => (s ?? '').replace(/\s+/gu, ' ').trim()
+  const rssOnly = db
+    .prepare(
+      "SELECT title FROM rss_items WHERE resolution_status = 'rss_only' AND title IS NOT NULL"
+    )
+    .all()
+  if (rssOnly.length === 0) return []
+  const series = db
+    .prepare('SELECT series_id, title FROM series WHERE is_available = 1 AND title IS NOT NULL')
+    .all()
+    .map((s) => ({ id: s.series_id, t: norm(s.title) }))
+    .filter((s) => s.t.length > 0)
+  const ids = new Set()
+  for (const r of rssOnly) {
+    const t = norm(r.title)
+    let best = null
+    for (const s of series) {
+      if (t.startsWith(s.t) && (!best || s.t.length > best.len))
+        best = { id: s.id, len: s.t.length }
+    }
+    if (best) ids.add(best.id)
+  }
+  return [...ids]
 }
 
 async function main() {

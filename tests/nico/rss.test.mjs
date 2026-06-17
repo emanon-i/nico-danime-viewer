@@ -184,4 +184,42 @@ describe('resolveRssItems (F-0019)', () => {
     expect(item.resolution_status).toBe('rss_only')
     expect(item.resolved_content_id).toBeNull()
   })
+
+  it('rss_only は後から episode が追加されたら再解決される（§D）', () => {
+    // 突合先がまだ無い状態で rss_item を入れる → rss_only
+    bulkUpsertRssItems(db, [
+      {
+        watchId: '2222222222',
+        title: '新番組 第1話',
+        pubDate: '2026-06-10T10:00:00+09:00',
+        guid: null,
+        titleNorm: null,
+        link: null,
+      },
+    ])
+    resolveRssItems(db)
+    expect(
+      db.prepare('SELECT resolution_status FROM rss_items WHERE watch_id=?').get('2222222222')
+        .resolution_status
+    ).toBe('rss_only')
+
+    // 後から該当 episode が追加される（nvapi 解決/snapshot 回収相当）
+    bulkUpsertEpisodes(
+      db,
+      [
+        {
+          contentId: 'so2002',
+          title: '新番組 第1話',
+          viewCounter: 50,
+          startTime: '2026-06-10T09:00:00+09:00',
+        },
+      ],
+      '2026-06-16T00:00:00Z'
+    )
+    // 再解決＝rss_only も対象に含むので resolved になる
+    resolveRssItems(db)
+    const after = db.prepare('SELECT * FROM rss_items WHERE watch_id=?').get('2222222222')
+    expect(after.resolution_status).toBe('resolved')
+    expect(after.resolved_content_id).toBe('so2002')
+  })
 })

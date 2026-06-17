@@ -21,11 +21,13 @@ on:
         options:
           - hourly
 
-# 最小権限: state ブランチへの書き込みのみ
+# 権限: state ブランチ書き込み＋（新規話があるときだけ）Pages デプロイ（§D）
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
-# 単一 state-writer: 並列実行を防ぎ状態の整合性を保証する
+# 単一 state-writer: 並列実行を防ぎ状態の整合性を保証する（日次と同一グループで排他）
 concurrency:
   group: state-writer
   cancel-in-progress: false
@@ -35,6 +37,10 @@ jobs:
     runs-on: ubuntu-latest
     # RSS 取得は軽量。長時間化＝異常としてここで打ち切る
     timeout-minutes: 20
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       # ── 状態復元 ────────────────────────────────────────────────
@@ -73,12 +79,44 @@ jobs:
         working-directory: src
         run: pnpm install --frozen-lockfile
 
-      # ── RSS 取得（条件付き GET・HWM 更新・id 解決） ──────────────
+      # ── RSS 取得＋新規動画の即時解決（条件付き GET・HWM 更新・nvapi 解決） ──
       - name: Fetch RSS (hourly mode)
         working-directory: src
         run: node scripts/fetch.mjs --mode=hourly
         env:
           NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
+
+      # ── デプロイ判定（§D churn 対策）：新規話を挿入したときだけ build+deploy ──
+      - name: Check deploy needed
+        id: gate
+        working-directory: src
+        run: |
+          if [ -f data/.deploy-needed ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "新規話あり → Pages 反映: $(cat data/.deploy-needed)"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "新規話なし → デプロイ skip"
+          fi
+
+      # ── 新規があるときだけ: ビルド → Pages デプロイ ──────────────
+      - name: Build static site
+        if: steps.gate.outputs.deploy == 'true'
+        working-directory: src
+        run: pnpm build
+        env:
+          CI: 'true'
+
+      - name: Upload Pages artifact
+        if: steps.gate.outputs.deploy == 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: src/dist/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        if: steps.gate.outputs.deploy == 'true'
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
       # ── 状態保存（state ブランチへコミット） ─────────────────────
       # GITHUB_TOKEN で認証。state ブランチを clone（無ければ orphan 初期化）し、
@@ -94,7 +132,7 @@ jobs:
           else
             mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --delete --exclude='.git' --exclude='build.sqlite' --exclude='*.sqlite' src/data/. state_pub/
+          rsync -av --delete --exclude='.git' --exclude='build.sqlite' --exclude='*.sqlite' --exclude='.deploy-needed' src/data/. state_pub/
           cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'

@@ -31,3 +31,4 @@ Thumbs.db
 # --- ログ ---
 *.log
 npm-debug.log*
+data/.deploy-needed
