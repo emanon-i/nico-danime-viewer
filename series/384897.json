@@ -1,1 +1,71 @@
-{"seriesId":384897,"title":"MANKAI STAGE『A3!』～SUMMER 2019～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43419516/43419516.83510527","descriptionFirst":"ダウンロード数700万突破のイケメン役者育成ゲーム『A3!（エースリー）』を舞台化したMANKAI STAGE『A3!』は、2018年の初演以降、舞台だけにとどまらずその枠を飛び出し常に全国で新しい花を咲かせています。本公演では夏組にスポットを当てた、第二回公演『にぼしを巡る冒険』、第三回公演『抜錨！スカイ海賊団』の2ストーリーを展開いたします。始まりの季節である春に続き、太陽のようにアツイ夏の物語をお届けいたします！\n\n出演:陳内 将　宮崎 湧　野口 準　本田礼生　赤澤 燈／横田龍儀　前川優希　中村太郎／宇佐卓真　滝口幸広　伊崎龍次郎／河合龍之介\n\n原作:イケメン役者育成ゲーム『A3!（エースリー）』／演出:松崎史也／脚本:亀田真二郎／音楽:Yu(vague)／振付:梅棒\n\n©Liber Entertainment Inc. All Rights Reserved.　©MANKAI STAGE『A3!』製作委員会2019","tags":["春単2019⇔夏単2019","夏単2019⇔秋単2020"],"cours":null,"colKey":"あ","relatedSeries":[{"seriesId":115342,"title":"MANKAI STAGE『A3!』～SPRING & SUMMER 2018～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43397589/43397589.29900396"},{"seriesId":115343,"title":"MANKAI STAGE『A3!』～AUTUMN & WINTER 2019～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43401642/43401642.80014751"},{"seriesId":384901,"title":"MANKAI STAGE『A3!』～SPRING 2019～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43419515/43419515.87802995"},{"seriesId":387756,"title":"MANKAI STAGE『A3!』～WINTER 2020～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43415465/43415465.29197382"},{"seriesId":387758,"title":"MANKAI STAGE『A3!』～AUTUMN 2020～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43415464/43415464.55785980"},{"seriesId":388143,"title":"MANKAI STAGE『A3!』～WINTER 2021～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43456900/43456900.73974520"}],"episodes":[{"contentId":"so43419516","episodeNo":1,"title":"MANKAI STAGE『A3!』～SUMMER 2019～　本編","viewCounter":109,"commentCounter":13,"mylistCounter":6,"lengthSeconds":9045,"startTime":"2024-03-01T00:00:00+09:00","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43419516/43419516.83510527","description":"ダウンロード数700万突破のイケメン役者育成ゲーム『A3!（エースリー）』を舞台化したMANKAI STAGE『A3!』は、2018年の初演以降、舞台だけにとどまらずその枠を飛び出し常に全国で新しい花を咲かせています。本公演では夏組にスポットを当てた、第二回公演『にぼしを巡る冒険』、第三回公演『抜錨！スカイ海賊団』の2ストーリーを展開いたします。始まりの季節である春に続き、太陽のようにアツイ夏の物語をお届けいたします！\n\n出演:陳内 将　宮崎 湧　野口 準　本田礼生　赤澤 燈／横田龍儀　前川優希　中村太郎／宇佐卓真　滝口幸広　伊崎龍次郎／河合龍之介\n\n原作:イケメン役者育成ゲーム『A3!（エースリー）』／演出:松崎史也／脚本:亀田真二郎／音楽:Yu(vague)／振付:梅棒\n\n©Liber Entertainment Inc. All Rights Reserved.　©MANKAI STAGE『A3!』製作委員会2019","tags":["春単2019⇔夏単2019","夏単2019⇔秋単2020"]}]}
+{
+  "seriesId": 384897,
+  "title": "MANKAI STAGE『A3!』～SUMMER 2019～",
+  "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43419516/43419516.83510527",
+  "descriptionFirst": "ダウンロード数700万突破のイケメン役者育成ゲーム『A3!（エースリー）』を舞台化したMANKAI STAGE『A3!』は、2018年の初演以降、舞台だけにとどまらずその枠を飛び出し常に全国で新しい花を咲かせています。本公演では夏組にスポットを当てた、第二回公演『にぼしを巡る冒険』、第三回公演『抜錨！スカイ海賊団』の2ストーリーを展開いたします。始まりの季節である春に続き、太陽のようにアツイ夏の物語をお届けいたします！\n\n出演:陳内 将　宮崎 湧　野口 準　本田礼生　赤澤 燈／横田龍儀　前川優希　中村太郎／宇佐卓真　滝口幸広　伊崎龍次郎／河合龍之介\n\n原作:イケメン役者育成ゲーム『A3!（エースリー）』／演出:松崎史也／脚本:亀田真二郎／音楽:Yu(vague)／振付:梅棒\n\n©Liber Entertainment Inc. All Rights Reserved.　©MANKAI STAGE『A3!』製作委員会2019",
+  "tags": [
+    "MANKAI_STAGE『A3!』～SUMMER_2019～",
+    "春単2019⇔夏単2019",
+    "夏単2019⇔秋単2020"
+  ],
+  "cours": null,
+  "colKey": "あ",
+  "franchiseKey": "f:115342",
+  "relatedSeries": [
+    {
+      "seriesId": 115342,
+      "title": "MANKAI STAGE『A3!』～SPRING & SUMMER 2018～",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43397589/43397589.29900396"
+    },
+    {
+      "seriesId": 115343,
+      "title": "MANKAI STAGE『A3!』～AUTUMN & WINTER 2019～",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43401642/43401642.80014751"
+    },
+    {
+      "seriesId": 384901,
+      "title": "MANKAI STAGE『A3!』～SPRING 2019～",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43419515/43419515.87802995"
+    },
+    {
+      "seriesId": 387756,
+      "title": "MANKAI STAGE『A3!』～WINTER 2020～",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43415465/43415465.29197382"
+    },
+    {
+      "seriesId": 387758,
+      "title": "MANKAI STAGE『A3!』～AUTUMN 2020～",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43415464/43415464.55785980"
+    },
+    {
+      "seriesId": 388143,
+      "title": "MANKAI STAGE『A3!』～WINTER 2021～",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43456900/43456900.73974520"
+    }
+  ],
+  "isAvailable": true,
+  "firstSeen": "2024-03-01T00:00:00+09:00",
+  "lastSeen": "2024-03-01T00:00:00+09:00",
+  "episodes": [
+    {
+      "contentId": "so43419516",
+      "episodeNo": 1,
+      "title": "MANKAI STAGE『A3!』～SUMMER 2019～　本編",
+      "viewCounter": 109,
+      "commentCounter": 13,
+      "likeCounter": 4,
+      "mylistCounter": 6,
+      "lengthSeconds": 9045,
+      "startTime": "2024-03-01T00:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43419516/43419516.83510527",
+      "description": "ダウンロード数700万突破のイケメン役者育成ゲーム『A3!（エースリー）』を舞台化したMANKAI STAGE『A3!』は、2018年の初演以降、舞台だけにとどまらずその枠を飛び出し常に全国で新しい花を咲かせています。本公演では夏組にスポットを当てた、第二回公演『にぼしを巡る冒険』、第三回公演『抜錨！スカイ海賊団』の2ストーリーを展開いたします。始まりの季節である春に続き、太陽のようにアツイ夏の物語をお届けいたします！\n\n出演:陳内 将　宮崎 湧　野口 準　本田礼生　赤澤 燈／横田龍儀　前川優希　中村太郎／宇佐卓真　滝口幸広　伊崎龍次郎／河合龍之介\n\n原作:イケメン役者育成ゲーム『A3!（エースリー）』／演出:松崎史也／脚本:亀田真二郎／音楽:Yu(vague)／振付:梅棒\n\n©Liber Entertainment Inc. All Rights Reserved.　©MANKAI STAGE『A3!』製作委員会2019",
+      "tags": [
+        "MANKAI_STAGE『A3!』～SUMMER_2019～",
+        "春単2019⇔夏単2019",
+        "夏単2019⇔秋単2020"
+      ],
+      "tagsCurated": [],
+      "lastUpdated": "2026-06-17T18:43:45.804Z"
+    }
+  ]
+}

@@ -1,1 +1,58 @@
-{"seriesId":372447,"title":"ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43160958/43160958.65890385","descriptionFirst":"「ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～」の映像です。\n\nアーティスト: μ's\n\n©2013 プロジェクトラブライブ！\n\n次話→so43161068","tags":["μ'S","ライブ/ラジオ/ETC."],"cours":null,"colKey":"ら","relatedSeries":[],"episodes":[{"contentId":"so43160958","episodeNo":1,"title":"ラブライブ! μ’s Go→Go! LoveLive! 2015 ～Dream Sensation!～　Day.1","viewCounter":371,"commentCounter":2,"mylistCounter":10,"lengthSeconds":12083,"startTime":"2024-01-01T00:00:00+09:00","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43160958/43160958.65890385","description":"「ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～」の映像です。\n\nアーティスト: μ's\n\n©2013 プロジェクトラブライブ！\n\n次話→so43161068","tags":["μ'S","ライブ/ラジオ/ETC."]},{"contentId":"so43161068","episodeNo":2,"title":"ラブライブ! μ’s Go→Go! LoveLive! 2015 ～Dream Sensation!～　Day.2","viewCounter":236,"commentCounter":0,"mylistCounter":9,"lengthSeconds":11840,"startTime":"2024-01-01T00:00:00+09:00","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/43161068/43161068.88887239","description":"「ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～」の映像です。\n\nアーティスト: μ's\n\n©2013 プロジェクトラブライブ！\n\nso43160958←前話　第一話→so43160958","tags":[]}]}
+{
+  "seriesId": 372447,
+  "title": "ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～",
+  "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43160958/43160958.65890385",
+  "descriptionFirst": "「ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～」の映像です。\n\nアーティスト: μ's\n\n©2013 プロジェクトラブライブ！\n\n次話→so43161068",
+  "tags": [
+    "ラブライブ!",
+    "μ'S",
+    "ライブ/ラジオ/ETC."
+  ],
+  "cours": null,
+  "colKey": "ら",
+  "franchiseKey": null,
+  "relatedSeries": [],
+  "isAvailable": true,
+  "firstSeen": "2024-01-01T00:00:00+09:00",
+  "lastSeen": "2024-01-01T00:00:00+09:00",
+  "episodes": [
+    {
+      "contentId": "so43160958",
+      "episodeNo": 1,
+      "title": "ラブライブ! μ’s Go→Go! LoveLive! 2015 ～Dream Sensation!～　Day.1",
+      "viewCounter": 371,
+      "commentCounter": 2,
+      "likeCounter": 2,
+      "mylistCounter": 10,
+      "lengthSeconds": 12083,
+      "startTime": "2024-01-01T00:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43160958/43160958.65890385",
+      "description": "「ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～」の映像です。\n\nアーティスト: μ's\n\n©2013 プロジェクトラブライブ！\n\n次話→so43161068",
+      "tags": [
+        "ラブライブ!",
+        "μ'S",
+        "ライブ/ラジオ/ETC."
+      ],
+      "tagsCurated": [
+        "ライブ/ラジオ/ETC."
+      ],
+      "lastUpdated": "2026-06-17T18:43:45.804Z"
+    },
+    {
+      "contentId": "so43161068",
+      "episodeNo": 2,
+      "title": "ラブライブ! μ’s Go→Go! LoveLive! 2015 ～Dream Sensation!～　Day.2",
+      "viewCounter": 236,
+      "commentCounter": 0,
+      "likeCounter": 4,
+      "mylistCounter": 9,
+      "lengthSeconds": 11840,
+      "startTime": "2024-01-01T00:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43161068/43161068.88887239",
+      "description": "「ラブライブ! μ's Go→Go! LoveLive! 2015 ～Dream Sensation!～」の映像です。\n\nアーティスト: μ's\n\n©2013 プロジェクトラブライブ！\n\nso43160958←前話　第一話→so43160958",
+      "tags": [],
+      "tagsCurated": [],
+      "lastUpdated": "2026-06-17T18:43:45.804Z"
+    }
+  ]
+}

@@ -1,1 +1,40 @@
-{"seriesId":378607,"title":"サンタさんへのおくりもの","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/41563508/41563508.88543731","descriptionFirst":null,"tags":[],"cours":null,"colKey":"さ","relatedSeries":[],"episodes":[{"contentId":"so41563508","episodeNo":1,"title":"サンタさんへのおくりもの　本編","viewCounter":121,"commentCounter":0,"mylistCounter":6,"lengthSeconds":597,"startTime":"2023-01-06T10:00:00+09:00","thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumbnails/41563508/41563508.88543731","description":"サンタさんに一度でいいから会ってみたいキティとミミィは、サンタさんへお手紙を書きました。「クッキーと","tags":[]}]}
+{
+  "seriesId": 378607,
+  "title": "サンタさんへのおくりもの",
+  "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/41563508/41563508.88543731",
+  "descriptionFirst": "サンタさんに一度でいいから会ってみたいキティとミミィは、サンタさんへお手紙を書きました。「クッキーと",
+  "tags": [
+    "サンタさんへのおくりもの",
+    "子供向け"
+  ],
+  "cours": null,
+  "colKey": "さ",
+  "franchiseKey": null,
+  "relatedSeries": [],
+  "isAvailable": true,
+  "firstSeen": "2023-01-06T10:00:00+09:00",
+  "lastSeen": "2023-01-06T10:00:00+09:00",
+  "episodes": [
+    {
+      "contentId": "so41563508",
+      "episodeNo": 1,
+      "title": "サンタさんへのおくりもの　本編",
+      "viewCounter": 121,
+      "commentCounter": 0,
+      "likeCounter": 5,
+      "mylistCounter": 6,
+      "lengthSeconds": 597,
+      "startTime": "2023-01-06T10:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/41563508/41563508.88543731",
+      "description": "サンタさんに一度でいいから会ってみたいキティとミミィは、サンタさんへお手紙を書きました。「クッキーと",
+      "tags": [
+        "サンタさんへのおくりもの",
+        "子供向け"
+      ],
+      "tagsCurated": [
+        "子供向け"
+      ],
+      "lastUpdated": "2026-06-17T18:43:45.804Z"
+    }
+  ]
+}
