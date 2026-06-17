@@ -161,11 +161,17 @@ ON CONFLICT(series_id) DO UPDATE SET
   total_views = excluded.total_views, delta_views = excluded.delta_views,
   velocity = excluded.velocity, recency = excluded.recency, updated_at = excluded.updated_at;
 
--- hot_score（勢い）は delta / velocity / recency のブレンド（係数は L3）
-UPDATE series_metrics SET hot_score = /* w1*delta_views + w2*velocity + w3*f(recency) */ … ;
+-- hot_score（勢い）の確定式（実装は scripts/etl/metrics.mjs の単一 INSERT OR REPLACE で
+--  ep_agg → derived → ranges → normalized の CTE 連鎖により set-based に算出）:
+--   hot_score = 0.5*delta_n + 0.3*velocity_n + 0.2*recency_n
+--     delta_n    = min-max 正規化(delta_views)
+--     velocity_n = min-max 正規化(log1p(velocity))
+--     recency_n  = exp(-recency_days / tau)   -- tau=14 日・recency_days = now - MAX(start_time)
 ```
 
+- 上記は2文に分けて示しているが、**実装は1文（`INSERT OR REPLACE … WITH …`）で正規化まで完結**する（全シリーズの min/max を `ranges` CTE で求め、同じ文内で `normalized` を計算）。
 - ビュー（`CREATE VIEW`）でも可だが、**ランキング sort を頻繁に当てるので実体集計テーブル＋索引**が有利。generated column は固定式の派生に使う（例 velocity を保存列にするなら STORED）。
+- **炎ティア（カードの Hot 表示・percentile ベース）【設計・未実装】**: `hot_score` の分布から percentile を求め、🔥🔥🔥＝上位1% / 🔥🔥＝上位5% / 🔥＝上位10% / それ未満は炎なし のティアをビルド時に算出して JSON へ付与する想定（`design-system.md` §9.6.1）。現状は tier 列を export せず、カードは数値を表示する。
 
 ## 5. PRAGMA（ビルド時・再生成可能なので緩めて速度優先）
 

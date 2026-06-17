@@ -28,11 +28,20 @@
 ## 3. CSP（Content-Security-Policy・可能な範囲で）
 
 - **脅威**: 注入されたスクリプト/リソースの実行・外部送信。
-- **対策**: Pages はレスポンスヘッダ設定が難しいため **`<meta http-equiv="Content-Security-Policy">`** で絞る:
-  - `default-src 'self'`、`script-src 'self'`（**インライン script を避ける**）、`connect-src 'self'`（自分の静的 JSON＝同一オリジンのみ）、
-    `img-src` は**ニコニコのサムネ画像ドメイン**（`*.nimg.jp` 等）＋`'self'`、`style-src 'self'`（必要なら最小の `'unsafe-inline'` 検討）、`base-uri 'self'`。
+- **対策**: Pages はレスポンスヘッダ設定が難しいため **`<meta http-equiv="Content-Security-Policy">`** で絞る。実適用値（`web/index.html`）:
+
+  ```
+  default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self';
+  img-src 'self' https://nicovideo.cdn.nimg.jp https://*.nimg.jp;
+  base-uri 'self'; object-src 'none'
+  ```
+
+  - `script-src 'self'`：**インライン `<script>` 禁止**（`theme-init.js` も外部ファイル）。
+  - `style-src 'self'`：**インライン `style=""` 属性禁止**（`'unsafe-inline'` を入れない）。動的位置（ツールチップ）は CSSOM（`element.style` プロパティ代入）で指定する。
+  - `font-src 'self'`：フォントは self-host woff2 のみ（`data:` フォントは弾く＝Vite の `assetsInlineLimit:0` で全 woff2 を self ファイル化）。
+  - `img-src`：自オリジン＋ニコニコのサムネ画像 CDN（`nicovideo.cdn.nimg.jp` / `*.nimg.jp`）。
+  - `object-src 'none'`：プラグイン埋め込み禁止。
   - **`frame-ancestors` は `<meta>` CSP では強制されない**（HTTP レスポンスヘッダ専用）。**クリックジャッキング対策が必要なら、実 HTTP ヘッダを設定できるホスティングが必要**（GitHub Pages では meta の保証外）。
-  - 可能な範囲で段階的に強める（L3 で確定）。
 
 ## 4. ブラウザの通信範囲
 
@@ -60,12 +69,12 @@
 
 ## 対策レベルまとめ
 
-| 脅威 | 対策レベル | v1 で必須 |
-|------|-----------|:---:|
-| XSS/注入 | エスケープ徹底・概要は allowlist サニタイズ・`innerHTML` 禁止 | ✓ |
-| 外部リンク | `noopener noreferrer`・スキーム/ホスト allowlist・id 検証 | ✓ |
-| CSP | `<meta>` CSP で `default-src 'self'` 等・インライン script 回避 | ✓（可能な範囲） |
-| 通信範囲 | ブラウザは自JSON＋画像CDNのみ・API/RSS直叩き禁止 | ✓ |
-| サプライチェーン | 最小権限トークン・action SHA固定・`--frozen-lockfile`・Dependabot・ブランチ保護・secret scanning＋push protection | ✓ |
-| プライバシー | localStorage のみ・送信なし・解析なし | ✓ |
-| データ完全性 | 公開前検証・中間物は非配信 | ✓ |
+| 脅威             | 対策レベル                                                                                                        |    v1 で必須    |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- | :-------------: |
+| XSS/注入         | エスケープ徹底・概要は allowlist サニタイズ・`innerHTML` 禁止                                                     |        ✓        |
+| 外部リンク       | `noopener noreferrer`・スキーム/ホスト allowlist・id 検証                                                         |        ✓        |
+| CSP              | `<meta>` CSP で `default-src 'self'` 等・インライン script 回避                                                   | ✓（可能な範囲） |
+| 通信範囲         | ブラウザは自JSON＋画像CDNのみ・API/RSS直叩き禁止                                                                  |        ✓        |
+| サプライチェーン | 最小権限トークン・action SHA固定・`--frozen-lockfile`・Dependabot・ブランチ保護・secret scanning＋push protection |        ✓        |
+| プライバシー     | localStorage のみ・送信なし・解析なし                                                                             |        ✓        |
+| データ完全性     | 公開前検証・中間物は非配信                                                                                        |        ✓        |
