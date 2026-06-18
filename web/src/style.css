@@ -309,7 +309,8 @@
     .logo-icon {
       width: 28px;
       height: 28px;
-      border-radius: var(--r-sm);
+      max-width: 28px;
+      border-radius: var(--r-md);
       object-fit: contain;
       flex-shrink: 0;
     }
