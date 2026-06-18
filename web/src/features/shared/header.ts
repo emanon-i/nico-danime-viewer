@@ -22,7 +22,17 @@ export function buildHeader(opts: HeaderOptions): HTMLElement {
   const logo = document.createElement('a')
   logo.className = 'logo'
   logo.href = '?'
-  logo.textContent = 'ニコニコ支店ビューア'
+
+  const logoImg = document.createElement('img')
+  logoImg.src = `${import.meta.env.BASE_URL}favicon-32.png`
+  logoImg.width = 28
+  logoImg.height = 28
+  logoImg.alt = ''
+  logoImg.setAttribute('aria-hidden', 'true')
+  logoImg.className = 'logo-icon'
+  logo.appendChild(logoImg)
+
+  logo.appendChild(document.createTextNode('ニコニコ支店ビューア'))
   header.appendChild(logo)
 
   const searchBtn = document.createElement('button')

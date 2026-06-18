@@ -300,17 +300,17 @@
       color: var(--text);
       margin-right: auto;
 
-      &::before {
-        content: '';
-        width: 0.6rem;
-        height: 1.15rem;
-        border-radius: 2px;
-        background: var(--accent);
-      }
-
       &:hover {
         color: var(--accent);
       }
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--r-sm);
+      object-fit: contain;
+      flex-shrink: 0;
     }
   }
 
