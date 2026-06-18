@@ -137,3 +137,23 @@ export function formatRelativeTime(input: string, nowMs: number = Date.now()): s
   if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}/${d.getDate()}`
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
 }
+
+/**
+ * latestAt（最近更新）向けの相対表記。`formatRelativeTime` との差異:
+ * - 24 時間以内 → `新着`（「◯時間前」の代わりにバッジ的に表示）
+ * - 7〜27 日 → `N週前`（日付より文脈が掴みやすい）
+ * - 28 日超は日付形式（同年: `M/D`、年跨ぎ: `YYYY/M/D`）。
+ */
+export function formatRelativeTimeLatest(input: string, nowMs: number = Date.now()): string {
+  const t = Date.parse(input)
+  if (Number.isNaN(t)) return ''
+  const diff = nowMs - t
+  const day = 24 * 60 * 60 * 1000
+  if (diff < day) return '新着'
+  if (diff < 7 * day) return `${Math.floor(diff / day)}日前`
+  if (diff < 28 * day) return `${Math.floor(diff / (7 * day))}週前`
+  const d = new Date(t)
+  const now = new Date(nowMs)
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}/${d.getDate()}`
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+}

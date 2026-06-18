@@ -429,7 +429,7 @@ async function render(): Promise<void> {
       if (screen.state.sort === 'created') {
         // 新規＝最古話（初話）の投稿時刻＝ソート基準(firstAt)と表示日付を一致
         const rel = w.firstAt ? formatRelativeTime(w.firstAt) : ''
-        return rel ? { icon: 'clock', value: rel, label: `初話 ${rel}` } : null
+        return rel ? { icon: 'sparkles', value: rel, label: `初話 ${rel}` } : null
       }
       if (screen.state.sort === 'comments') {
         const c = w.commentTotal

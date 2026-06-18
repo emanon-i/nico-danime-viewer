@@ -4,7 +4,7 @@ import { buildListUrl, PAGE_SIZE_OPTIONS } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { card as createCard } from '../../components/card'
 import { icon } from '../../components/icon'
-import { metaSpan, formatViews, formatRelativeTime } from '../../components/meta'
+import { metaSpan, formatViews, formatRelativeTimeLatest } from '../../components/meta'
 import type { MetaSpec } from '../../components/meta'
 import { progressiveReveal } from '../../components/reveal'
 import { coursList, toggleCours } from './filter'
@@ -802,7 +802,7 @@ export function renderList(
       const cell = document.createElement('div')
       cell.className = 'card-cell'
       cell.appendChild(createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref))
-      // カード外枠下の常時メタ（§93）＝[film]話数 ＋ [play]総再生回数 ＋ [clock]投稿日(最新話)。
+      // カード外枠下の常時メタ（§93）＝[film]話数 ＋ [play]総再生回数 ＋ [history]投稿日(最新話)。
       // この 3 点は常に出す。並び替え連動メタ（§32）は、現在の sort 値がこの 3 点に
       // 含まれない場合だけ追加する（views=総再生 / new=投稿日 は二重表示しないため cardMetric が
       // null を返す。created=初話 / comments / 平均系 / hot は別値なので追加）。
@@ -819,8 +819,8 @@ export function renderList(
         metas.push({ icon: 'play', value: v, label: `総再生回数 ${v}` })
       }
       if (work.latestAt) {
-        const rel = formatRelativeTime(work.latestAt)
-        if (rel) metas.push({ icon: 'clock', value: rel, label: `投稿 ${rel}` })
+        const rel = formatRelativeTimeLatest(work.latestAt)
+        if (rel) metas.push({ icon: 'history', value: rel, label: `最新話投稿 ${rel}` })
       }
       const metric = cardMetric?.(work)
       // 並び替え連動メタは、表示文字列(value)が常時メタのいずれかと一致する場合は描画しない
