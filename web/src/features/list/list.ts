@@ -387,6 +387,23 @@ function buildTagSearch(
   return root
 }
 
+/**
+ * ページネーション用の数列を生成する（数字 + '…' 省略）。
+ * 両端（1 / total）と current±delta の範囲を表示し、間が 2 以上あれば '…' を挿入する。
+ */
+function paginationPages(current: number, total: number, delta: number): (number | '…')[] {
+  if (total <= 1) return []
+  const set = new Set<number>([1, total])
+  for (let p = Math.max(1, current - delta); p <= Math.min(total, current + delta); p++) set.add(p)
+  const sorted = [...set].sort((a, b) => a - b)
+  const result: (number | '…')[] = []
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) result.push('…')
+    result.push(sorted[i])
+  }
+  return result
+}
+
 /** 一覧画面（検索バー／五十音／フィルタ／グリッド／ページング）を描画する */
 export function renderList(
   container: HTMLElement,
@@ -840,38 +857,99 @@ export function renderList(
   results.appendChild(grid)
 
   // ── ページング ───────────────────────────────────────────────
-  const paginationDiv = document.createElement('div')
-  paginationDiv.className = 'list-pagination'
-  paginationDiv.dataset.part = 'pagination'
+  const paginationNav = document.createElement('nav')
+  paginationNav.className = 'list-pagination'
+  paginationNav.setAttribute('aria-label', 'ページネーション')
+  paginationNav.dataset.part = 'pagination'
 
-  const prevBtn = document.createElement('a')
-  prevBtn.className = 'pagination-prev'
-  prevBtn.dataset.nav = 'prev'
-  prevBtn.textContent = '前へ'
-  if (state.page > 1) {
-    prevBtn.href = buildListUrl({ ...state, page: state.page - 1 })
-  } else {
-    prevBtn.setAttribute('aria-disabled', 'true')
+  // 表示範囲（N–M件 / 全K件）
+  const rangeEl = document.createElement('span')
+  rangeEl.className = 'pagination-range'
+  if (totalCount > 0) {
+    const s = (state.page - 1) * state.size + 1
+    const e = Math.min(state.page * state.size, totalCount)
+    rangeEl.textContent = `${s}–${e}件 / 全${totalCount}件`
+  }
+  paginationNav.appendChild(rangeEl)
+
+  // ページボタン群
+  const btnRow = document.createElement('div')
+  btnRow.className = 'pagination-btns'
+  btnRow.setAttribute('role', 'group')
+  btnRow.setAttribute('aria-label', 'ページ選択')
+
+  // ページ遷移の SPA wiring + 再描画後に一覧先頭へスクロール
+  const wirePaginate = (a: HTMLAnchorElement, next: ListState): void => {
+    if (!onNavigate) return
+    a.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      e.preventDefault()
+      onNavigate(next)
+      // render() は await ensureData() 後に同期的に実行される（キャッシュ温）ため
+      // rAF タイミングでは DOM 確定済み → 一覧先頭へスクロール
+      requestAnimationFrame(() => container.scrollIntoView({ block: 'start' }))
+    })
   }
 
-  const pageInfo = document.createElement('span')
-  pageInfo.className = 'pagination-info'
-  pageInfo.textContent = ` ${state.page} / ${totalPages} `
-
-  const nextBtn = document.createElement('a')
-  nextBtn.className = 'pagination-next'
-  nextBtn.dataset.nav = 'next'
-  nextBtn.textContent = '次へ'
-  if (state.page < totalPages) {
-    nextBtn.href = buildListUrl({ ...state, page: state.page + 1 })
-  } else {
-    nextBtn.setAttribute('aria-disabled', 'true')
+  // 前後・両端ナビボタン（« ‹ › »）
+  const makeNavBtn = (
+    label: string,
+    symbol: string,
+    targetPage: number,
+    disabled: boolean
+  ): HTMLAnchorElement => {
+    const a = document.createElement('a')
+    a.className = 'pagination-btn pagination-nav' + (disabled ? ' disabled' : '')
+    a.setAttribute('aria-label', label)
+    if (disabled) {
+      a.setAttribute('aria-disabled', 'true')
+    } else {
+      const next = { ...state, page: targetPage }
+      a.href = buildListUrl(next)
+      wirePaginate(a, next)
+    }
+    const sym = document.createElement('span')
+    sym.textContent = symbol
+    sym.setAttribute('aria-hidden', 'true')
+    a.appendChild(sym)
+    return a
   }
 
-  paginationDiv.appendChild(prevBtn)
-  paginationDiv.appendChild(pageInfo)
-  paginationDiv.appendChild(nextBtn)
-  results.appendChild(paginationDiv)
+  btnRow.appendChild(makeNavBtn('最初のページ', '«', 1, state.page <= 1))
+  btnRow.appendChild(makeNavBtn('前のページ', '‹', state.page - 1, state.page <= 1))
+
+  // 数字ページ＋省略（デスクトップ delta=2 / モバイル delta=1）
+  const delta = window.innerWidth < 768 ? 1 : 2
+  for (const p of paginationPages(state.page, totalPages, delta)) {
+    if (p === '…') {
+      const el = document.createElement('span')
+      el.className = 'pagination-ellipsis'
+      el.textContent = '…'
+      el.setAttribute('aria-hidden', 'true')
+      btnRow.appendChild(el)
+    } else {
+      const isCurrent = p === state.page
+      const a = document.createElement('a')
+      a.className = 'pagination-btn pagination-num' + (isCurrent ? ' current' : '')
+      a.textContent = String(p)
+      if (isCurrent) {
+        a.setAttribute('aria-current', 'page')
+        a.setAttribute('aria-label', `${p}ページ（現在）`)
+      } else {
+        const next = { ...state, page: p }
+        a.href = buildListUrl(next)
+        a.setAttribute('aria-label', `${p}ページへ`)
+        wirePaginate(a, next)
+      }
+      btnRow.appendChild(a)
+    }
+  }
+
+  btnRow.appendChild(makeNavBtn('次のページ', '›', state.page + 1, state.page >= totalPages))
+  btnRow.appendChild(makeNavBtn('最後のページ', '»', totalPages, state.page >= totalPages))
+
+  paginationNav.appendChild(btnRow)
+  results.appendChild(paginationNav)
 
   body.appendChild(results)
   container.appendChild(body)

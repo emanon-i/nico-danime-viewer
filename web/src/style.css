@@ -2297,36 +2297,90 @@
 
   .list-pagination {
     display: flex;
+    flex-direction: column;
     gap: var(--sp-2);
-    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
-    padding: var(--sp-5);
+    padding: var(--sp-5) var(--sp-2);
   }
 
-  .page-btn {
-    padding: var(--sp-2) var(--sp-3);
+  .pagination-range {
+    font-size: var(--text-l4);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pagination-btns {
+    display: flex;
+    gap: var(--sp-1);
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pagination-btn {
+    min-width: 2.25rem;
+    height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--sp-2);
     border: 1px solid var(--border);
     border-radius: var(--r-md);
     font-size: var(--text-l4);
     color: var(--text-muted);
     background: var(--surface);
     transition:
-      color 0.15s,
-      border-color 0.15s;
+      color 0.12s,
+      border-color 0.12s,
+      background 0.12s;
+    cursor: pointer;
 
-    &:hover {
+    &:hover:not(.disabled):not(.current) {
       color: var(--accent);
       border-color: var(--accent);
     }
-    &.active {
-      color: var(--accent);
+
+    &.current {
+      color: var(--bg);
+      background: var(--accent);
       border-color: var(--accent);
       font-weight: 700;
-    }
-    &:disabled {
-      opacity: 0.4;
       cursor: default;
+    }
+
+    &.disabled {
+      opacity: 0.35;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    /* «‹›» は文字が大きめ */
+    &.pagination-nav {
+      font-size: var(--text-l3);
+    }
+  }
+
+  .pagination-ellipsis {
+    min-width: 1.5rem;
+    height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: var(--text-l4);
+  }
+
+  /* モバイル: ボタンを少し縮める */
+  @media (max-width: 767px) {
+    .pagination-btn {
+      min-width: 2rem;
+      height: 2rem;
+      padding: 0 var(--sp-1);
+    }
+
+    .pagination-ellipsis {
+      min-width: 1.25rem;
+      height: 2rem;
     }
   }
 
