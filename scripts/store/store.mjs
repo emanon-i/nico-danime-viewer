@@ -10,6 +10,7 @@
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { stripHtml } from '../etl/series.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
 // 型定義（JSDoc）
@@ -422,7 +423,7 @@ function _buildSeriesJson(store, seriesId) {
       lengthSeconds: ep.lengthSeconds,
       startTime: ep.startTime,
       thumbnailUrl: ep.thumbnailUrl,
-      description: ep.description,
+      description: stripHtml(ep.description) || null,
       tags: ep.tags,
       tagsCurated: ep.tagsCurated,
       lastUpdated: ep.lastUpdated,

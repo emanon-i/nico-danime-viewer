@@ -860,6 +860,45 @@ async function derivePastCoursFromStore(store, now) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Store 版 self-heal（C4: §85 パリティ）
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ep=0 のシリーズを nvapi で reseed する（Store 版 selfHealEmptySeries）。
+ * @param {import('./store/store.mjs').Store} store
+ * @param {{ limit?: number }} opts
+ */
+async function selfHealEmptySeriesJS(store, opts = {}) {
+  const epCountBySeriesId = new Map()
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId != null)
+      epCountBySeriesId.set(ep.seriesId, (epCountBySeriesId.get(ep.seriesId) ?? 0) + 1)
+  }
+  let targets = [...store.series.values()]
+    .filter((s) => s.isAvailable && (epCountBySeriesId.get(s.seriesId) ?? 0) === 0)
+    .map((s) => s.seriesId)
+
+  if (opts.limit != null) targets = targets.slice(0, opts.limit)
+  if (targets.length === 0) {
+    logger.info('fetch', '[JS] self-heal: no empty series', {})
+    return { processed: 0, inserted: 0 }
+  }
+  logger.info('fetch', '[JS] self-heal: empty series found', { count: targets.length })
+
+  let inserted = 0
+  await seedAllSeries(targets, async (seriesId, data) => {
+    const eps = mapNvapiEpisodes(seriesId, data.items ?? [])
+    if (eps.length > 0) {
+      storeUpsertEps(store, eps)
+      inserted += eps.length
+      store._dirtySeries.add(seriesId)
+    }
+  })
+  logger.info('fetch', '[JS] self-heal: nvapi done', { processed: targets.length, inserted })
+  return { processed: targets.length, inserted }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // M3: --mode=full-js  Store ベース フルパイプライン
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1077,6 +1116,19 @@ async function runFullJS() {
   // E6: Thumbnails
   storeSyncThumbs(store)
   logger.info('fetch', '[JS] E6 thumbnails synced')
+
+  // E7: self-heal（任意・§85）。0話シリーズが残っていれば nvapi で reseed。
+  // 既定 OFF → --self-heal / NICO_SELF_HEAL=1 で有効
+  // --self-heal-limit= / NICO_SELF_HEAL_LIMIT= で 1 回の件数上限を絞れる
+  if (CLI_ARGS.includes('--self-heal') || process.env.NICO_SELF_HEAL === '1') {
+    const limitRaw =
+      CLI_ARGS.find((a) => a.startsWith('--self-heal-limit='))?.split('=')[1] ??
+      process.env.NICO_SELF_HEAL_LIMIT ??
+      null
+    const limit = limitRaw ? Number(limitRaw) : undefined
+    const healStats = await selfHealEmptySeriesJS(store, { limit })
+    logger.info('fetch', '[JS] E7 self-heal done', healStats)
+  }
 
   // ── 回帰ガード ───────────────────────────────────────────────────────────
   const guard = detectShrinkFromStore(store, DATA_DIR)

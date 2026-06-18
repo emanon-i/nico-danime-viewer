@@ -158,6 +158,7 @@ export function deriveSeriesTagsFromStore(store) {
   const bySeries = new Map()
   for (const ep of store.episodes.values()) {
     if (ep.seriesId == null) continue
+    const seriesTitle = store.series.get(ep.seriesId)?.title ?? null
     let acc = bySeries.get(ep.seriesId)
     if (!acc) {
       acc = new Map()
@@ -166,6 +167,7 @@ export function deriveSeriesTagsFromStore(store) {
     const curatedSet = new Set(ep.tagsCurated ?? [])
     for (const name of ep.tags ?? []) {
       if (!name) continue
+      if (isTitleTag(name, seriesTitle)) continue
       const prev = acc.get(name)
       const isCurated = curatedSet.has(name)
       if (prev) prev.isCurated = prev.isCurated || isCurated

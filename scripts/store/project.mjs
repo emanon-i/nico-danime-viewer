@@ -47,8 +47,10 @@ function buildEpAggMap(store) {
         durationTotal: 0,
         latestAt: null,
         firstAt: null,
-        mylistFirst: null, // 第1話（最古話）のmylist_counter
-        firstEpSortKey: null,
+        mylistFirst: null,
+        _firstEpNo: null, // 第1話決定用 内部フィールド
+        _firstTime: null,
+        _firstCid: null,
       }
       map.set(ep.seriesId, a)
     }
@@ -56,22 +58,28 @@ function buildEpAggMap(store) {
     a.commentTotal += ep.commentCounter ?? 0
     a.mylistTotal += ep.mylistCounter ?? 0
     a.durationTotal += ep.lengthSeconds ?? 0
-    if (ep.startTime) {
-      const t = ep.startTime
-      if (!a.latestAt || t > a.latestAt) a.latestAt = t
-      if (!a.firstAt || t < a.firstAt) {
-        a.firstAt = t
-        // 第1話の mylist_counter をエピソードの並び順で決定
-        // （chromoSort 最古 = 第1話的位置）
-        a.mylistFirst = ep.mylistCounter ?? 0
-      }
-    } else if (!a.firstAt) {
-      // startTime がない場合、episodeNo 最小を第1話として採用
-      const sortKey = ep.episodeNo ?? 9999
-      if (a.firstEpSortKey === null || sortKey < a.firstEpSortKey) {
-        a.firstEpSortKey = sortKey
-        a.mylistFirst = ep.mylistCounter ?? 0
-      }
+    if (ep.startTime && (!a.latestAt || ep.startTime > a.latestAt)) a.latestAt = ep.startTime
+
+    // 第1話: episode_no IS NULL ASC, episode_no ASC, start_time ASC, content_id ASC（旧SQLパリティ）
+    const epNo = ep.episodeNo ?? Infinity // null → Infinity（後ろ）
+    const time = ep.startTime ?? '￿' // null → 末尾
+    const cid = ep.contentId
+    let isFirst = false
+    if (a._firstCid === null) {
+      isFirst = true
+    } else if (epNo !== a._firstEpNo) {
+      isFirst = epNo < a._firstEpNo
+    } else if (time !== a._firstTime) {
+      isFirst = time < a._firstTime
+    } else {
+      isFirst = cid < a._firstCid
+    }
+    if (isFirst) {
+      a._firstEpNo = epNo
+      a._firstTime = time
+      a._firstCid = cid
+      a.firstAt = ep.startTime ?? null
+      a.mylistFirst = ep.mylistCounter ?? 0
     }
   }
   return map
