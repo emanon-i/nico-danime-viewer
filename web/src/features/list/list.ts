@@ -438,6 +438,10 @@ export function renderList(
     filterOpen = false,
     onToggleFilter,
   } = options
+  // フィルタ再描画前にスクロール位置を保持（再描画後に復元）
+  const savedTagScroll = container.querySelector<HTMLElement>('.filter-tag-list')?.scrollTop ?? 0
+  const savedCoursScroll =
+    container.querySelector<HTMLElement>('.filter-cours-list')?.scrollTop ?? 0
   container.innerHTML = ''
 
   // サイドバーのタグ/クール選択を SPA 遷移化（§91）。onNavigate 指定時は全リロードせず
@@ -871,4 +875,10 @@ export function renderList(
 
   body.appendChild(results)
   container.appendChild(body)
+
+  // スクロール位置を復元（再描画後に DOM が確定した時点で）
+  const restoredTagList = container.querySelector<HTMLElement>('.filter-tag-list')
+  if (restoredTagList && savedTagScroll > 0) restoredTagList.scrollTop = savedTagScroll
+  const restoredCoursList = container.querySelector<HTMLElement>('.filter-cours-list')
+  if (restoredCoursList && savedCoursScroll > 0) restoredCoursList.scrollTop = savedCoursScroll
 }

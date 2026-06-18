@@ -1775,6 +1775,15 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--sp-1);
+    /* 展開しても固定高さ内でスクロール（「もっと見る」でサイドバーが無限に伸びない） */
+    max-height: 18rem;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+
+    @media (max-width: 767px) {
+      max-height: 13rem;
+    }
   }
 
   .filter-tag-item,
