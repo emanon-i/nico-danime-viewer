@@ -306,8 +306,9 @@
     }
 
     .logo-icon {
-      width: 36px;
-      height: 36px;
+      width: 28px;
+      height: 28px;
+      border-radius: var(--r-sm);
       object-fit: contain;
       flex-shrink: 0;
     }

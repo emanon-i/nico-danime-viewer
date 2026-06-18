@@ -25,8 +25,8 @@ export function buildHeader(opts: HeaderOptions): HTMLElement {
 
   const logoImg = document.createElement('img')
   logoImg.src = `${import.meta.env.BASE_URL}favicon-32.png`
-  logoImg.width = 36
-  logoImg.height = 36
+  logoImg.width = 28
+  logoImg.height = 28
   logoImg.alt = ''
   logoImg.setAttribute('aria-hidden', 'true')
   logoImg.className = 'logo-icon'
