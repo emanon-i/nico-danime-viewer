@@ -294,11 +294,9 @@
       display: inline-flex;
       align-items: center;
       gap: var(--sp-2);
-      font-size: var(--text-l3);
-      font-weight: 700;
-      letter-spacing: -0.01em;
       color: var(--text);
       margin-right: auto;
+      min-width: 0;
 
       &:hover {
         color: var(--accent);
@@ -311,6 +309,26 @@
       border-radius: var(--r-sm);
       object-fit: contain;
       flex-shrink: 0;
+    }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1em;
+      line-height: 1.1;
+      min-width: 0;
+    }
+
+    .logo-brand {
+      font-size: var(--text-l2);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .logo-sub {
+      font-size: var(--text-l4);
+      font-weight: 400;
+      color: var(--text-muted);
     }
   }
 

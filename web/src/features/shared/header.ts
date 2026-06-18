@@ -32,7 +32,17 @@ export function buildHeader(opts: HeaderOptions): HTMLElement {
   logoImg.className = 'logo-icon'
   logo.appendChild(logoImg)
 
-  logo.appendChild(document.createTextNode('ニコニコ支店ビューア'))
+  const logoText = document.createElement('span')
+  logoText.className = 'logo-text'
+  const logoBrand = document.createElement('span')
+  logoBrand.className = 'logo-brand'
+  logoBrand.textContent = 'dアニメストア'
+  const logoSub = document.createElement('span')
+  logoSub.className = 'logo-sub'
+  logoSub.textContent = 'ニコニコ支店ビューア'
+  logoText.appendChild(logoBrand)
+  logoText.appendChild(logoSub)
+  logo.appendChild(logoText)
   header.appendChild(logo)
 
   const searchBtn = document.createElement('button')
