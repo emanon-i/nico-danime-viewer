@@ -56,7 +56,7 @@ import {
   deriveCoursFromTags,
   deriveCoursFromTagsFromStore,
 } from './etl/cours.mjs'
-import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
+import { fetchPeriodHtml, enumeratePastSeasons, seasonOfMonth } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
 import { exportAll } from './export/export.mjs'
 import { selfHealEmptySeries, backfillSeries } from './backfill.mjs'
@@ -398,6 +398,38 @@ async function runHourly() {
 }
 
 /**
+ * Store の孤児エピソード（seriesId == null）を既存シリーズにタイトル前方一致で対応付ける（§S1）。
+ * エピソードタイトルは「<シリーズ名> 第N話 <サブタイトル>」形式。最長一致で seriesId を特定。
+ * @param {import('./store/store.mjs').Store} store
+ * @returns {Set<number>} 対応できた seriesId の集合
+ */
+function matchOrphanEpsToSeries(store) {
+  const norm = (s) => (s ?? '').replace(/\s+/gu, ' ').trim()
+  const orphanTitles = []
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null && ep.title) orphanTitles.push(norm(ep.title))
+  }
+  if (orphanTitles.length === 0) return new Set()
+
+  const series = []
+  for (const s of store.series.values()) {
+    if (s.isAvailable && s.title) series.push({ sid: s.seriesId, t: norm(s.title) })
+  }
+
+  const ids = new Set()
+  for (const t of orphanTitles) {
+    let best = null
+    for (const s of series) {
+      if (s.t.length > 0 && t.startsWith(s.t) && (!best || s.t.length > best.len)) {
+        best = { sid: s.sid, len: s.t.length }
+      }
+    }
+    if (best) ids.add(best.sid)
+  }
+  return ids
+}
+
+/**
  * 未解決(rss_only)の新着 RSS を、既存シリーズに title 前方一致（最長一致）で対応付ける（§D）。
  * RSS title は「<シリーズ名> 第N話 <サブタイトル>」形式。先頭がどの series.title で始まるかで判定。
  * @param {import('better-sqlite3').Database} db
@@ -640,16 +672,22 @@ function detectShrinkFromStore(store, dataDir, threshold = 0.9) {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function runCoursPipelineFromStore(store, now) {
-  // 0. クリア（is_available シリーズのみ）
+  // 0. クリア（is_available シリーズのみ）。cours が変化したものを dirty 追跡。
   for (const s of store.series.values()) {
-    if (s.isAvailable) s.cours = null
+    if (s.isAvailable && s.cours !== null) {
+      s.cours = null
+      store._dirtySeries.add(s.seriesId)
+    }
   }
 
   // 1. 主源 = 第1話タグの「YYYY年<季>アニメ」から放送季を導出
   const tagMap = deriveCoursFromTagsFromStore(store, chronoSort)
   for (const [id, cours] of tagMap) {
     const s = store.series.get(id)
-    if (s) s.cours = cours
+    if (s) {
+      s.cours = cours
+      store._dirtySeries.add(id)
+    }
   }
   logger.info('fetch', 'E3 cours from tags (primary)', { count: tagMap.size })
 
@@ -662,6 +700,7 @@ async function runCoursPipelineFromStore(store, now) {
     const s = store.series.get(id)
     if (s && s.isAvailable && s.cours == null) {
       s.cours = coursLabel
+      store._dirtySeries.add(id)
       curAdded++
     }
   }
@@ -673,6 +712,33 @@ async function runCoursPipelineFromStore(store, now) {
 }
 
 async function derivePastCoursFromStore(store, now) {
+  // S3: period-cache.json で過去季 HTML のパース結果をキャッシュ。
+  // 現行季の直近1季（前季）のみ毎日再取得。月次で全季リフレッシュ。
+  const { readFile: rf, writeFile: wf, mkdir: md, rename: rn } = await import('node:fs/promises')
+  const stateDir = join(DATA_DIR, 'state')
+  const cachePath = join(stateDir, 'period-cache.json')
+  const monthKey = now.slice(0, 7) // 'YYYY-MM'
+
+  let cache = { format: 1, monthlyRefreshKey: monthKey, seasons: {} }
+  try {
+    const raw = JSON.parse(await rf(cachePath, 'utf-8'))
+    if (raw.format === 1 && raw.monthlyRefreshKey === monthKey) cache = raw
+    // monthlyRefreshKey が変わった場合 → seasons を空にしてフルリフレッシュ
+  } catch {
+    /* キャッシュなし → 初回 */
+  }
+
+  // 直近1季（前季）を特定 → 必ず再取得する季
+  const nowDate = new Date(now)
+  const curYear = nowDate.getFullYear()
+  const curSeason = seasonOfMonth(nowDate.getMonth() + 1)
+  const SEASON_ORDER = ['winter', 'spring', 'summer', 'autumn']
+  const curIdx = SEASON_ORDER.indexOf(curSeason)
+  const prevSeason =
+    curIdx === 0
+      ? { year: curYear - 1, season: 'autumn' }
+      : { year: curYear, season: SEASON_ORDER[curIdx - 1] }
+
   const assigned = new Set()
   for (const s of store.series.values()) {
     if (s.isAvailable && s.cours != null) assigned.add(s.seriesId)
@@ -682,35 +748,49 @@ async function derivePastCoursFromStore(store, now) {
     if (s.isAvailable) seriesMap.set(s.seriesId, s.title)
   }
 
-  const seasons = enumeratePastSeasons(new Date(now), COURS_FROM_YEAR)
+  const seasons = enumeratePastSeasons(nowDate, COURS_FROM_YEAR)
   let assignedCount = 0
   let seasonsWithData = 0
+  let cacheHits = 0
 
   for (const { year, season } of seasons) {
-    let html = null
-    try {
-      const res = await fetchPeriodHtml(year, season)
-      if (res.status !== 200 || !res.body) continue
-      html = res.body
-    } catch (err) {
-      logger.warn('fetch', 'period fetch failed (skip season)', {
-        year,
-        season,
-        error: err.message,
-      })
-      continue
+    const key = `${year}-${season}`
+    const mustRefetch = year === prevSeason.year && season === prevSeason.season
+
+    let cachedData = cache.seasons[key]
+
+    if (!mustRefetch && cachedData) {
+      // キャッシュヒット: HTTP 省略（series 突合のみ実行）
+      cacheHits++
+    } else {
+      // HTTP 取得 + キャッシュ更新
+      let parsedResult
+      try {
+        const res = await fetchPeriodHtml(year, season)
+        if (res.status !== 200 || !res.body) continue
+        parsedResult = parsePeriodHtml(res.body, key)
+      } catch (err) {
+        logger.warn('fetch', 'period fetch failed (skip season)', {
+          year,
+          season,
+          error: err.message,
+        })
+        continue
+      }
+      if (!parsedResult.title.includes('dアニメストア') || parsedResult.slugs.length < 1) continue
+      cachedData = {
+        entries: parsedResult.entries,
+        title: parsedResult.title,
+        slugs: parsedResult.slugs,
+      }
+      cache.seasons[key] = cachedData
     }
-    let parsed
-    try {
-      parsed = parsePeriodHtml(html, `${year}-${season}`)
-    } catch {
-      continue
-    }
-    if (!parsed.title.includes('dアニメストア') || parsed.slugs.length < 1) continue
+
+    if (!cachedData) continue
     seasonsWithData++
 
     const coursLabel = makeCoursLabel(year, season)
-    const matches = matchPeriodEntriesToSeries(parsed.entries, seriesMap)
+    const matches = matchPeriodEntriesToSeries(cachedData.entries, seriesMap)
     let seasonAssigned = 0
     for (const m of matches) {
       if (m.seriesId == null || m.confidence < COURS_MATCH_MIN) continue
@@ -718,16 +798,30 @@ async function derivePastCoursFromStore(store, now) {
       const s = store.series.get(m.seriesId)
       if (!s || !s.isAvailable) continue
       s.cours = coursLabel
+      store._dirtySeries.add(m.seriesId)
       assigned.add(m.seriesId)
       assignedCount++
       seasonAssigned++
     }
     logger.info('fetch', 'period season done', {
       cours: coursLabel,
-      entries: parsed.entries.length,
+      entries: cachedData.entries.length,
       assigned: seasonAssigned,
+      cached: !mustRefetch && cacheHits > 0,
     })
   }
+
+  // キャッシュ保存（書き込み失敗は非致命的）
+  try {
+    await md(stateDir, { recursive: true })
+    const tmpPath = cachePath + '.tmp'
+    await wf(tmpPath, JSON.stringify(cache), 'utf-8')
+    await rn(tmpPath, cachePath)
+  } catch (err) {
+    logger.warn('fetch', 'period-cache write failed (non-fatal)', { error: err.message })
+  }
+
+  logger.info('fetch', 'period parse done', { cacheHits, seasonsWithData, assignedCount })
   return { seasons: seasonsWithData, assigned: assignedCount }
 }
 
@@ -764,7 +858,7 @@ async function runFullJS() {
         ...ep,
         tags: processedTags.map((t) => t.name),
         tagsCurated: processedTags.filter((t) => t.isCurated).map((t) => t.name),
-        lastUpdated: now,
+        // lastUpdated は upsertEpisodes の実変化チェックで設定（無条件の now を排除）
       }
     })
     storeUpsertEps(store, mappedEps)
@@ -792,9 +886,12 @@ async function runFullJS() {
     })
   }
 
-  // list.json 外のシリーズを unavailable にマーク
+  // list.json 外のシリーズを unavailable にマーク（変化した場合のみ dirty）
   for (const s of store.series.values()) {
-    if (!listSeriesIds.has(s.seriesId)) s.isAvailable = false
+    if (!listSeriesIds.has(s.seriesId) && s.isAvailable) {
+      s.isAvailable = false
+      store._dirtySeries.add(s.seriesId)
+    }
   }
   // list.json 収録シリーズを upsert（新規は追加、既存は title/colKey 更新）
   storeUpsertSeries(store, seriesFromList)
@@ -805,21 +902,42 @@ async function runFullJS() {
   }
   logger.info('fetch', '[JS] list.json done', { count: seriesFromList.length })
 
-  // ── Phase C: nvapi seed（orphan-driven）────────────────────────────────────
+  // ── Phase C: nvapi seed（§S1: 対象限定 + 閾値/週次/force 時のみ全件）────────
+  // 孤児が有意閾値以下なら title 前方一致で対応 series に限定し nvapi リクエストを最小化する。
+  // 閾値超 / 週次(7日) / force 時のみ全件 seed（ドリフト回復の安全網）。
   const orphans = countOrphanEpisodes(store)
   const daysSinceRefresh = store.meta.lastSeedAt
     ? (Date.now() - new Date(store.meta.lastSeedAt).getTime()) / 86400000
     : Infinity
   const forceSeed = process.env.NICO_FORCE_SEED === '1'
-  const needSeed = forceSeed || orphans > 0 || daysSinceRefresh >= 7
+  const weeklyOrForce = forceSeed || daysSinceRefresh >= 7
+  const ORPHAN_FULL_THRESHOLD = 500
 
-  if (needSeed) {
-    const seedTargets = selectSeedTargets(store, { allIfOrphans: true })
+  let seedTargets
+  let seedMode
+  if (weeklyOrForce || orphans > ORPHAN_FULL_THRESHOLD) {
+    // 全件 seed（週次 / force / 孤児過多）
+    seedTargets = [...store.series.keys()].filter((sid) => store.series.get(sid).isAvailable)
+    seedMode = weeklyOrForce ? (forceSeed ? 'force' : 'weekly') : 'orphan-overflow'
+  } else if (orphans > 0) {
+    // 孤児をタイトル前方一致で対応シリーズに限定 + 新規・話数不足 series
+    const orphanMatched = matchOrphanEpsToSeries(store)
+    const normal = selectSeedTargets(store, { insufficientThreshold: 3, allIfOrphans: false })
+    const combined = new Set([...orphanMatched, ...normal])
+    seedTargets = [...combined]
+    seedMode = 'targeted'
+  } else {
+    // 孤児ゼロ：新規・話数不足のみ
+    seedTargets = selectSeedTargets(store, { insufficientThreshold: 3, allIfOrphans: false })
+    seedMode = 'new-or-insufficient'
+  }
+
+  if (seedTargets.length > 0) {
     logger.info('fetch', '[JS] phase C: nvapi seed', {
+      mode: seedMode,
       total: seedTargets.length,
       orphans,
       daysSinceRefresh: Math.round(daysSinceRefresh),
-      forceSeed,
     })
     await seedAllSeries(seedTargets, async (seriesId, data) => {
       const updates = mapNvapiItems(seriesId, data.items ?? [])
@@ -892,11 +1010,17 @@ async function runFullJS() {
     if (s.isAvailable) titleMap.set(s.seriesId, s.title)
   }
   const franchiseKeys = computeFranchiseKeys(seriesTagsMap, titleMap)
-  for (const s of store.series.values()) s.franchiseKey = null
+  // franchiseKey null クリア（変化した series のみ dirty）
+  for (const s of store.series.values()) {
+    if (s.franchiseKey !== null) {
+      s.franchiseKey = null
+      store._dirtySeries.add(s.seriesId)
+    }
+  }
   for (const [seriesId, franchiseKey] of franchiseKeys) {
     storeUpdateSeries(store, seriesId, { franchiseKey })
   }
-  // franchise = Store の relatedSeries を再計算
+  // franchise = Store の relatedSeries を再計算（直接変更のため dirty 追跡）
   const byFranchise = new Map()
   for (const s of store.series.values()) {
     if (!s.franchiseKey) continue
@@ -908,6 +1032,7 @@ async function runFullJS() {
       s.relatedSeries = members
         .filter((m) => m.seriesId !== s.seriesId && m.isAvailable)
         .map((m) => ({ seriesId: m.seriesId, title: m.title, thumbnailUrl: m.thumbnailUrl }))
+      store._dirtySeries.add(s.seriesId)
     }
   }
   logger.info('fetch', '[JS] E4 franchise keys done', { count: franchiseKeys.size })

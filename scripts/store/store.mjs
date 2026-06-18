@@ -317,55 +317,70 @@ async function _loadState(store, stateDir) {
  * 4. state/series-index.json を更新（contentId → seriesId 逆引き）
  */
 export async function writeBackStore(store, dataDir, opts = {}) {
-  const { seriesIds = null } = opts
+  // seriesIds: 指定時はその series のみ（hourly 用）
+  // forceAll: true なら dirty に関係なく全 series を書く（週次 full seed 後などの安全網）
+  const { seriesIds = null, forceAll = false } = opts
   const seriesDir = path.join(dataDir, 'series')
   const stateDir = path.join(dataDir, 'state')
 
   await fs.mkdir(seriesDir, { recursive: true })
   await fs.mkdir(stateDir, { recursive: true })
 
-  // 書き出す series の範囲
-  const targets = seriesIds != null ? new Set(seriesIds.map(Number)) : new Set(store.series.keys())
+  // 書き出す series の範囲（S4c: dirty 限定、ただし forceAll 時は全件）
+  let targets
+  if (seriesIds != null) {
+    targets = new Set(seriesIds.map(Number))
+  } else if (forceAll) {
+    targets = new Set(store.series.keys())
+  } else {
+    // dirty のみ（実変化した series のみ）
+    targets = new Set(store._dirtySeries)
+  }
 
-  // ── series/*.json ────────────────────────────────────────────────
-  for (const seriesId of targets) {
-    const s = store.series.get(seriesId)
-    if (!s) continue
+  // ── series/*.json（S4a: chunked 並列・S4b: compact）────────────────
+  const targetArr = [...targets]
+  const WRITE_CHUNK = 200
+  for (let i = 0; i < targetArr.length; i += WRITE_CHUNK) {
+    const chunk = targetArr.slice(i, i + WRITE_CHUNK)
+    await Promise.all(
+      chunk.map((seriesId) => {
+        const s = store.series.get(seriesId)
+        if (!s) return Promise.resolve()
 
-    const episodes = _getEpisodesForSeriesSorted(store, seriesId)
-
-    const json = {
-      seriesId: s.seriesId,
-      title: s.title,
-      thumbnailUrl: s.thumbnailUrl,
-      descriptionFirst: s.descriptionFirst,
-      tags: s.tags.map((t) => t.name), // web フロントは string[] を期待
-      cours: s.cours,
-      colKey: s.colKey,
-      franchiseKey: s.franchiseKey,
-      relatedSeries: s.relatedSeries,
-      isAvailable: s.isAvailable, // 内部フィールド（Store 再ロード用）
-      firstSeen: s.firstSeen,
-      lastSeen: s.lastSeen,
-      episodes: episodes.map((ep) => ({
-        contentId: ep.contentId,
-        episodeNo: ep.episodeNo,
-        title: ep.title,
-        viewCounter: ep.viewCounter,
-        commentCounter: ep.commentCounter,
-        likeCounter: ep.likeCounter,
-        mylistCounter: ep.mylistCounter,
-        lengthSeconds: ep.lengthSeconds,
-        startTime: ep.startTime,
-        thumbnailUrl: ep.thumbnailUrl,
-        description: ep.description,
-        tags: ep.tags,
-        tagsCurated: ep.tagsCurated, // 内部フィールド
-        lastUpdated: ep.lastUpdated,
-      })),
-    }
-
-    await _writeJsonAtomic(path.join(seriesDir, `${seriesId}.json`), json)
+        const episodes = _getEpisodesForSeriesSorted(store, seriesId)
+        const json = {
+          seriesId: s.seriesId,
+          title: s.title,
+          thumbnailUrl: s.thumbnailUrl,
+          descriptionFirst: s.descriptionFirst,
+          tags: s.tags.map((t) => t.name), // web フロントは string[] を期待
+          cours: s.cours,
+          colKey: s.colKey,
+          franchiseKey: s.franchiseKey,
+          relatedSeries: s.relatedSeries,
+          isAvailable: s.isAvailable, // 内部フィールド（Store 再ロード用）
+          firstSeen: s.firstSeen,
+          lastSeen: s.lastSeen,
+          episodes: episodes.map((ep) => ({
+            contentId: ep.contentId,
+            episodeNo: ep.episodeNo,
+            title: ep.title,
+            viewCounter: ep.viewCounter,
+            commentCounter: ep.commentCounter,
+            likeCounter: ep.likeCounter,
+            mylistCounter: ep.mylistCounter,
+            lengthSeconds: ep.lengthSeconds,
+            startTime: ep.startTime,
+            thumbnailUrl: ep.thumbnailUrl,
+            description: ep.description,
+            tags: ep.tags,
+            tagsCurated: ep.tagsCurated, // 内部フィールド
+            lastUpdated: ep.lastUpdated,
+          })),
+        }
+        return _writeJsonCompact(path.join(seriesDir, `${seriesId}.json`), json)
+      })
+    )
   }
 
   // ── state/prev-views.json ────────────────────────────────────────
@@ -376,26 +391,26 @@ export async function writeBackStore(store, dataDir, opts = {}) {
       prevViews[ep.contentId] = ep.prevViewCounter
     }
   }
-  await _writeJsonAtomic(path.join(stateDir, 'prev-views.json'), prevViews)
+  await _writeJsonCompact(path.join(stateDir, 'prev-views.json'), prevViews)
 
   // ── state/meta.json ──────────────────────────────────────────────
-  await _writeJsonAtomic(path.join(stateDir, 'meta.json'), store.meta)
+  await _writeJsonCompact(path.join(stateDir, 'meta.json'), store.meta)
 
   // ── state/rss.json ───────────────────────────────────────────────
   const rssData = {
     lastGuid: store.meta.rssLastGuid,
     items: [...store.rss.values()],
   }
-  await _writeJsonAtomic(path.join(stateDir, 'rss.json'), rssData)
+  await _writeJsonCompact(path.join(stateDir, 'rss.json'), rssData)
 
   // ── state/series-index.json（contentId → seriesId 逆引き）────────
   const idx = {}
   for (const ep of store.episodes.values()) {
     if (ep.seriesId != null) idx[ep.contentId] = ep.seriesId
   }
-  await _writeJsonAtomic(path.join(stateDir, 'series-index.json'), idx)
+  await _writeJsonCompact(path.join(stateDir, 'series-index.json'), idx)
 
-  // _dirtySeries リセット（部分書き出し完了後）
+  // _dirtySeries リセット
   if (seriesIds != null) {
     for (const sid of seriesIds) store._dirtySeries.delete(Number(sid))
   } else {
@@ -403,9 +418,10 @@ export async function writeBackStore(store, dataDir, opts = {}) {
   }
 }
 
-async function _writeJsonAtomic(filePath, data) {
+// S4b: compact JSON（インデント無し）で atomic 書き出し
+async function _writeJsonCompact(filePath, data) {
   const tmp = filePath + '.tmp'
-  await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8')
+  await fs.writeFile(tmp, JSON.stringify(data), 'utf-8')
   await fs.rename(tmp, filePath)
 }
 
@@ -436,19 +452,64 @@ export function upsertEpisodes(store, rawEps) {
       // PRESERVE seriesId, episodeNo, title, startTime（確定済みなら守る）
       const prevView = existing.viewCounter // 旧 viewCounter を prev に退避
       existing.prevViewCounter = prevView
-      existing.viewCounter = raw.viewCounter ?? existing.viewCounter
-      existing.commentCounter = raw.commentCounter ?? existing.commentCounter
-      existing.likeCounter = raw.likeCounter ?? existing.likeCounter
-      existing.mylistCounter = raw.mylistCounter ?? existing.mylistCounter
-      existing.lengthSeconds = raw.lengthSeconds ?? existing.lengthSeconds
-      existing.thumbnailUrl = raw.thumbnailUrl ?? existing.thumbnailUrl
-      if (raw.tags != null) existing.tags = raw.tags
-      if (raw.tagsCurated != null) existing.tagsCurated = raw.tagsCurated
-      existing.lastUpdated = now
+
+      // 実変化チェック（変化があった場合のみ dirty に追加・lastUpdated 更新）
+      let changed = false
+      const newView = raw.viewCounter ?? existing.viewCounter
+      if (existing.viewCounter !== newView) {
+        existing.viewCounter = newView
+        changed = true
+      }
+      const newComment = raw.commentCounter ?? existing.commentCounter
+      if (existing.commentCounter !== newComment) {
+        existing.commentCounter = newComment
+        changed = true
+      }
+      const newLike = raw.likeCounter ?? existing.likeCounter
+      if (existing.likeCounter !== newLike) {
+        existing.likeCounter = newLike
+        changed = true
+      }
+      const newMylist = raw.mylistCounter ?? existing.mylistCounter
+      if (existing.mylistCounter !== newMylist) {
+        existing.mylistCounter = newMylist
+        changed = true
+      }
+      const newLen = raw.lengthSeconds ?? existing.lengthSeconds
+      if (existing.lengthSeconds !== newLen) {
+        existing.lengthSeconds = newLen
+        changed = true
+      }
+      const newThumb = raw.thumbnailUrl ?? existing.thumbnailUrl
+      if (existing.thumbnailUrl !== newThumb) {
+        existing.thumbnailUrl = newThumb
+        changed = true
+      }
+      if (raw.tags != null) {
+        const newTagStr = raw.tags.join('\x00')
+        if (existing.tags.join('\x00') !== newTagStr) {
+          existing.tags = raw.tags
+          changed = true
+        }
+      }
+      if (raw.tagsCurated != null) {
+        const newCurStr = raw.tagsCurated.join('\x00')
+        if (existing.tagsCurated.join('\x00') !== newCurStr) {
+          existing.tagsCurated = raw.tagsCurated
+          changed = true
+        }
+      }
+
+      if (changed) {
+        existing.lastUpdated = now
+        if (existing.seriesId != null) store._dirtySeries.add(existing.seriesId)
+      }
+
       // seriesId が null なら受け入れる（linkEpisodes で後から設定）
       // seriesId が non-null なら既存を保護（orphan 化を防ぐ）
       if (existing.seriesId == null && raw.seriesId != null) {
         existing.seriesId = raw.seriesId
+        store._dirtySeries.add(raw.seriesId)
       }
     } else {
       store.episodes.set(cid, {
@@ -469,6 +530,7 @@ export function upsertEpisodes(store, rawEps) {
         tagsCurated: raw.tagsCurated ?? [],
         lastUpdated: now,
       })
+      if (raw.seriesId != null) store._dirtySeries.add(raw.seriesId)
     }
   }
 }
@@ -499,6 +561,7 @@ export function upsertSeries(store, seriesList) {
           typeof t === 'string' ? { name: t, isCurated: false } : t
         )
       }
+      store._dirtySeries.add(sid)
     } else {
       store.series.set(sid, {
         seriesId: sid,
@@ -516,6 +579,7 @@ export function upsertSeries(store, seriesList) {
         ),
         relatedSeries: raw.relatedSeries ?? [],
       })
+      store._dirtySeries.add(sid)
     }
   }
 }
@@ -556,11 +620,13 @@ const SERIES_UPDATE_WHITELIST = new Set([
 ])
 
 export function updateSeries(store, seriesId, fields) {
-  const s = store.series.get(Number(seriesId))
+  const sid = Number(seriesId)
+  const s = store.series.get(sid)
   if (!s) return
   for (const [k, v] of Object.entries(fields)) {
     if (SERIES_UPDATE_WHITELIST.has(k)) s[k] = v
   }
+  store._dirtySeries.add(sid)
 }
 
 /**
@@ -574,6 +640,7 @@ export function syncSeriesThumbnails(store) {
     for (const ep of eps) {
       if (ep.thumbnailUrl) {
         s.thumbnailUrl = ep.thumbnailUrl
+        store._dirtySeries.add(s.seriesId)
         break
       }
     }
@@ -608,8 +675,11 @@ export function syncSeriesTimestamps(store) {
   for (const [sid, r] of ranges) {
     const s = store.series.get(sid)
     if (s) {
-      s.firstSeen = r.firstStr
-      s.lastSeen = r.lastStr
+      if (s.firstSeen !== r.firstStr || s.lastSeen !== r.lastStr) {
+        s.firstSeen = r.firstStr
+        s.lastSeen = r.lastStr
+        store._dirtySeries.add(sid)
+      }
     }
   }
 }
@@ -681,9 +751,11 @@ export function updateRssResolution(store, watchId, resolvedContentId, status) {
  * @param {{name:string,isCurated:boolean}[]} tags
  */
 export function replaceSeriesTags(store, seriesId, tags) {
-  const s = store.series.get(Number(seriesId))
+  const sid = Number(seriesId)
+  const s = store.series.get(sid)
   if (!s) return
   s.tags = tags
+  store._dirtySeries.add(sid)
 }
 
 // ── orphan / seed ──────────────────────────────────────────────────────────
