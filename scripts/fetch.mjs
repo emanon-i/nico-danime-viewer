@@ -920,16 +920,16 @@ async function runFullJS() {
     seedTargets = [...store.series.keys()].filter((sid) => store.series.get(sid).isAvailable)
     seedMode = weeklyOrForce ? (forceSeed ? 'force' : 'weekly') : 'orphan-overflow'
   } else if (orphans > 0) {
-    // 孤児をタイトル前方一致で対応シリーズに限定 + 新規・話数不足 series
+    // 孤児をタイトル前方一致で対応シリーズに限定 + 新規のみ（ep=0）
     const orphanMatched = matchOrphanEpsToSeries(store)
-    const normal = selectSeedTargets(store, { insufficientThreshold: 3, allIfOrphans: false })
-    const combined = new Set([...orphanMatched, ...normal])
+    const newOnly = selectSeedTargets(store, { insufficientThreshold: 0, allIfOrphans: false })
+    const combined = new Set([...orphanMatched, ...newOnly])
     seedTargets = [...combined]
     seedMode = 'targeted'
   } else {
-    // 孤児ゼロ：新規・話数不足のみ
-    seedTargets = selectSeedTargets(store, { insufficientThreshold: 3, allIfOrphans: false })
-    seedMode = 'new-or-insufficient'
+    // 孤児ゼロ：新規（ep=0）のみ。ep≤3の再照合は週次（weeklyOrForce）で実行
+    seedTargets = selectSeedTargets(store, { insufficientThreshold: 0, allIfOrphans: false })
+    seedMode = 'new-only'
   }
 
   if (seedTargets.length > 0) {
