@@ -12,6 +12,7 @@
     "NHK",
     "米女メイ",
     "若菜四季",
+    "神回",
     "鬼塚夏美",
     "オニナッツ",
     "ビタミンSUMMER！",
@@ -22,7 +23,6 @@
     "葉月恋",
     "ゲーム回",
     "CHANCE_DAY,_CHANCE_WAY！",
-    "神回",
     "大胆な告白は女の子の特権",
     "ここにキマシタワーを建てよう",
     "2022年秋アニメ",
@@ -68,7 +68,7 @@
         "アイドル",
         "NHK"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so40821234",
@@ -87,7 +87,7 @@
         "2022年夏アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so40856693",
@@ -106,14 +106,14 @@
         "2022年夏アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so40891945",
       "episodeNo": 4,
       "title": "ラブライブ！スーパースター!!TVアニメ2期　第4話　科学室のふたり",
-      "viewCounter": 9964,
-      "commentCounter": 1079,
+      "viewCounter": 9965,
+      "commentCounter": 1081,
       "likeCounter": 75,
       "mylistCounter": 24,
       "lengthSeconds": 1428,
@@ -124,16 +124,17 @@
         "ラブライブ！スーパースター!!TVアニメ2期",
         "2022年夏アニメ",
         "米女メイ",
-        "若菜四季"
+        "若菜四季",
+        "神回"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so40927291",
       "episodeNo": 5,
       "title": "ラブライブ！スーパースター!!TVアニメ2期　第5話　マニーは天下の回りもの",
-      "viewCounter": 7853,
+      "viewCounter": 7854,
       "commentCounter": 692,
       "likeCounter": 51,
       "mylistCounter": 17,
@@ -148,7 +149,7 @@
         "オニナッツ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so40964860",
@@ -173,13 +174,13 @@
         "邪神ちゃん"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so41000459",
       "episodeNo": 7,
       "title": "ラブライブ！スーパースター!!TVアニメ2期　第7話　UR 葉月恋",
-      "viewCounter": 10291,
+      "viewCounter": 10293,
       "commentCounter": 812,
       "likeCounter": 61,
       "mylistCounter": 27,
@@ -197,7 +198,7 @@
       "tagsCurated": [
         "NHK"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so41069702",
@@ -217,7 +218,7 @@
         "CHANCE_DAY,_CHANCE_WAY！"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so41107508",
@@ -239,7 +240,7 @@
         "ここにキマシタワーを建てよう"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so41136350",
@@ -258,7 +259,7 @@
         "2022年夏アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so41169197",
@@ -277,7 +278,7 @@
         "2022年秋アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so41214390",
@@ -299,7 +300,7 @@
         "衝撃の結末"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     }
   ]
 }

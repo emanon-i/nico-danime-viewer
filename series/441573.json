@@ -8,7 +8,8 @@
     "2015年夏アニメ",
     "マングローブ(アニメ制作会社)",
     "梅津泰臣",
-    "アクション/バトル"
+    "アクション/バトル",
+    "最終話"
   ],
   "cours": "2015-夏",
   "colKey": "か",
@@ -22,10 +23,10 @@
       "contentId": "so43029414",
       "episodeNo": 1,
       "title": "GANGSTA．　Act.01　NAUGHTY BOYS",
-      "viewCounter": 5539,
+      "viewCounter": 5546,
       "commentCounter": 123,
       "likeCounter": 69,
-      "mylistCounter": 152,
+      "mylistCounter": 153,
       "lengthSeconds": 1445,
       "startTime": "2025-07-01T00:00:00+09:00",
       "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43029414/43029414.84665210",
@@ -40,13 +41,13 @@
       "tagsCurated": [
         "アクション/バトル"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029286",
       "episodeNo": 2,
       "title": "GANGSTA．　Act.02　HUNDEMARKEN",
-      "viewCounter": 1722,
+      "viewCounter": 1723,
       "commentCounter": 86,
       "likeCounter": 17,
       "mylistCounter": 3,
@@ -58,13 +59,13 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029285",
       "episodeNo": 3,
       "title": "GANGSTA．　Act.03　ERGASTULUM",
-      "viewCounter": 1375,
+      "viewCounter": 1376,
       "commentCounter": 36,
       "likeCounter": 10,
       "mylistCounter": 2,
@@ -76,7 +77,7 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029273",
@@ -94,7 +95,7 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029283",
@@ -112,7 +113,7 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029282",
@@ -130,14 +131,14 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029281",
       "episodeNo": 7,
       "title": "GANGSTA．　Act.07　BIRTH",
-      "viewCounter": 928,
-      "commentCounter": 12,
+      "viewCounter": 929,
+      "commentCounter": 28,
       "likeCounter": 8,
       "mylistCounter": 3,
       "lengthSeconds": 1445,
@@ -148,15 +149,15 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029280",
       "episodeNo": 8,
       "title": "GANGSTA．　Act.08　EVENING DRESS",
-      "viewCounter": 894,
-      "commentCounter": 11,
-      "likeCounter": 8,
+      "viewCounter": 896,
+      "commentCounter": 33,
+      "likeCounter": 9,
       "mylistCounter": 2,
       "lengthSeconds": 1445,
       "startTime": "2025-07-01T00:00:00+09:00",
@@ -166,15 +167,15 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029279",
       "episodeNo": 9,
       "title": "GANGSTA．　Act.09　SIBLINGS",
-      "viewCounter": 768,
-      "commentCounter": 2,
-      "likeCounter": 9,
+      "viewCounter": 770,
+      "commentCounter": 39,
+      "likeCounter": 10,
       "mylistCounter": 2,
       "lengthSeconds": 1445,
       "startTime": "2025-07-01T00:00:00+09:00",
@@ -184,15 +185,15 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029278",
       "episodeNo": 10,
       "title": "GANGSTA．　Act.10　LAND OF CONFUSION",
-      "viewCounter": 771,
-      "commentCounter": 1,
-      "likeCounter": 6,
+      "viewCounter": 775,
+      "commentCounter": 18,
+      "likeCounter": 7,
       "mylistCounter": 4,
       "lengthSeconds": 1445,
       "startTime": "2025-07-01T00:00:00+09:00",
@@ -202,15 +203,15 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029277",
       "episodeNo": 11,
       "title": "GANGSTA．　Act.11　ABSENCE",
-      "viewCounter": 713,
-      "commentCounter": 5,
-      "likeCounter": 6,
+      "viewCounter": 716,
+      "commentCounter": 26,
+      "likeCounter": 8,
       "mylistCounter": 2,
       "lengthSeconds": 1445,
       "startTime": "2025-07-01T00:00:00+09:00",
@@ -220,25 +221,26 @@
         "GANGSTA．"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so43029276",
       "episodeNo": 12,
       "title": "GANGSTA．　Act.12　ODDS AND ENDS",
-      "viewCounter": 812,
-      "commentCounter": 12,
-      "likeCounter": 8,
+      "viewCounter": 817,
+      "commentCounter": 31,
+      "likeCounter": 9,
       "mylistCounter": 3,
       "lengthSeconds": 1440,
       "startTime": "2025-07-01T00:00:00+09:00",
       "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/43029276/43029276.1292935",
       "description": "過激化する反黄昏種（アンチトワイライツ）派達の暴動も、偽りの平穏を保っていたエルガストルムの均衡を崩していく。この街の要である四大父たちの元を次々と攻撃する襲撃者（ハンター）・駆逐隊（エスミーニツ）達の目的とは!?\n\nウォリック・アルカンジェロ:諏訪部順一／ニコラス・ブラウン:津田健次郎／アレックス・ベネデット:能登麻美子\n\n原作:コースケ（新潮社「月刊コミック＠バンチ」連載）／監督:村瀬修功／シリーズディレクター:初見浩一／シリーズ構成:猪爪慎一／キャラクターデザイン:植田羊一／美術設定:久保田正宏／美術監督:甲斐政俊（スタジオカイム）／色彩設計:斎藤裕子／プロップデザイン:常木志伸／撮影監督:長田雄一郎（旭プロダクション）／編集:長坂智樹（ジェイ・フィルム）／音響監督:長崎行男／音楽:TSUTCHIE／オープニング主題歌:STEREO DIVE FOUNDATION「Renegade」／エンディング主題歌:Annabel「夜の国」／アニメーション制作:マングローブ\n\n©コースケ/新潮社・GANGSTA.製作委員会\n\nso43029277←前話　第一話→so43029414",
       "tags": [
-        "GANGSTA．"
+        "GANGSTA．",
+        "最終話"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     }
   ]
 }

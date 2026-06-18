@@ -2,7 +2,7 @@
   "seriesId": 181977,
   "title": "シティーハンター",
   "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/37793582/37793582.89111792",
-  "descriptionFirst": "通り魔に妹を殺された菜摘は、スイーパー・冴羽リョウに犯人探しを依頼する。打ち合わせ場所にトップレスバーを指定するリョウに抵抗を感じる菜摘だったが、強盗を圧倒する姿を見てリョウを見直す。一方、菜摘がリョウと接触したことを知った犯人は、今度は菜摘を標的にするが……。\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\n次話→so37793664",
+  "descriptionFirst": "娘の由加里が二度も自殺未遂をしたため、リョウに身を守って欲しいと母親が依頼してきた。リョウが由加里に事情を訊くと、義理の父・正木瑛三が保険金目当てに彼女を殺そうとしており、逆に自殺を思い立ったという。だが彼女を狙っていたのは、正木を脅迫している一味で……。\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\nso37793585←前話｜次話→so37793583　第一話→so37793642",
   "tags": [
     "シティーハンター",
     "GET_WILD",
@@ -40,7 +40,7 @@
     "最終回",
     "冴羽獠"
   ],
-  "cours": "1987-春",
+  "cours": null,
   "colKey": "さ",
   "franchiseKey": null,
   "relatedSeries": [],
@@ -48,6 +48,24 @@
   "firstSeen": "2020-11-13T10:00:00+09:00",
   "lastSeen": "2020-11-13T10:00:00+09:00",
   "episodes": [
+    {
+      "contentId": "so37793584",
+      "episodeNo": 1,
+      "title": "シティーハンター　第36話　女子大生愛のツッパリ！　誰かが私を狙ってる",
+      "viewCounter": 1434,
+      "commentCounter": 48,
+      "likeCounter": 6,
+      "mylistCounter": 9,
+      "lengthSeconds": 1483,
+      "startTime": "2020-11-13T10:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/37793584/37793584.93982593",
+      "description": "娘の由加里が二度も自殺未遂をしたため、リョウに身を守って欲しいと母親が依頼してきた。リョウが由加里に事情を訊くと、義理の父・正木瑛三が保険金目当てに彼女を殺そうとしており、逆に自殺を思い立ったという。だが彼女を狙っていたのは、正木を脅迫している一味で……。\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\nso37793585←前話｜次話→so37793583　第一話→so37793642",
+      "tags": [
+        "シティーハンター"
+      ],
+      "tagsCurated": [],
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
+    },
     {
       "contentId": "so37793642",
       "episodeNo": 1,
@@ -73,13 +91,31 @@
         "アクション/バトル",
         "少年ジャンプ"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
+    },
+    {
+      "contentId": "so37793583",
+      "episodeNo": 2,
+      "title": "シティーハンター　第37話　新宿仁義一直線！　着流し美人は弟子志願（前編）",
+      "viewCounter": 1505,
+      "commentCounter": 66,
+      "likeCounter": 6,
+      "mylistCounter": 7,
+      "lengthSeconds": 1483,
+      "startTime": "2020-11-13T10:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/37793583/37793583.34237456",
+      "description": "暴力団・花吹雪組の実権を狙う鬼頭は、呑み屋｢大虎｣を襲い土地の権利を奪おうとするが、出くわしたリョウに阻止される。リョウの活躍を見た女任侠・菊之介は弟子入りを迫るが、リョウは断る。一方、鬼頭は｢大虎｣の女主人おとらをさらい、無理矢理土地の明け渡しを迫るが……。\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\nso37793584←前話｜次話→so37793593　第一話→so37793642",
+      "tags": [
+        "シティーハンター"
+      ],
+      "tagsCurated": [],
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793664",
       "episodeNo": 2,
       "title": "シティーハンター　第2話　私を殺して!!　美女に照準は似合わない",
-      "viewCounter": 7934,
+      "viewCounter": 7935,
       "commentCounter": 434,
       "likeCounter": 42,
       "mylistCounter": 23,
@@ -91,13 +127,35 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
+    },
+    {
+      "contentId": "so37793582",
+      "episodeNo": 3,
+      "title": "シティーハンター　第51話　史上最強の敵!!　リョウと香のラストマッチ（後編）",
+      "viewCounter": 2378,
+      "commentCounter": 68,
+      "likeCounter": 11,
+      "mylistCounter": 9,
+      "lengthSeconds": 1483,
+      "startTime": "2020-11-13T10:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/37793582/37793582.89111792",
+      "description": "マフィアの貨物船に監禁された香を奪還すべく、単身乗り込んでいくリョウ。待ち構えていたロードスマフィアの殺し屋たち。駆けつけた海坊主の加勢を受けて敵を圧倒するリョウだが、爆弾がセットされた船内に閉じ込められてしまう。リョウは香を救い、この危機を脱出できるのか！？\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\nso37793597←前話　第一話→so37793642",
+      "tags": [
+        "シティーハンター",
+        "シティーハンター1→2_移動用タグ",
+        "最終回",
+        "冴羽獠",
+        "槇村香"
+      ],
+      "tagsCurated": [],
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793702",
       "episodeNo": 3,
       "title": "シティーハンター　第3話　愛よ消えないで！　明日へのテンカウント",
-      "viewCounter": 6450,
+      "viewCounter": 6451,
       "commentCounter": 247,
       "likeCounter": 30,
       "mylistCounter": 13,
@@ -112,7 +170,7 @@
       "tagsCurated": [
         "1話完結おすすめ話"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793735",
@@ -131,7 +189,7 @@
         "槇村香"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793736",
@@ -153,13 +211,13 @@
         "槇村秀幸"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793737",
       "episodeNo": 6,
       "title": "シティーハンター　第6話　恋しない女優　希望へのラストショット",
-      "viewCounter": 4826,
+      "viewCounter": 4827,
       "commentCounter": 349,
       "likeCounter": 30,
       "mylistCounter": 14,
@@ -172,13 +230,13 @@
         "海坊主"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793738",
       "episodeNo": 7,
       "title": "シティーハンター　第7話　心ふるえる銃声　悲しきロンリーガール",
-      "viewCounter": 4974,
+      "viewCounter": 4976,
       "commentCounter": 326,
       "likeCounter": 32,
       "mylistCounter": 16,
@@ -192,7 +250,7 @@
         "海坊主"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793709",
@@ -212,7 +270,7 @@
         "野上冴子"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793708",
@@ -230,13 +288,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793707",
       "episodeNo": 10,
       "title": "シティーハンター　第10話　危険な家庭教師？　女子高生に愛の手料理",
-      "viewCounter": 3476,
+      "viewCounter": 3477,
       "commentCounter": 316,
       "likeCounter": 19,
       "mylistCounter": 9,
@@ -248,7 +306,7 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793706",
@@ -266,7 +324,7 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793705",
@@ -285,7 +343,7 @@
         "コマンドー"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793704",
@@ -303,7 +361,7 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793703",
@@ -321,13 +379,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793675",
       "episodeNo": 15,
       "title": "シティーハンター　第15話　リョウが女子大講師？　麗しのお嬢サマを守れ",
-      "viewCounter": 2790,
+      "viewCounter": 2792,
       "commentCounter": 242,
       "likeCounter": 21,
       "mylistCounter": 11,
@@ -340,13 +398,13 @@
         "胸に傷のある男"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793643",
       "episodeNo": 16,
       "title": "シティーハンター　第16話　おきゃんスチュワーデス　リョウの教官物語",
-      "viewCounter": 2500,
+      "viewCounter": 2503,
       "commentCounter": 198,
       "likeCounter": 18,
       "mylistCounter": 10,
@@ -358,14 +416,14 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793644",
       "episodeNo": 17,
       "title": "シティーハンター　第17話　夏の美人デザイナー　リョウの心はハイレッグ",
-      "viewCounter": 2739,
-      "commentCounter": 183,
+      "viewCounter": 2743,
+      "commentCounter": 223,
       "likeCounter": 11,
       "mylistCounter": 10,
       "lengthSeconds": 1483,
@@ -376,14 +434,14 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793665",
       "episodeNo": 18,
       "title": "シティーハンター　第18話　夏の夜のお告げ?!　祈祷師に恋の手ほどき（祷＝示偏に壽と表示）",
-      "viewCounter": 2322,
-      "commentCounter": 166,
+      "viewCounter": 2326,
+      "commentCounter": 171,
       "likeCounter": 12,
       "mylistCounter": 9,
       "lengthSeconds": 1483,
@@ -394,13 +452,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793666",
       "episodeNo": 19,
       "title": "シティーハンター　第19話　思い出の渚　オーディションは危険がいっぱい",
-      "viewCounter": 2356,
+      "viewCounter": 2357,
       "commentCounter": 126,
       "likeCounter": 18,
       "mylistCounter": 12,
@@ -413,13 +471,13 @@
         "神回"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793667",
       "episodeNo": 20,
       "title": "シティーハンター　第20話　山から姫が降りてくる　リョウの長～～～い一日",
-      "viewCounter": 2196,
+      "viewCounter": 2197,
       "commentCounter": 153,
       "likeCounter": 11,
       "mylistCounter": 9,
@@ -431,13 +489,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793668",
       "episodeNo": 21,
       "title": "シティーハンター　第21話　姿なき狙撃者!!　リョウと冴子の危険なゲーム",
-      "viewCounter": 2265,
+      "viewCounter": 2266,
       "commentCounter": 149,
       "likeCounter": 17,
       "mylistCounter": 9,
@@ -450,13 +508,13 @@
         "野上冴子"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793669",
       "episodeNo": 22,
       "title": "シティーハンター　第22話　愛のキューピット　ダイヤモンドに乾杯!!",
-      "viewCounter": 2053,
+      "viewCounter": 2054,
       "commentCounter": 116,
       "likeCounter": 14,
       "mylistCounter": 8,
@@ -468,13 +526,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793670",
       "episodeNo": 23,
       "title": "シティーハンター　第23話　毒バチブンブン!!　空から花嫁降ってきた",
-      "viewCounter": 2067,
+      "viewCounter": 2068,
       "commentCounter": 156,
       "likeCounter": 11,
       "mylistCounter": 8,
@@ -486,13 +544,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793671",
       "episodeNo": 24,
       "title": "シティーハンター　第24話　バラ色の入院生活？　狙われた白衣の天使",
-      "viewCounter": 2018,
+      "viewCounter": 2019,
       "commentCounter": 182,
       "likeCounter": 11,
       "mylistCounter": 9,
@@ -504,13 +562,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793672",
       "episodeNo": 25,
       "title": "シティーハンター　第25話　愛の国際親善?!　ライバルはブロンド美人",
-      "viewCounter": 1993,
+      "viewCounter": 1994,
       "commentCounter": 108,
       "likeCounter": 8,
       "mylistCounter": 8,
@@ -524,13 +582,13 @@
         "処刑用BGM"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793673",
       "episodeNo": 26,
       "title": "シティーハンター　第26話　愛ってなんですか？　リョウの正しい恋愛講座",
-      "viewCounter": 1893,
+      "viewCounter": 1894,
       "commentCounter": 121,
       "likeCounter": 12,
       "mylistCounter": 9,
@@ -542,13 +600,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793674",
       "episodeNo": 27,
       "title": "シティーハンター　第27話　リョウと海坊主の純情足ながおじさん伝説（前編）",
-      "viewCounter": 2700,
+      "viewCounter": 2701,
       "commentCounter": 234,
       "likeCounter": 16,
       "mylistCounter": 15,
@@ -564,13 +622,13 @@
         "ケンタッキーおじさん"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793592",
       "episodeNo": 28,
       "title": "シティーハンター　第28話　リョウと海坊主の純情足ながおじさん伝説（後編）",
-      "viewCounter": 2528,
+      "viewCounter": 2529,
       "commentCounter": 161,
       "likeCounter": 18,
       "mylistCounter": 12,
@@ -585,13 +643,13 @@
         "あしながおじさん"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793591",
       "episodeNo": 29,
       "title": "シティーハンター　第29話　依頼料は500円!?　メルヘン美人はリョウ好み",
-      "viewCounter": 2021,
+      "viewCounter": 2022,
       "commentCounter": 170,
       "likeCounter": 16,
       "mylistCounter": 7,
@@ -606,13 +664,13 @@
       "tagsCurated": [
         "1話完結おすすめ話"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793590",
       "episodeNo": 30,
       "title": "シティーハンター　第30話　恋のライバル出現!?　香さんをいただきます",
-      "viewCounter": 1743,
+      "viewCounter": 1744,
       "commentCounter": 127,
       "likeCounter": 9,
       "mylistCounter": 8,
@@ -624,13 +682,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793589",
       "episodeNo": 31,
       "title": "シティーハンター　第31話　バリバリラブ！　乙女心を駈けぬけろ！",
-      "viewCounter": 1575,
+      "viewCounter": 1576,
       "commentCounter": 144,
       "likeCounter": 7,
       "mylistCounter": 9,
@@ -642,13 +700,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793588",
       "episodeNo": 32,
       "title": "シティーハンター　第32話　リョウ死なないで!!　ハードボイルドマグナム",
-      "viewCounter": 1876,
+      "viewCounter": 1877,
       "commentCounter": 96,
       "likeCounter": 14,
       "mylistCounter": 11,
@@ -663,13 +721,13 @@
       "tagsCurated": [
         "名勝負・名バトル"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793587",
       "episodeNo": 33,
       "title": "シティーハンター　第33話　がんばれ海坊主!!　ハードな初恋協奏曲",
-      "viewCounter": 1800,
+      "viewCounter": 1801,
       "commentCounter": 136,
       "likeCounter": 11,
       "mylistCounter": 10,
@@ -685,13 +743,13 @@
       "tagsCurated": [
         "1話完結おすすめ話"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793586",
       "episodeNo": 34,
       "title": "シティーハンター　第34話　衝撃!!　リョウの父親宣言　寝てる子は起こすな",
-      "viewCounter": 1620,
+      "viewCounter": 1621,
       "commentCounter": 64,
       "likeCounter": 16,
       "mylistCounter": 9,
@@ -703,13 +761,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793585",
       "episodeNo": 35,
       "title": "シティーハンター　第35話　突撃美人キャスター　リョウのマル秘モッコリ取材",
-      "viewCounter": 1505,
+      "viewCounter": 1507,
       "commentCounter": 66,
       "likeCounter": 8,
       "mylistCounter": 8,
@@ -721,49 +779,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
-    },
-    {
-      "contentId": "so37793584",
-      "episodeNo": 36,
-      "title": "シティーハンター　第36話　女子大生愛のツッパリ！　誰かが私を狙ってる",
-      "viewCounter": 1433,
-      "commentCounter": 48,
-      "likeCounter": 6,
-      "mylistCounter": 9,
-      "lengthSeconds": 1483,
-      "startTime": "2020-11-13T10:00:00+09:00",
-      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/37793584/37793584.93982593",
-      "description": "娘の由加里が二度も自殺未遂をしたため、リョウに身を守って欲しいと母親が依頼してきた。リョウが由加里に事情を訊くと、義理の父・正木瑛三が保険金目当てに彼女を殺そうとしており、逆に自殺を思い立ったという。だが彼女を狙っていたのは、正木を脅迫している一味で……。\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\nso37793585←前話｜次話→so37793583　第一話→so37793642",
-      "tags": [
-        "シティーハンター"
-      ],
-      "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
-    },
-    {
-      "contentId": "so37793583",
-      "episodeNo": 37,
-      "title": "シティーハンター　第37話　新宿仁義一直線！　着流し美人は弟子志願（前編）",
-      "viewCounter": 1504,
-      "commentCounter": 66,
-      "likeCounter": 6,
-      "mylistCounter": 7,
-      "lengthSeconds": 1483,
-      "startTime": "2020-11-13T10:00:00+09:00",
-      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/37793583/37793583.34237456",
-      "description": "暴力団・花吹雪組の実権を狙う鬼頭は、呑み屋｢大虎｣を襲い土地の権利を奪おうとするが、出くわしたリョウに阻止される。リョウの活躍を見た女任侠・菊之介は弟子入りを迫るが、リョウは断る。一方、鬼頭は｢大虎｣の女主人おとらをさらい、無理矢理土地の明け渡しを迫るが……。\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\nso37793584←前話｜次話→so37793593　第一話→so37793642",
-      "tags": [
-        "シティーハンター"
-      ],
-      "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793593",
       "episodeNo": 38,
       "title": "シティーハンター　第38話　新宿仁義一直線！　着流し美人は弟子志願（後編）",
-      "viewCounter": 1390,
+      "viewCounter": 1391,
       "commentCounter": 65,
       "likeCounter": 7,
       "mylistCounter": 7,
@@ -775,13 +797,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793594",
       "episodeNo": 39,
       "title": "シティーハンター　第39話　プッツンかぐや姫！　リョウも手を焼く記憶喪失",
-      "viewCounter": 1415,
+      "viewCounter": 1416,
       "commentCounter": 65,
       "likeCounter": 9,
       "mylistCounter": 8,
@@ -793,13 +815,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793595",
       "episodeNo": 40,
       "title": "シティーハンター　第40話　もっこりパートナー！　依頼料はシャワーの後で",
-      "viewCounter": 1543,
+      "viewCounter": 1544,
       "commentCounter": 82,
       "likeCounter": 10,
       "mylistCounter": 9,
@@ -813,13 +835,13 @@
         "探してたあのセリフ・シーン@Dアニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793740",
       "episodeNo": 41,
       "title": "シティーハンター　第41話　冴子の妹は女探偵（前編）　翔んだ女の大胆秘密",
-      "viewCounter": 1957,
+      "viewCounter": 1958,
       "commentCounter": 70,
       "likeCounter": 11,
       "mylistCounter": 9,
@@ -833,13 +855,13 @@
         "似たもの姉妹"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793605",
       "episodeNo": 42,
       "title": "シティーハンター　第42話　冴子の妹は女探偵（後編）　翔んだ女の大捕物帳",
-      "viewCounter": 1791,
+      "viewCounter": 1792,
       "commentCounter": 75,
       "likeCounter": 10,
       "mylistCounter": 9,
@@ -852,13 +874,13 @@
         "死亡フラグ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793604",
       "episodeNo": 43,
       "title": "シティーハンター　第43話　女心のクッキー記念日　胸ボクロと初恋の唄",
-      "viewCounter": 1417,
+      "viewCounter": 1418,
       "commentCounter": 70,
       "likeCounter": 6,
       "mylistCounter": 8,
@@ -870,13 +892,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793603",
       "episodeNo": 44,
       "title": "シティーハンター　第44話　子供100人に聞きました!?　リョウは僕らのヒーローだ",
-      "viewCounter": 1327,
+      "viewCounter": 1328,
       "commentCounter": 59,
       "likeCounter": 6,
       "mylistCounter": 8,
@@ -888,13 +910,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793602",
       "episodeNo": 45,
       "title": "シティーハンター　第45話　三姉妹は招くよ！　リョウちゃんのスキー天国",
-      "viewCounter": 1326,
+      "viewCounter": 1327,
       "commentCounter": 60,
       "likeCounter": 6,
       "mylistCounter": 8,
@@ -906,13 +928,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793601",
       "episodeNo": 46,
       "title": "シティーハンター　第46話　盗ってもスリリング　明日に向ってすれ!!",
-      "viewCounter": 1241,
+      "viewCounter": 1242,
       "commentCounter": 61,
       "likeCounter": 5,
       "mylistCounter": 8,
@@ -924,13 +946,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793600",
       "episodeNo": 47,
       "title": "シティーハンター　第47話　モッコリが特効薬!?　美女ハスラーと愛の球跡",
-      "viewCounter": 1386,
+      "viewCounter": 1387,
       "commentCounter": 78,
       "likeCounter": 11,
       "mylistCounter": 8,
@@ -942,13 +964,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793599",
       "episodeNo": 48,
       "title": "シティーハンター　第48話　春よこい恋未亡人！　さぁ喪服をぬいで…",
-      "viewCounter": 1412,
+      "viewCounter": 1413,
       "commentCounter": 69,
       "likeCounter": 4,
       "mylistCounter": 11,
@@ -964,13 +986,13 @@
       "tagsCurated": [
         "1話完結おすすめ話"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793598",
       "episodeNo": 49,
       "title": "シティーハンター　第49話　迷えるシスター　もっこりは愛のお導き!?",
-      "viewCounter": 1176,
+      "viewCounter": 1177,
       "commentCounter": 70,
       "likeCounter": 7,
       "mylistCounter": 9,
@@ -982,13 +1004,13 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so37793597",
       "episodeNo": 50,
       "title": "シティーハンター　第50話　史上最強の敵!!　リョウと香のラストマッチ（前編）",
-      "viewCounter": 1524,
+      "viewCounter": 1525,
       "commentCounter": 86,
       "likeCounter": 11,
       "mylistCounter": 9,
@@ -1000,29 +1022,7 @@
         "シティーハンター"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
-    },
-    {
-      "contentId": "so37793582",
-      "episodeNo": 51,
-      "title": "シティーハンター　第51話　史上最強の敵!!　リョウと香のラストマッチ（後編）",
-      "viewCounter": 2376,
-      "commentCounter": 68,
-      "likeCounter": 11,
-      "mylistCounter": 9,
-      "lengthSeconds": 1483,
-      "startTime": "2020-11-13T10:00:00+09:00",
-      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/37793582/37793582.89111792",
-      "description": "マフィアの貨物船に監禁された香を奪還すべく、単身乗り込んでいくリョウ。待ち構えていたロードスマフィアの殺し屋たち。駆けつけた海坊主の加勢を受けて敵を圧倒するリョウだが、爆弾がセットされた船内に閉じ込められてしまう。リョウは香を救い、この危機を脱出できるのか！？\n\n冴羽リョウ:神谷明／槇村香:伊倉一恵／槇村秀幸:田中秀幸／海坊主:玄田哲章／野上冴子:麻上洋子／野上麗香:鷹森淑乃\n\n原作:北条司（集英社「週刊少年ジャンプ」）／監督:こだま兼嗣／キャラクターデザイン:神村幸子／メカニカルデザイン:明貴美加／総作画監督:北原健雄／音楽:国吉良一、矢野立美／製作:よみうりテレビ、日本サンライズ\n\n©北条司／コアミックス・読売テレビ・サンライズ　版権許諾証TA-306\n\nso37793597←前話　第一話→so37793642",
-      "tags": [
-        "シティーハンター",
-        "シティーハンター1→2_移動用タグ",
-        "最終回",
-        "冴羽獠",
-        "槇村香"
-      ],
-      "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     }
   ]
 }

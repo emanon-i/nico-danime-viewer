@@ -16,7 +16,7 @@
   "relatedSeries": [],
   "isAvailable": true,
   "firstSeen": "2026-04-16T01:00:00+09:00",
-  "lastSeen": "2026-06-11T01:00:00+09:00",
+  "lastSeen": "2026-06-18T01:00:00+09:00",
   "episodes": [
     {
       "contentId": "so46168318",
@@ -40,7 +40,7 @@
       "tagsCurated": [
         "ショートアニメ"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46208639",
@@ -59,7 +59,7 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46238564",
@@ -78,13 +78,13 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46251796",
       "episodeNo": 4,
       "title": "キャンディーカリエス　第4話　白い粉はキケン？",
-      "viewCounter": 206,
+      "viewCounter": 207,
       "commentCounter": 28,
       "likeCounter": 11,
       "mylistCounter": 1,
@@ -97,7 +97,7 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46304077",
@@ -116,7 +116,7 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46334151",
@@ -135,16 +135,16 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46361068",
       "episodeNo": 7,
       "title": "キャンディーカリエス　第7話　歯医者はこわくない",
-      "viewCounter": 137,
+      "viewCounter": 138,
       "commentCounter": 16,
-      "likeCounter": 7,
-      "mylistCounter": 1,
+      "likeCounter": 8,
+      "mylistCounter": 2,
       "lengthSeconds": 186,
       "startTime": "2026-05-28T01:00:00+09:00",
       "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/46361068/46361068.62997402",
@@ -154,7 +154,7 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46389569",
@@ -173,7 +173,7 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so46417968",
@@ -192,7 +192,26 @@
         "2026年春アニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
+    },
+    {
+      "contentId": "so46444551",
+      "episodeNo": 10,
+      "title": "キャンディーカリエス　第10話　カリエスのお引越し",
+      "viewCounter": 10,
+      "commentCounter": 0,
+      "likeCounter": 0,
+      "mylistCounter": 0,
+      "lengthSeconds": 186,
+      "startTime": "2026-06-18T01:00:00+09:00",
+      "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/46444551/46444551.63295510",
+      "description": "アメと喧嘩して部屋を飛び出したカリエス。ミカンたちを頼ってみんなの口の中に泊めてもらおうとするが……。<br><br>アメ:佐藤みゆ希／カリエス:武田華／ミカン:引坂理絵／ビーフ:矢部雅史／サメ:齋藤彩夏／狂人歯医者:片桐仁／ハロルド:松丸亮吾／アメ母:野呂佳代<br><br>原作:見里朝希/WIT STUDIO／監督:見里朝希／副監督:森井ケンシロウ／脚本:西中千晶／編集:齋藤朱里／音響監督:えびなやすのり／音響制作:サウンドチーム・ドンファン／音楽:帆足圭吾／アニメーションプロデューサー:山田健太／アニメーション制作:TORUKU from WIT STUDIO／製作:トゥースフェアリーズ<br><br>©Tomoki Misato/WIT STUDIO/トゥースフェアリーズ<br><br>so46417968←前話　第一話→so46168318",
+      "tags": [
+        "キャンディーカリエス",
+        "2026年春アニメ"
+      ],
+      "tagsCurated": [],
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     }
   ]
 }

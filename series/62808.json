@@ -82,16 +82,16 @@
     "α世界線",
     "キュンキュン・てぇてぇなシーン",
     "23話分岐（α→本放送・β→時系列）リンク",
-    "シュタインズ・ゲート",
-    "シュタインズゲート→ゼロ移動用",
-    "シュタインズゲート0へ続く",
     "スカイクラッドの観測者",
     "特に意味は無い",
     "特殊ED回",
     "最終話",
     "SG世界線",
     "シュタゲ劇場版リンク",
-    "きっと心が覚えている"
+    "きっと心が覚えている",
+    "シュタインズ・ゲート",
+    "シュタインズゲート→ゼロ移動用",
+    "シュタインズゲート0へ続く"
   ],
   "cours": "2011-春",
   "colKey": "さ",
@@ -105,10 +105,10 @@
       "contentId": "so31881425",
       "episodeNo": 1,
       "title": "STEINS;GATE　第1話　始まりと終わりのプロローグ",
-      "viewCounter": 95525,
-      "commentCounter": 1437,
+      "viewCounter": 95543,
+      "commentCounter": 1438,
       "likeCounter": 432,
-      "mylistCounter": 2061,
+      "mylistCounter": 2063,
       "lengthSeconds": 1420,
       "startTime": "2012-12-07T10:00:00+09:00",
       "thumbnailUrl": "https://nicovideo.cdn.nimg.jp/thumbnails/31881425/31881425.35284394",
@@ -126,14 +126,14 @@
         "ホラー/サスペンス/推理",
         "ゲーム・ソシャゲ原作"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881426",
       "episodeNo": 2,
       "title": "STEINS;GATE　第2話　時間跳躍のパラノイア",
-      "viewCounter": 65445,
-      "commentCounter": 1469,
+      "viewCounter": 65455,
+      "commentCounter": 1470,
       "likeCounter": 205,
       "mylistCounter": 186,
       "lengthSeconds": 1420,
@@ -149,14 +149,14 @@
         "探してたあのセリフ・シーン@Dアニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881427",
       "episodeNo": 3,
       "title": "STEINS;GATE　第3話　並列過程のパラノイア",
-      "viewCounter": 57114,
-      "commentCounter": 1060,
+      "viewCounter": 57127,
+      "commentCounter": 1061,
       "likeCounter": 164,
       "mylistCounter": 162,
       "lengthSeconds": 1419,
@@ -171,13 +171,13 @@
         "フゥーハハハ!"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881428",
       "episodeNo": 4,
       "title": "STEINS;GATE　第4話　空理彷徨のランデヴー",
-      "viewCounter": 56475,
+      "viewCounter": 56488,
       "commentCounter": 1046,
       "likeCounter": 166,
       "mylistCounter": 162,
@@ -191,13 +191,13 @@
         "イチャイチャしやがって"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881429",
       "episodeNo": 5,
       "title": "STEINS;GATE　第5話　電荷衝突のランデヴー",
-      "viewCounter": 54008,
+      "viewCounter": 54017,
       "commentCounter": 856,
       "likeCounter": 151,
       "mylistCounter": 165,
@@ -209,13 +209,13 @@
         "STEINS;GATE"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881430",
       "episodeNo": 6,
       "title": "STEINS;GATE　第6話　蝶翼のダイバージェンス",
-      "viewCounter": 54392,
+      "viewCounter": 54399,
       "commentCounter": 730,
       "likeCounter": 160,
       "mylistCounter": 159,
@@ -233,13 +233,13 @@
         "変態という名の紳士"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881431",
       "episodeNo": 7,
       "title": "STEINS;GATE　第7話　断層のダイバージェンス",
-      "viewCounter": 50741,
+      "viewCounter": 50747,
       "commentCounter": 905,
       "likeCounter": 150,
       "mylistCounter": 155,
@@ -254,13 +254,13 @@
         "胸囲の格差社会"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881432",
       "episodeNo": 8,
       "title": "STEINS;GATE　第8話　夢幻のホメオスタシス",
-      "viewCounter": 50261,
+      "viewCounter": 50270,
       "commentCounter": 914,
       "likeCounter": 139,
       "mylistCounter": 153,
@@ -274,13 +274,13 @@
         "だが男だ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881433",
       "episodeNo": 9,
       "title": "STEINS;GATE　第9話　幻相のホメオスタシス (げんそう)",
-      "viewCounter": 51519,
+      "viewCounter": 51529,
       "commentCounter": 790,
       "likeCounter": 161,
       "mylistCounter": 176,
@@ -299,13 +299,13 @@
         "記憶を消してもう一度見たいアニメ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881434",
       "episodeNo": 10,
       "title": "STEINS;GATE　第10話　相生のホメオスタシス (そうせい)",
-      "viewCounter": 49469,
+      "viewCounter": 49477,
       "commentCounter": 852,
       "likeCounter": 149,
       "mylistCounter": 146,
@@ -324,13 +324,13 @@
         "ゲーマーズ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881458",
       "episodeNo": 11,
       "title": "STEINS;GATE　第11話　時空境界のドグマ",
-      "viewCounter": 46642,
+      "viewCounter": 46647,
       "commentCounter": 834,
       "likeCounter": 157,
       "mylistCounter": 151,
@@ -347,13 +347,13 @@
         "お前は知りすぎた"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881459",
       "episodeNo": 12,
       "title": "STEINS;GATE　第12話　静止限界のドグマ",
-      "viewCounter": 49143,
+      "viewCounter": 49149,
       "commentCounter": 1220,
       "likeCounter": 161,
       "mylistCounter": 153,
@@ -369,13 +369,13 @@
         "地獄の最下層"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881460",
       "episodeNo": 13,
       "title": "STEINS;GATE　第13話　形而上のネクローシス",
-      "viewCounter": 48855,
+      "viewCounter": 48864,
       "commentCounter": 1113,
       "likeCounter": 151,
       "mylistCounter": 152,
@@ -389,13 +389,13 @@
         "みんなのトラウマ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881461",
       "episodeNo": 14,
       "title": "STEINS;GATE　第14話　形而下のネクローシス",
-      "viewCounter": 47393,
+      "viewCounter": 47402,
       "commentCounter": 1161,
       "likeCounter": 160,
       "mylistCounter": 150,
@@ -410,13 +410,13 @@
         "ゲルまゆ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881462",
       "episodeNo": 15,
       "title": "STEINS;GATE　第15話　亡環上のネクローシス",
-      "viewCounter": 46666,
+      "viewCounter": 46677,
       "commentCounter": 975,
       "likeCounter": 131,
       "mylistCounter": 137,
@@ -430,13 +430,13 @@
         "初見コメ消し推奨"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881463",
       "episodeNo": 16,
       "title": "STEINS;GATE　第16話　不可逆のネクローシス",
-      "viewCounter": 45984,
+      "viewCounter": 45995,
       "commentCounter": 1069,
       "likeCounter": 147,
       "mylistCounter": 155,
@@ -451,14 +451,14 @@
         "失敗した失敗した失敗した失敗した失敗した"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881464",
       "episodeNo": 17,
       "title": "STEINS;GATE　第17話　虚像歪曲のコンプレックス",
-      "viewCounter": 45439,
-      "commentCounter": 933,
+      "viewCounter": 45451,
+      "commentCounter": 936,
       "likeCounter": 137,
       "mylistCounter": 151,
       "lengthSeconds": 1419,
@@ -471,13 +471,13 @@
         "フェイリス・ニャンニャン"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881465",
       "episodeNo": 18,
       "title": "STEINS;GATE　第18話　自己相似のアンドロギュノス",
-      "viewCounter": 45474,
+      "viewCounter": 45482,
       "commentCounter": 1838,
       "likeCounter": 140,
       "mylistCounter": 140,
@@ -495,13 +495,13 @@
         "だが画伯だ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881466",
       "episodeNo": 19,
       "title": "STEINS;GATE　第19話　無限連鎖のアポトーシス",
-      "viewCounter": 45443,
+      "viewCounter": 45456,
       "commentCounter": 989,
       "likeCounter": 135,
       "mylistCounter": 145,
@@ -518,13 +518,13 @@
         "男女平等パンチ"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881467",
       "episodeNo": 20,
       "title": "STEINS;GATE　第20話　怨嗟断絶のアポトーシス",
-      "viewCounter": 49670,
+      "viewCounter": 49692,
       "commentCounter": 1039,
       "likeCounter": 149,
       "mylistCounter": 157,
@@ -542,13 +542,13 @@
         "闇バイト"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881491",
       "episodeNo": 21,
       "title": "STEINS;GATE　第21話　因果律のメルト",
-      "viewCounter": 50031,
+      "viewCounter": 50046,
       "commentCounter": 819,
       "likeCounter": 158,
       "mylistCounter": 146,
@@ -563,13 +563,13 @@
         "時報"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881492",
       "episodeNo": 22,
       "title": "STEINS;GATE　第22話　存在了解のメルト",
-      "viewCounter": 60185,
+      "viewCounter": 60201,
       "commentCounter": 1488,
       "likeCounter": 180,
       "mylistCounter": 181,
@@ -589,13 +589,13 @@
       "tagsCurated": [
         "キュンキュン・てぇてぇなシーン"
       ],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881493",
       "episodeNo": 24,
       "title": "STEINS;GATE　第23話　境界面上のシュタインズゲート",
-      "viewCounter": 87467,
+      "viewCounter": 87489,
       "commentCounter": 1552,
       "likeCounter": 211,
       "mylistCounter": 255,
@@ -611,13 +611,13 @@
         "特殊ED回"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so31881494",
       "episodeNo": 25,
       "title": "STEINS;GATE　第24話　終わりと始まりのプロローグ",
-      "viewCounter": 77334,
+      "viewCounter": 77347,
       "commentCounter": 1823,
       "likeCounter": 274,
       "mylistCounter": 222,
@@ -633,13 +633,13 @@
         "きっと心が覚えている"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     },
     {
       "contentId": "so33101950",
       "episodeNo": 23,
       "title": "STEINS;GATE　第23話 改変版（β版）　境界面上のミッシングリンク",
-      "viewCounter": 62012,
+      "viewCounter": 62027,
       "commentCounter": 970,
       "likeCounter": 222,
       "mylistCounter": 202,
@@ -655,7 +655,7 @@
         "23話分岐（α→本放送・β→時系列）リンク"
       ],
       "tagsCurated": [],
-      "lastUpdated": "2026-06-17T18:43:45.804Z"
+      "lastUpdated": "2026-06-17T23:03:53.624Z"
     }
   ]
 }
