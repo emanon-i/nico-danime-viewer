@@ -4,7 +4,7 @@
 // 環境変数:
 //   NICO_USER_AGENT  問い合わせ先を含む UA 文字列（省略可・デフォルト値あり）
 
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, renameSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -27,9 +27,10 @@ import {
 import { fetchAllBranchEpisodes, fetchSnapshotVersion } from './nico/snapshot.mjs'
 import { assertSnapshotOk } from './nico/assert.mjs'
 import { fetchListJson, fetchProgramlist } from './nico/list.mjs'
-import { seedAllSeries, mapNvapiItems } from './nico/nvapi.mjs'
+import { seedAllSeries, mapNvapiItems, mapNvapiEpisodes } from './nico/nvapi.mjs'
 import {
   fetchRss,
+  fetchRssMultiPage,
   parseRssXml,
   filterNewRssItems,
   assertRssOk,
@@ -68,6 +69,7 @@ import {
   loadStore,
   loadPartialStore,
   writeBackStore,
+  writeSeriesFiles,
   upsertEpisodes as storeUpsertEps,
   upsertSeries as storeUpsertSeries,
   linkEpisodes as storeLinkEps,
@@ -395,6 +397,38 @@ async function runHourly() {
     writeFileSync(join(DATA_DIR, '.deploy-needed'), `${insertedEpisodes}\n`)
   }
   logger.info('fetch', 'hourly done', { now, insertedEpisodes })
+}
+
+/**
+ * rss_only の RSS アイテムを series-titles Map でマッチ（§D2 hourly）。
+ * タイトル形式: "シリーズ名 第N話 サブタイトル" → series.title が RSS title の先頭一致（最長一致）。
+ * 境界チェック: prefix 直後が空白・「第」・数字・文字列終端であること（誤食い防止）。
+ * @param {import('./store/store.mjs').RssEntry[]} rssOnlyItems
+ * @param {Map<number, string>} seriesTitles - seriesId → title（series-titles.json から）
+ * @returns {Set<number>} マッチした seriesId の集合
+ */
+function matchRssOnlyFromTitles(rssOnlyItems, seriesTitles) {
+  const norm = (s) => (s ?? '').replace(/\s+/gu, ' ').trim()
+  const isBoundary = (str, pos) => {
+    if (pos >= str.length) return true
+    const c = str[pos]
+    return c === ' ' || c === '第' || /\d/.test(c)
+  }
+  const matched = new Set()
+  for (const item of rssOnlyItems) {
+    const t = norm(item.title ?? '')
+    if (!t) continue
+    let best = null
+    for (const [sid, title] of seriesTitles) {
+      const nt = norm(title)
+      if (!nt) continue
+      if (t.startsWith(nt) && isBoundary(t, nt.length)) {
+        if (!best || nt.length > best.len) best = { sid, len: nt.length }
+      }
+    }
+    if (best) matched.add(best.sid)
+  }
+  return matched
 }
 
 /**
@@ -1056,6 +1090,21 @@ async function runFullJS() {
   logger.info('fetch', '[JS] phase F+G: project all')
   await writeBackStore(store, DATA_DIR, { now })
   await projectAll(store, DATA_DIR, now)
+
+  // series-titles.json: hourly D2 の title prefix matching 用索引（isAvailable のみ）
+  {
+    const titlesObj = {}
+    for (const s of store.series.values()) {
+      if (s.isAvailable) titlesObj[s.seriesId] = s.title
+    }
+    const titlesPath = join(DATA_DIR, 'state', 'series-titles.json')
+    writeFileSync(titlesPath + '.tmp', JSON.stringify(titlesObj), 'utf-8')
+    renameSync(titlesPath + '.tmp', titlesPath)
+    logger.info('fetch', '[JS] series-titles.json written', {
+      count: Object.keys(titlesObj).length,
+    })
+  }
+
   logger.info('fetch', '[JS] all done', { now, ep0: guard.ep0 })
 }
 
@@ -1068,33 +1117,23 @@ async function runHourlyJS() {
   const now = new Date().toISOString()
   const stateDir = join(DATA_DIR, 'state')
 
-  // ── Phase D: RSS 新着取得（series-index + state だけロード）────────────────
+  // ── Phase D: RSS 新着取得（meta + rss + series-index のみロード）────────────
   logger.info('fetch', '[JS] phase D: RSS (hourly)')
 
-  // まず state/meta.json と rss.json だけ読んで lightweight な Store を作る
-  // （series/episodes は RSS 処理後に必要分だけ読む）
-  const { store: partialStore, contentToSeries } = await loadPartialStore(DATA_DIR, [])
+  const { store: rssStore, contentToSeries } = await loadPartialStore(DATA_DIR, [])
 
-  // 空 Store ガード（series-index.json が存在しない = 初回 or 壊れた状態）
+  // series-index が空 = 初回 or 壊れた状態 → 日次 full に委ねる
   if (contentToSeries.size === 0) {
-    // series-index がないと rss_only 解決もできない → skip してガードする
     logger.warn('fetch', '[JS] hourly: no series-index (first run?) → skip', {})
     return
   }
 
-  const rssResult = await fetchRss()
-  if (rssResult.status === 304) {
-    logger.info('fetch', '[JS] RSS 304 not modified, skipping')
-    return
-  }
+  // B: 複数ページ取得（最大3ページ・約72h窓）でcronの飛びを吸収
+  const lastGuid = rssStore.meta.rssLastGuid ?? null
+  const { items: newRssItems, newLastGuid } = await fetchRssMultiPage(lastGuid)
 
-  let insertedEpisodes = 0
-
-  if (rssResult.status === 200 && rssResult.body) {
-    const { channelTitle, items } = parseRssXml(rssResult.body)
-    assertRssOk(items, channelTitle)
-    const newItems = filterNewRssItems(items, partialStore.meta.rssLastGuid ?? null)
-    const rssRows = newItems
+  if (newRssItems.length > 0) {
+    const rssRows = newRssItems
       .map((item) => {
         const watchId = extractWatchId(item.link)
         if (!watchId) return null
@@ -1108,56 +1147,117 @@ async function runHourlyJS() {
         }
       })
       .filter(Boolean)
-
     if (rssRows.length > 0) {
-      storeUpsertRss(partialStore, rssRows)
+      storeUpsertRss(rssStore, rssRows)
       logger.info('fetch', '[JS] hourly: new RSS items', { count: rssRows.length })
     }
-    const newLastGuid = items[0]?.guid ?? partialStore.meta.rssLastGuid
-    if (newLastGuid) storeUpdateMeta(partialStore, { rssLastGuid: newLastGuid })
+    if (newLastGuid) storeUpdateMeta(rssStore, { rssLastGuid: newLastGuid })
+  } else {
+    logger.info('fetch', '[JS] hourly: RSS no new items', {})
+  }
 
-    // ── Phase D2: rss_only → 対応シリーズ nvapi backfill ──────────────────
-    // contentToSeries インデックスから rss_only タイトルに対応するシリーズを特定。
-    // 軽量なシリーズ情報だけロードして backfill し、series/*.json と new.json のみ更新する。
-    //
-    // §0-4: hourly は works.json を書かない（全量 projection を避ける）。
-    const rssOnlyTitles = [...partialStore.rss.values()]
-      .filter((r) => r.resolutionStatus === 'rss_only' && r.title)
-      .map((r) => r.title)
+  let insertedEpisodes = 0
 
-    if (rssOnlyTitles.length > 0) {
-      // タイトル前方一致でシリーズ特定（series title が必要）。
-      // 必要なシリーズ情報を series-index から逆引きして該当 series JSON を読む。
-      // ただし、rss_only 解決のためには series タイトルが必要。
-      // シリーズ JSON をすべて読むのは重い（6352件）ので、まず rss title から候補 seriesId を
-      // contentToSeries + heuristic で絞る。
-      //
-      // 簡略化: rss_only タイトルの prefix が seriesId に対応するか探すには series タイトルが必要。
-      // ここでは「全シリーズタイトルインデックス」を state に持つ必要がある → series-titles.json
-      // （M4 段階ではまだ存在しないため、この step は skip して rss_only は日次 full で回収する）
-      logger.info('fetch', '[JS] hourly: rss_only items will be resolved by next daily', {
-        count: rssOnlyTitles.length,
+  // ── Phase D2: rss_only → series title match → nvapi seed ──────────────────
+  // series-titles.json（daily full が生成）で title 前方一致マッチ → 該当シリーズのみ nvapi。
+  // works.json は書かない（全量 projection を避ける）。series/{id}.json + new.json のみ更新。
+  const rssOnlyItems = [...rssStore.rss.values()].filter(
+    (r) => r.resolutionStatus === 'rss_only' && r.title
+  )
+
+  if (rssOnlyItems.length > 0) {
+    let seriesTitlesObj = {}
+    try {
+      seriesTitlesObj = JSON.parse(readFileSync(join(stateDir, 'series-titles.json'), 'utf-8'))
+    } catch {
+      logger.info(
+        'fetch',
+        '[JS] hourly: series-titles.json not found → D2 skip (next daily will resolve)',
+        {}
+      )
+    }
+    const seriesTitles = new Map(Object.entries(seriesTitlesObj).map(([id, t]) => [Number(id), t]))
+
+    if (seriesTitles.size > 0) {
+      const matchedSeriesIds = matchRssOnlyFromTitles(rssOnlyItems, seriesTitles)
+      logger.info('fetch', '[JS] hourly D2: rss_only match', {
+        rssOnlyCount: rssOnlyItems.length,
+        matched: matchedSeriesIds.size,
       })
+
+      if (matchedSeriesIds.size > 0) {
+        // マッチしたシリーズの series/*.json を読み込む（lightweight partial load）
+        const { store: seedStore } = await loadPartialStore(DATA_DIR, [...matchedSeriesIds])
+        // 更新済み RSS 状態を伝播（rssStore で upsert した内容）
+        for (const [k, v] of rssStore.rss) seedStore.rss.set(k, v)
+        seedStore.meta = { ...rssStore.meta }
+
+        // 挿入前の contentId セット（新規カウント用）
+        const preExisting = new Set(seedStore.episodes.keys())
+
+        // nvapi seed（支店判定付き）
+        logger.info('fetch', '[JS] hourly D2: nvapi seed', { series: matchedSeriesIds.size })
+        await seedAllSeries([...matchedSeriesIds], async (seriesId, data) => {
+          const eps = mapNvapiEpisodes(seriesId, data.items ?? [])
+          if (eps.length > 0) storeUpsertEps(seedStore, eps)
+        })
+
+        // 本当に新しいエピソードのみカウント
+        for (const ep of seedStore.episodes.values()) {
+          if (!preExisting.has(ep.contentId)) insertedEpisodes++
+        }
+
+        if (insertedEpisodes > 0) {
+          // サムネ・タイムスタンプ同期
+          storeSyncThumbs(seedStore)
+          storeSyncTimestamps(seedStore)
+
+          // rss_only → resolved に昇格
+          resolveRssItemsFromStore(seedStore)
+          // 解決結果を rssStore に同期（state/rss.json の書き出しに反映）
+          for (const [k, v] of seedStore.rss) rssStore.rss.set(k, v)
+          if (seedStore.meta.rssLastGuid) {
+            storeUpdateMeta(rssStore, { rssLastGuid: seedStore.meta.rssLastGuid })
+          }
+
+          // 影響シリーズの series/*.json のみ書き出し（prev-views/series-index は触らない）
+          await writeSeriesFiles(seedStore, DATA_DIR, [...matchedSeriesIds])
+
+          // series-index.json に新 contentId → seriesId エントリをマージ
+          const idxPath = join(stateDir, 'series-index.json')
+          let existingIdx = {}
+          try {
+            existingIdx = JSON.parse(readFileSync(idxPath, 'utf-8'))
+          } catch {
+            /* 初回は空 */
+          }
+          for (const ep of seedStore.episodes.values()) {
+            if (ep.seriesId != null) existingIdx[ep.contentId] = ep.seriesId
+          }
+          writeFileSync(idxPath + '.tmp', JSON.stringify(existingIdx), 'utf-8')
+          renameSync(idxPath + '.tmp', idxPath)
+
+          logger.info('fetch', '[JS] hourly D2: done', {
+            insertedEpisodes,
+            series: matchedSeriesIds.size,
+          })
+        } else {
+          logger.info('fetch', '[JS] hourly D2: no new episodes (all already known)', {})
+        }
+      }
     }
   }
 
-  // ── new.json のみ書き出し（§0-4: works.json は書かない）──────────────────
-  // partialStore.rss には更新済みの全 RSS アイテムが入っている（state/rss.json から）
-  await exportNewStore(partialStore, DATA_DIR, now)
+  // ── new.json（常に更新）────────────────────────────────────────────────────
+  await exportNewStore(rssStore, DATA_DIR, now)
 
-  // ── state 書き戻し（touched series なし・meta + rss + series-index のみ）────
-  // prev-views.json は変化なし（viewCounter 更新なし）→ 既存ファイルを保持
-  const rssData = { lastGuid: partialStore.meta.rssLastGuid, items: [...partialStore.rss.values()] }
-  const { writeFile } = await import('node:fs/promises')
-  const { mkdir } = await import('node:fs/promises')
-  await mkdir(stateDir, { recursive: true })
-  const tmpMeta = join(stateDir, 'meta.json.tmp')
-  await writeFile(tmpMeta, JSON.stringify(partialStore.meta, null, 2), 'utf-8')
-  const { rename } = await import('node:fs/promises')
-  await rename(tmpMeta, join(stateDir, 'meta.json'))
-  const tmpRss = join(stateDir, 'rss.json.tmp')
-  await writeFile(tmpRss, JSON.stringify(rssData, null, 2), 'utf-8')
-  await rename(tmpRss, join(stateDir, 'rss.json'))
+  // ── state 書き戻し（meta + rss のみ。prev-views/series-index は daily が担当）─
+  mkdirSync(stateDir, { recursive: true })
+  writeFileSync(join(stateDir, 'meta.json') + '.tmp', JSON.stringify(rssStore.meta), 'utf-8')
+  renameSync(join(stateDir, 'meta.json') + '.tmp', join(stateDir, 'meta.json'))
+  const rssData = { lastGuid: rssStore.meta.rssLastGuid, items: [...rssStore.rss.values()] }
+  writeFileSync(join(stateDir, 'rss.json') + '.tmp', JSON.stringify(rssData), 'utf-8')
+  renameSync(join(stateDir, 'rss.json') + '.tmp', join(stateDir, 'rss.json'))
 
   if (insertedEpisodes > 0) {
     writeFileSync(join(DATA_DIR, '.deploy-needed'), `${insertedEpisodes}\n`)

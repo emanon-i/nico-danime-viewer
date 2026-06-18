@@ -25,6 +25,56 @@ export async function fetchRss(etag = null, lastModified = null) {
 }
 
 /**
+ * RSS を複数ページ取得し lastGuid より新しいアイテムをまとめて返す（B: 広域窓）。
+ * lastGuid が見つかるか maxPages に達するまでページを進める。
+ * fetchWithToS が ≥500ms ToS 遅延を担う（逐次・UA 付き）。
+ * @param {string|null} lastGuid - 前回最新 guid（null = 初回 → 全件返す）
+ * @param {number} maxPages - 最大ページ数（デフォルト 3 ≒ 60件・約72h）
+ * @returns {Promise<{items: object[], newLastGuid: string|null}>}
+ */
+export async function fetchRssMultiPage(lastGuid, maxPages = 3) {
+  const allItems = []
+  const seenGuids = new Set()
+
+  for (let page = 1; page <= maxPages; page++) {
+    const url = page === 1 ? RSS_URL : `${RSS_URL}&page=${page}`
+    const resp = await fetchWithToS(url, {})
+    if (resp.status !== 200) {
+      logger.warn('rss', 'fetchRssMultiPage: non-200', { page, status: resp.status })
+      break
+    }
+    const body = await resp.text()
+    const { channelTitle, items } = parseRssXml(body)
+    if (page === 1) assertRssOk(items, channelTitle)
+    if (!items.length) break
+
+    let foundLastGuid = false
+    for (const item of items) {
+      if (item.guid === lastGuid) {
+        foundLastGuid = true
+        break
+      }
+      if (!seenGuids.has(item.guid)) {
+        seenGuids.add(item.guid)
+        allItems.push(item)
+      }
+    }
+    logger.info('rss', 'fetchRssMultiPage page done', {
+      page,
+      pageItems: items.length,
+      newSoFar: allItems.length,
+    })
+    if (foundLastGuid) break
+    if (items.length < 20) break // ページ末尾（RSS 固定20件未満 = 最後のページ）
+  }
+
+  return {
+    items: allItems,
+    newLastGuid: allItems.length > 0 ? allItems[0].guid : lastGuid,
+  }
+}
+
+/**
  * RSS XML のチャンネル情報と item リストを抽出（正規表現パース）
  * @param {string} xml
  * @returns {{ channelTitle: string, items: {title: string, link: string, guid: string, pubDate: string}[] }}

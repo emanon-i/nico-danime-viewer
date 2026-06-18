@@ -344,40 +344,8 @@ export async function writeBackStore(store, dataDir, opts = {}) {
     const chunk = targetArr.slice(i, i + WRITE_CHUNK)
     await Promise.all(
       chunk.map((seriesId) => {
-        const s = store.series.get(seriesId)
-        if (!s) return Promise.resolve()
-
-        const episodes = _getEpisodesForSeriesSorted(store, seriesId)
-        const json = {
-          seriesId: s.seriesId,
-          title: s.title,
-          thumbnailUrl: s.thumbnailUrl,
-          descriptionFirst: s.descriptionFirst,
-          tags: s.tags.map((t) => t.name), // web フロントは string[] を期待
-          cours: s.cours,
-          colKey: s.colKey,
-          franchiseKey: s.franchiseKey,
-          relatedSeries: s.relatedSeries,
-          isAvailable: s.isAvailable, // 内部フィールド（Store 再ロード用）
-          firstSeen: s.firstSeen,
-          lastSeen: s.lastSeen,
-          episodes: episodes.map((ep) => ({
-            contentId: ep.contentId,
-            episodeNo: ep.episodeNo,
-            title: ep.title,
-            viewCounter: ep.viewCounter,
-            commentCounter: ep.commentCounter,
-            likeCounter: ep.likeCounter,
-            mylistCounter: ep.mylistCounter,
-            lengthSeconds: ep.lengthSeconds,
-            startTime: ep.startTime,
-            thumbnailUrl: ep.thumbnailUrl,
-            description: ep.description,
-            tags: ep.tags,
-            tagsCurated: ep.tagsCurated, // 内部フィールド
-            lastUpdated: ep.lastUpdated,
-          })),
-        }
+        const json = _buildSeriesJson(store, seriesId)
+        if (!json) return Promise.resolve()
         return _writeJsonCompact(path.join(seriesDir, `${seriesId}.json`), json)
       })
     )
@@ -423,6 +391,67 @@ async function _writeJsonCompact(filePath, data) {
   const tmp = filePath + '.tmp'
   await fs.writeFile(tmp, JSON.stringify(data), 'utf-8')
   await fs.rename(tmp, filePath)
+}
+
+// series JSON オブジェクトを組み立てる（writeBackStore / writeSeriesFiles 共通）
+function _buildSeriesJson(store, seriesId) {
+  const s = store.series.get(seriesId)
+  if (!s) return null
+  const episodes = _getEpisodesForSeriesSorted(store, seriesId)
+  return {
+    seriesId: s.seriesId,
+    title: s.title,
+    thumbnailUrl: s.thumbnailUrl,
+    descriptionFirst: s.descriptionFirst,
+    tags: s.tags.map((t) => t.name),
+    cours: s.cours,
+    colKey: s.colKey,
+    franchiseKey: s.franchiseKey,
+    relatedSeries: s.relatedSeries,
+    isAvailable: s.isAvailable,
+    firstSeen: s.firstSeen,
+    lastSeen: s.lastSeen,
+    episodes: episodes.map((ep) => ({
+      contentId: ep.contentId,
+      episodeNo: ep.episodeNo,
+      title: ep.title,
+      viewCounter: ep.viewCounter,
+      commentCounter: ep.commentCounter,
+      likeCounter: ep.likeCounter,
+      mylistCounter: ep.mylistCounter,
+      lengthSeconds: ep.lengthSeconds,
+      startTime: ep.startTime,
+      thumbnailUrl: ep.thumbnailUrl,
+      description: ep.description,
+      tags: ep.tags,
+      tagsCurated: ep.tagsCurated,
+      lastUpdated: ep.lastUpdated,
+    })),
+  }
+}
+
+/**
+ * 指定 series の JSON を data/series/*.json に書き出す（hourly 部分書き戻し用）。
+ * writeBackStore と異なり state/*.json（prev-views/meta/rss/series-index）は書かない。
+ * @param {Store} store
+ * @param {string} dataDir
+ * @param {number[]} seriesIds
+ */
+export async function writeSeriesFiles(store, dataDir, seriesIds) {
+  const seriesDir = path.join(dataDir, 'series')
+  await fs.mkdir(seriesDir, { recursive: true })
+  const CHUNK = 50
+  const ids = [...seriesIds]
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK)
+    await Promise.all(
+      chunk.map((sid) => {
+        const json = _buildSeriesJson(store, sid)
+        if (!json) return Promise.resolve()
+        return _writeJsonCompact(path.join(seriesDir, `${sid}.json`), json)
+      })
+    )
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
