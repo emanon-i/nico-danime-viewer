@@ -1,5 +1,5 @@
 {
-  "lastGuid": "tag:nicovideo.jp,2026-06-18:/watch/1781658125",
+  "lastGuid": "tag:nicovideo.jp,2026-06-18:/watch/1781659143",
   "items": [
     {
       "watchId": "1781658129",
@@ -220,6 +220,36 @@
       "link": "https://www.nicovideo.jp/watch/1781658127",
       "resolvedContentId": null,
       "resolutionStatus": "rss_only"
+    },
+    {
+      "watchId": "1781659143",
+      "guid": "tag:nicovideo.jp,2026-06-18:/watch/1781659143",
+      "pubDate": "Thu, 18 Jun 2026 22:30:00 +0900",
+      "title": "姫騎士は蛮族の嫁　第十一話　探求は鉱人の起源",
+      "titleNorm": null,
+      "link": "https://www.nicovideo.jp/watch/1781659143",
+      "resolvedContentId": null,
+      "resolutionStatus": "unresolved"
+    },
+    {
+      "watchId": "1781659323",
+      "guid": "tag:nicovideo.jp,2026-06-18:/watch/1781659323",
+      "pubDate": "Thu, 18 Jun 2026 22:30:00 +0900",
+      "title": "Dr.STONE SCIENCE FUTURE（第4期）　第36話　WHYMAN",
+      "titleNorm": null,
+      "link": "https://www.nicovideo.jp/watch/1781659323",
+      "resolvedContentId": null,
+      "resolutionStatus": "unresolved"
+    },
+    {
+      "watchId": "1781658124",
+      "guid": "tag:nicovideo.jp,2026-06-18:/watch/1781658124",
+      "pubDate": "Thu, 18 Jun 2026 22:00:00 +0900",
+      "title": "元祖！バンドリちゃん　第37話　RiNGで待ち合わせ",
+      "titleNorm": null,
+      "link": "https://www.nicovideo.jp/watch/1781658124",
+      "resolvedContentId": null,
+      "resolutionStatus": "unresolved"
     }
   ]
 }
