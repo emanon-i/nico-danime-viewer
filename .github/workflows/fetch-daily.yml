@@ -27,6 +27,11 @@ on:
         required: false
         default: false
         type: boolean
+      force_snapshot:
+        description: 'snapshot version gate を無視して強制実行（E2E検証用）'
+        required: false
+        default: false
+        type: boolean
 
 # 最小権限
 permissions:
@@ -105,6 +110,7 @@ jobs:
         env:
           NICO_USER_AGENT: 'nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)'
           NICO_FORCE_SEED: ${{ inputs.force_seed && '1' || '0' }}
+          NICO_FORCE_SNAPSHOT: ${{ inputs.force_snapshot && '1' || '0' }}
           NODE_OPTIONS: '--max-old-space-size=4096'
 
       # ── ビルド（CSP meta 含む）・data/ を dist/ に配置 ──────────

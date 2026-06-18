@@ -916,7 +916,9 @@ async function runFullJS() {
 
   // ── Phase A: Snapshot ──────────────────────────────────────────────────────
   logger.info('fetch', '[JS] phase A: snapshot')
-  const storedVersion = store.meta.snapshotVersionLastModified ?? null
+  const forceSnapshot = process.env.NICO_FORCE_SNAPSHOT === '1'
+  const storedVersion = forceSnapshot ? null : (store.meta.snapshotVersionLastModified ?? null)
+  if (forceSnapshot) logger.info('fetch', '[JS] NICO_FORCE_SNAPSHOT=1: version gate bypassed', {})
   const snapResult = await fetchAllBranchEpisodes(storedVersion)
 
   if (!snapResult.skipped) {
