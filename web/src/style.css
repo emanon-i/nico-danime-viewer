@@ -312,23 +312,29 @@
     }
 
     .logo-text {
-      display: flex;
-      flex-direction: column;
-      gap: 0.1em;
-      line-height: 1.1;
+      display: inline-flex;
+      flex-direction: row;
+      align-items: baseline;
+      gap: 0.35em;
       min-width: 0;
+      overflow: hidden;
     }
 
     .logo-brand {
       font-size: var(--text-l2);
       font-weight: 700;
       letter-spacing: -0.01em;
+      flex-shrink: 0;
     }
 
     .logo-sub {
       font-size: var(--text-l4);
       font-weight: 400;
       color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
     }
   }
 
