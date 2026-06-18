@@ -17,7 +17,7 @@ export type IconName =
   | 'film'
   | 'clock'
   | 'history'
-  | 'sparkles'
+  | 'calendar-plus'
   | 'flame'
   | 'message'
   | 'bookmark'
@@ -47,9 +47,9 @@ const PATHS: Record<IconName, string> = {
   // CCW 矢印付き時計＝「更新履歴」「最近更新」の意味で latestAt に使う
   history:
     '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
-  // 星の輝き＝「新規シリーズ」「初登場」の意味で firstAt（created ソート）に使う
-  sparkles:
-    '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>',
+  // カレンダー＋プラス＝「新規シリーズ登録」の意味で firstAt（created ソート）に使う
+  'calendar-plus':
+    '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 16h8"/><path d="M12 12v8"/>',
   flame:
     '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
   message: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
