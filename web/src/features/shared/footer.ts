@@ -37,7 +37,7 @@ export function renderFooter(opts: FooterOptions = {}): HTMLElement {
   const note = document.createElement('p')
   note.className = 'footer-note'
   note.textContent =
-    '非公式・非営利の発見ページ。ドワンゴ／dアニメストアとは関係ありません。視聴は公式プレイヤーへ。'
+    '非公式・非営利のビューア。ドワンゴ／dアニメストアとは関係ありません。視聴は公式プレイヤーへ。'
   inner.appendChild(note)
 
   // メタ行（出典・更新・リポジトリ）
