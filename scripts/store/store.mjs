@@ -529,6 +529,12 @@ export function upsertEpisodes(store, rawEps) {
           changed = true
         }
       }
+      // snapshot description で既存の shortDescription を補完（D2 挿入 ep の説明を完全版に上書き）
+      const newDesc = raw.description ?? existing.description
+      if (existing.description !== newDesc) {
+        existing.description = newDesc
+        changed = true
+      }
 
       if (changed) {
         existing.lastUpdated = now

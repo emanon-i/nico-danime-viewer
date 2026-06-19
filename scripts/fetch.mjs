@@ -977,23 +977,23 @@ async function runFullJS() {
   }
   logger.info('fetch', '[JS] list.json done', { count: seriesFromList.length })
 
-  // ── Phase C: nvapi seed（§S1: 対象限定 + 閾値/週次/force 時のみ全件）────────
-  // 孤児が有意閾値以下なら title 前方一致で対応 series に限定し nvapi リクエストを最小化する。
-  // 閾値超 / 週次(7日) / force 時のみ全件 seed（ドリフト回復の安全網）。
+  // ── Phase C: nvapi seed（§S1: 対象限定。全件は週次/force のみ）──────────────
+  // 孤児発生時は title 前方一致で対応 series に限定（nvapi が ep を未収録でも無駄打ちしない）。
+  // snapshot が先にインデックス化した新着 ep は nvapi 側が追いつくまで seriesId=null のまま
+  // 残るが、週次 / force の全件 seed で自然解消する。閾値起動の全件 seed は廃止。
   const orphans = countOrphanEpisodes(store)
   const daysSinceRefresh = store.meta.lastSeedAt
     ? (Date.now() - new Date(store.meta.lastSeedAt).getTime()) / 86400000
     : Infinity
   const forceSeed = process.env.NICO_FORCE_SEED === '1'
   const weeklyOrForce = forceSeed || daysSinceRefresh >= 7
-  const ORPHAN_FULL_THRESHOLD = 500
 
   let seedTargets
   let seedMode
-  if (weeklyOrForce || orphans > ORPHAN_FULL_THRESHOLD) {
-    // 全件 seed（週次 / force / 孤児過多）
+  if (weeklyOrForce) {
+    // 全件 seed（週次 / force のみ）
     seedTargets = [...store.series.keys()].filter((sid) => store.series.get(sid).isAvailable)
-    seedMode = weeklyOrForce ? (forceSeed ? 'force' : 'weekly') : 'orphan-overflow'
+    seedMode = forceSeed ? 'force' : 'weekly'
   } else if (orphans > 0) {
     // 孤児をタイトル前方一致で対応シリーズに限定 + 新規のみ（ep=0）
     const orphanMatched = matchOrphanEpsToSeries(store)
