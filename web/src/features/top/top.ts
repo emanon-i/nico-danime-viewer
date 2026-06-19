@@ -145,7 +145,7 @@ function fillTagRow(row: HTMLElement, label: string, tags: string[]): void {
   tags.forEach((t) => row.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
 }
 
-/** タグ辞書として発見性のあるタグ（巨大な汎用タグ「アニメ」「第1話/第一話」を除外＝§27）。 */
+/** タグ辞書として使うタグ（巨大な汎用タグ「アニメ」「第1話/第一話」を除外＝§27）。 */
 function discoveryTags(allTags: Tag[]): Tag[] {
   const EXCLUDE = new Set(['アニメ', '第一話', '第1話'])
   return allTags.filter((t) => !EXCLUDE.has(t.name))
