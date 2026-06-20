@@ -185,17 +185,17 @@ snapshot に登場したが seriesId が未解決の ep を救出する。
 
 ### 4-1. 仮シリーズ（SANDA 型）の仕組み
 
-| 項目                   | 内容                                                                                                                                                       |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **seriesId**           | `provisionalSeriesId(seriesTitle)` が返す**負整数**（決定的・再実行で同値）                                                                                |
-| **ハッシュ式**         | djb2 変形: `h = Math.imul(h,31) + ch.codePointAt(0) \| 0`（全文字）。`h <= 0 ? h-1 : -h` で必ず負数                                                        |
-| **contentId 復元**     | `thumbnailUrl` の `/thumbnails/<N>/` → `so<N>` （`contentIdFromThumbnail`）                                                                                |
-| **seriesTitle 抽出**   | `extractSeriesTitle`（「第N話」「#N」「Episode N」前の語を抽出）                                                                                           |
-| **フロント表示**       | `seriesId < 0` → 公式シリーズページボタンを disabled + ツールチップ「公式シリーズ情報を取得中です」                                                        |
-| **isAvailable**        | 仮登録時は `true`（E7 grace 対象外・仮のまま）                                                                                                             |
-| **解消タイミング**     | 翌日の Phase B3（nvapi authoritative）で本物 seriesId が登録され B6 で統合                                                                                 |
-| **B6 reconciliation**  | 仮 seriesId × allTitles 完全一致 → ep の seriesId を実 ID に付け替え → `store.series.delete(負数ID)` → `data/series/<neg>.json` 削除（再インジェスト防止） |
-| **ハッシュ衝突リスク** | 32-bit ハッシュで異なるタイトルが同じ負数になる確率 ≈ 2^-32。実用上許容                                                                                    |
+| 項目                   | 内容                                                                                                                                                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **seriesId**           | `provisionalSeriesId(seriesTitle)` が返す**負整数**（決定的・再実行で同値）                                                                                                                                                            |
+| **ハッシュ式**         | djb2 変形: `h = Math.imul(h,31) + ch.codePointAt(0) \| 0`（全文字）。`h <= 0 ? h-1 : -h` で必ず負数                                                                                                                                    |
+| **contentId 復元**     | `thumbnailUrl` の `/thumbnails/<N>/` → `so<N>` （`contentIdFromThumbnail`）                                                                                                                                                            |
+| **seriesTitle 抽出**   | `extractSeriesTitle`（「第N話」「#N」「Episode N」前の語を抽出）                                                                                                                                                                       |
+| **フロント表示**       | `seriesId < 0` → 公式シリーズページボタンを disabled + ツールチップ「公式シリーズ情報を取得中です」                                                                                                                                    |
+| **isAvailable**        | 仮登録時は `true`（E7 grace 対象外・仮のまま）                                                                                                                                                                                         |
+| **解消タイミング**     | 翌日の Phase B3（nvapi authoritative）で本物 seriesId が登録され B6 で統合                                                                                                                                                             |
+| **B6 reconciliation**  | 仮 seriesId × allTitles 完全一致 → nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）→ 検証 OK: ep の seriesId を実 ID に付け替え → `store.series.delete(負数ID)` → `data/series/<neg>.json` 削除（再インジェスト防止） |
+| **ハッシュ衝突リスク** | 32-bit ハッシュで異なるタイトルが同じ負数になる確率 ≈ 2^-32。実用上許容                                                                                                                                                                |
 
 ---
 
@@ -284,7 +284,8 @@ Phase B  : 全 static JSON union（8 本並列取得）
               B4: list.json 掲載シリーズ → col_key パッチ + isAvailable=true 強制
               B5: list-index.json 保存（タイトル→seriesId Map）
               B6: 仮シリーズ（seriesId < 0）× allTitles 完全一致 reconciliation
-                  → ep の seriesId を実 ID に付け替え
+                  → nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）
+                  → 検証 OK: ep の seriesId を実 ID に付け替え
                   → store.series.delete(仮 id)
                   → data/series/<neg>.json を existsSync + unlinkSync で削除
 
@@ -436,15 +437,15 @@ Phase G  : projectAll（works / ranking / tags / kana / new 等）← 非 atomic
 
 ### 8-5. pending 判定と解決フロー
 
-| 項目                             | 内容                                                                                                                          |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **pending とは**                 | RSS で取得したが seriesId への対応付けが未解決。`resolutionStatus === 'pending'`                                              |
-| **いつ発生するか**               | RSS の watchId に対応する ep が store に未登録（新シリーズ or snapshot 未反映）                                               |
-| **毎時の解決方法① タイトル照合** | list-index.json（前回日次 B5 出力）の タイトル→seriesId Map で前方一致照合 → 成功で `resolved` 昇格                           |
-| **毎時の解決方法② 仮シリーズ**   | 照合失敗 → thumbnailUrl → contentId 復元・タイトル抽出・provisionalSeriesId → 負数 seriesId で仮登録・`resolved`（仮 ID）昇格 |
-| **翌日の B6 reconciliation**     | 仮シリーズタイトル × allTitles 完全一致 → 本物 seriesId に統合・仮 series/{neg}.json 削除                                     |
-| **B6 非一致時**                  | 仮シリーズのまま保持。B3 で本物が取り込まれた翌日に自動解消                                                                   |
-| **タイトル照合（廃止扱い）**     | watch ページ依存の旧タイトル照合は廃止。list-index を「主経路」、タグ/タイトル照合は「最終手段」                              |
+| 項目                             | 内容                                                                                                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **pending とは**                 | RSS で取得したが seriesId への対応付けが未解決。`resolutionStatus === 'pending'`                                                                                      |
+| **いつ発生するか**               | RSS の watchId に対応する ep が store に未登録（新シリーズ or snapshot 未反映）                                                                                       |
+| **毎時の解決方法① タイトル照合** | list-index.json（前回日次 B5 出力）の タイトル→seriesId Map で前方一致照合 → 成功で `resolved` 昇格                                                                   |
+| **毎時の解決方法② 仮シリーズ**   | 照合失敗 → thumbnailUrl → contentId 復元・タイトル抽出・provisionalSeriesId → 負数 seriesId で仮登録・`resolved`（仮 ID）昇格                                         |
+| **翌日の B6 reconciliation**     | 仮シリーズタイトル × allTitles 完全一致 → nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）→ 検証 OK: 本物 seriesId に統合・仮 series/{neg}.json 削除 |
+| **B6 非一致時**                  | 仮シリーズのまま保持。B3 で本物が取り込まれた翌日に自動解消                                                                                                           |
+| **タイトル照合（廃止扱い）**     | watch ページ依存の旧タイトル照合は廃止。list-index を「主経路」、タグ/タイトル照合は「最終手段」                                                                      |
 
 ---
 
@@ -565,7 +566,7 @@ Phase G  : projectAll（works / ranking / tags / kana / new 等）← 非 atomic
 
 **状況**: `provisionalSeriesId` は 32-bit ハッシュで負数を生成するため、異なるタイトルが同じ負数になる確率が ≈ 2^-32 存在する。
 
-**影響**: 衝突時は B6 reconciliation で誤った ep が付け替わる可能性があるが、確率が極めて低いため実用上許容。
+**影響**: 衝突時は B6 reconciliation で誤った ep が付け替わる可能性があるが、nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）で大幅に緩和。残余リスクは確率 ≈ 2^-32 のため実用上許容。
 
 **本物との区別**: 本物 seriesId は必ず正整数。仮は必ず負整数。重複しない。
 

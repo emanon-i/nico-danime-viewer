@@ -197,7 +197,8 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
   }
 
   for (const [seriesId, cids] of seriesIdToMissed) {
-    if (!store.series.has(seriesId)) {
+    const wasNew = !store.series.has(seriesId)
+    if (wasNew) {
       const title = [...(byTitle?.entries() ?? [])].find(([, sid]) => sid === seriesId)?.[0] ?? ''
       storeUpsertSeries(store, [{ seriesId, title, isAvailable: true }])
     }
@@ -207,12 +208,13 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
       nvapiData = await fetchSeriesData(seriesId)
     } catch (err) {
       logger.warn('fetch', '[JS] A2 nvapi failed', { seriesId, err: err.message })
-      for (const cid of cids) missedContentIds.delete(cid)
+      if (wasNew) store.series.delete(seriesId)
       continue
     }
 
     if (!isBranchSeries(nvapiData?.detail)) {
       logger.warn('fetch', '[JS] A2 rescue: non-branch series, skip', { seriesId })
+      if (wasNew) store.series.delete(seriesId)
       continue
     }
 
@@ -382,7 +384,8 @@ async function runFullJS() {
   logger.info('fetch', '[JS] B3 new seriesIds -> nvapi', { count: newSeriesIds.length })
 
   for (const seriesId of newSeriesIds) {
-    if (!store.series.has(seriesId)) {
+    const wasNew = !store.series.has(seriesId)
+    if (wasNew) {
       storeUpsertSeries(store, [{ seriesId, title: '', isAvailable: true }])
     }
     let data
@@ -390,6 +393,7 @@ async function runFullJS() {
       data = await fetchSeriesData(seriesId)
     } catch (err) {
       logger.warn('fetch', '[JS] B3 nvapi failed', { seriesId, err: err.message })
+      if (wasNew) store.series.delete(seriesId)
       continue
     }
     if (!isBranchSeries(data?.detail)) {

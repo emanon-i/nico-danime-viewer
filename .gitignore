@@ -23,6 +23,11 @@ Thumbs.db
 !.vscode/settings.json
 .idea/
 
+# --- SQLite 中間ファイル（安全網: SQLite 機能は廃止済みだが誤コミット防止）---
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
 # --- 確認用スクショ（一時生成物）---
 /preview-shots/
 
