@@ -188,9 +188,9 @@ export function card(
     pendingBtn.type = 'button'
     pendingBtn.className = 'icon-btn card-external card-external--pending'
     pendingBtn.setAttribute('aria-disabled', 'true')
-    pendingBtn.setAttribute('aria-label', '公式シリーズページ（未取得）')
-    pendingBtn.title = '未取得'
-    pendingBtn.dataset.tooltip = '未取得'
+    pendingBtn.setAttribute('aria-label', '公式シリーズページ（取得中）')
+    pendingBtn.title = '公式シリーズ情報を取得中です'
+    pendingBtn.dataset.tooltip = '公式シリーズ情報を取得中です'
     pendingBtn.addEventListener('click', (e) => e.preventDefault())
     pendingBtn.appendChild(icon('external-link', 16))
     el.appendChild(pendingBtn)

@@ -53,7 +53,7 @@ flowchart TB
     RSS -->|"Phase D"| H
     NV -->|"D3（正整数 seriesId のみ）"| H
     H --> ST & SJ
-    H -->|"insertedEpisodes > 0"| GP
+    H -->|"insertedEpisodes>0\nOR hasProvisional"| GP
 
     SN -->|"Phase A"| FJ
     LJ -->|"Phase B: union→nvapi→col_key\n→reconciliation"| FJ
@@ -74,7 +74,7 @@ flowchart TB
 3. 照合成功 → `resolved` 昇格（resolvedSeriesIds に追加）
 4. 照合失敗 → 仮シリーズ登録（thumbnailUrl → contentId 復元・タイトル抽出・負数 seriesId）
 5. **D3 = 正整数 seriesId のみ**（`resolvedSeriesIds.filter(sid => sid > 0)`）
-6. **deploy = `insertedEpisodes > 0` のみ**
+6. **deploy = `insertedEpisodes > 0 || hasProvisional`**（新着 ep 追加 OR 仮シリーズあり → deploy）
 
 ```mermaid
 flowchart TD
@@ -88,7 +88,7 @@ flowchart TD
     F -->|"あり"| G["Phase D3: nvapi v2/series × 正整数 seriesId\n全話 × viewCounter/commentCounter\nlikeCounter/mylistCounter\nregisteredAt/duration/thumbnailUrl"]
     G --> H2["storeUpsertEps（実変化チェック）\n→ _dirtySeries 更新\ninsertedEpisodes カウント"]
     H2 --> I["_trimRss(200)\nseries/{id}.json 書き出し\nseries-index 更新（負数含む）"]
-    I --> J{"insertedEpisodes > 0?"}
+    I --> J{"insertedEpisodes > 0\nOR hasProvisional?"}
     J -->|"なし"| Z
     J -->|"あり"| K["new.json 更新\nstate 書き戻し\n.deploy-needed → Pages deploy"]
     ZW --> Z
@@ -249,7 +249,7 @@ Phase D3 : nvapi 更新（正整数 seriesId のみ）
                               insertedEpisodes カウント（series-index 未登録の ep）
 
 書き出し: _dirtySeries 非空 → series/{id}.json + series-index 更新（負数 seriesId ファイルも書き出す）
-deploy  : insertedEpisodes > 0 のみ → .deploy-needed → Pages deploy
+deploy  : insertedEpisodes > 0 || hasProvisional → .deploy-needed → Pages deploy
 state   : meta.json + rss.json 書き戻し（常時）
 export  : new.json 更新（常時）
 ```
@@ -259,7 +259,7 @@ export  : new.json 更新（常時）
 - タイトル照合は `list-index.json`（前回日次の B5 出力）に依存。初回実行や日次未走行時は空 Map → 照合スキップ（仮シリーズ登録のみ）
 - 仮シリーズは D3 をスキップするが、翌日の B6 reconciliation で本物に統合される
 - watch ページ不使用のため bot 検知リスクなし
-- **deploy は `insertedEpisodes > 0` のみ**。再生数更新はファイルに反映されるが Pages deploy は伴わない
+- **deploy は `insertedEpisodes > 0 || hasProvisional`**。新着 ep 追加 OR 仮シリーズが存在する場合にのみ Pages deploy。再生数更新はファイルに反映されるが Pages deploy は伴わない
 
 ---
 
@@ -414,14 +414,14 @@ Phase G  : projectAll（works / ranking / tags / kana / new 等）← 非 atomic
 
 ### 8-3. 変更あり判定（`_dirtySeries` / `insertedEpisodes`）
 
-| 項目                        | 毎時                                                      | 日次                                                            |
-| --------------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| **dirty 追跡の型**          | `_dirtySeries: Set<number>`                               | 同左                                                            |
-| **dirty トリガー**          | viewCounter / tags / 新 ep 挿入・仮シリーズ登録           | 同左（＋ upsertSeries は常に dirty）                            |
-| **series/\*.json 書き出し** | `_dirtySeries 非空` → 対象のみ（`writeSeriesFiles`）      | `_dirtySeries 非空` → 対象のみ（`writeBackStore`）              |
-| **state/\*.json 書き出し**  | meta.json + rss.json を個別書き出し                       | prev-views / meta / rss / series-index 全量（`writeBackStore`） |
-| **Pages deploy の条件**     | **`insertedEpisodes > 0` のみ** → `.deploy-needed` 生成   | **毎回**（detectShrink 除く）                                   |
-| **count 変化のみの場合**    | ファイル更新のみ（deploy なし）→ 翌日の日次 deploy で反映 | 毎日デプロイで常に最新                                          |
+| 項目                        | 毎時                                                                   | 日次                                                            |
+| --------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **dirty 追跡の型**          | `_dirtySeries: Set<number>`                                            | 同左                                                            |
+| **dirty トリガー**          | viewCounter / tags / 新 ep 挿入・仮シリーズ登録                        | 同左（＋ upsertSeries は常に dirty）                            |
+| **series/\*.json 書き出し** | `_dirtySeries 非空` → 対象のみ（`writeSeriesFiles`）                   | `_dirtySeries 非空` → 対象のみ（`writeBackStore`）              |
+| **state/\*.json 書き出し**  | meta.json + rss.json を個別書き出し                                    | prev-views / meta / rss / series-index 全量（`writeBackStore`） |
+| **Pages deploy の条件**     | **`insertedEpisodes > 0 \|\| hasProvisional`** → `.deploy-needed` 生成 | **毎回**（detectShrink 除く）                                   |
+| **count 変化のみの場合**    | ファイル更新のみ（deploy なし）→ 翌日の日次 deploy で反映              | 毎日デプロイで常に最新                                          |
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Tri-SSD L2 基盤ドキュメント。実値・機構で記述し、ふわっとした語（"洗練された" 等）は使わない。
 > **本書が「見た目・トークン・コンポーネント・テーマ機構」の正本**。レイアウト/情報設計（画面ごとの順序・動線）の正本は
-> [`screens.md`](screens.md)、データ生成（取得・SQLite・JSON 化）の正本は [`foundation.md`](foundation.md) / [`dataflow.md`](dataflow.md)。
+> [`screens.md`](screens.md)、データ生成（取得・JS ETL・JSON 化）の正本は [`foundation.md`](foundation.md) / [`dataflow.md`](dataflow.md)。
 > 衝突しうる箇所（カード比率＝§9.5、クールの出し方＝§10.3）は本書に決定と根拠を明記する。
 > **本書は現在の状態だけを記述する**（変遷・before/after・経緯ログは書かない）。
 >
@@ -512,7 +512,7 @@ base-uri 'self'; object-src 'none'
 
 - 左＝**新着シリーズ（シリーズ行）**／右＝**最新の動画（各話行）**。§9.3 の 2 型で**別見え**に。
 - **新着シリーズ行**：本体＝うちの詳細（`?series=`）／右上 ↗＝公式シリーズ。並び順＝`latestAt` 降順（最新話 startTime の MAX）。メタ＝[film]N話。
-- **最新の動画行**：本体＝公式 watch（外部直行・↗ なし）。`resolved`（`so…` 解決済み）を優先し、未解決（rss_only）はフォールバック。メタ＝[clock]投稿時間（強調）＋[play]再生数＋（取得時）[message]コメント・[bookmark]マイリス。
+- **最新の動画行**：本体＝公式 watch（外部直行・↗ なし）。`resolutionStatus === 'resolved'`（contentId 確定済み）を優先表示。メタ＝[clock]投稿時間（強調）＋[play]再生数＋（取得時）[message]コメント・[bookmark]マイリス。
 - **列独立化**：左右の列は独立した上限（最大 6・両列にデータがあれば見栄えを揃えて切り詰め）。**片方が 0 でももう片方を空にしない**。
 - **2 列整列**：見出し同高・各行同高で行ベースラインを揃える（subgrid・非対応は固定高フォールバック＝§13）。モバイルは 1 列に縦積み。
 

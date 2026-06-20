@@ -265,16 +265,22 @@ describe('rss', () => {
         watchId: '12345678',
         guid: 'tag:nicovideo.jp,2024-01-01:/watch/12345678',
         title: 'テスト第1話',
-        resolutionStatus: 'unresolved',
+        resolutionStatus: 'pending',
       },
     ])
     expect(store.rss.size).toBe(1)
-    expect(store.rss.get('12345678')?.resolutionStatus).toBe('unresolved')
+    expect(store.rss.get('12345678')?.resolutionStatus).toBe('pending')
+  })
+
+  it('upsertRssItems で不正な resolutionStatus は pending に矯正される', () => {
+    const store = createStore()
+    upsertRssItems(store, [{ watchId: '99999999', resolutionStatus: 'unresolved' }])
+    expect(store.rss.get('99999999')?.resolutionStatus).toBe('pending')
   })
 
   it('updateRssResolution で解決状態を更新する', () => {
     const store = createStore()
-    upsertRssItems(store, [{ watchId: '12345678', resolutionStatus: 'unresolved' }])
+    upsertRssItems(store, [{ watchId: '12345678', resolutionStatus: 'pending' }])
     updateRssResolution(store, '12345678', 'so99000001', 'resolved')
     const item = store.rss.get('12345678')
     expect(item.resolvedContentId).toBe('so99000001')

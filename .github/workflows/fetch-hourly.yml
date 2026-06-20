@@ -120,7 +120,7 @@ jobs:
 
       # ── 状態保存（state ブランチへコミット） ─────────────────────
       # GITHUB_TOKEN で認証。state ブランチを clone（無ければ orphan 初期化）し、
-      # data/（build.sqlite 除く）を反映して push。冪等・初回 bootstrap も成功する。
+      # data/ を反映して push。冪等・初回 bootstrap も成功する。
       - name: Save state to state branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -132,7 +132,7 @@ jobs:
           else
             mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --delete --exclude='.git' --exclude='build.sqlite' --exclude='*.sqlite' --exclude='.deploy-needed' src/data/. state_pub/
+          rsync -av --delete --exclude='.git' --exclude='*.sqlite' --exclude='.deploy-needed' src/data/. state_pub/
           cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'

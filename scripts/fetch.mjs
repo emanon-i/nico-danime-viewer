@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync, readFileSync, renameSync, existsSync, unlinkS
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { fetchAllBranchEpisodes } from './nico/snapshot.mjs'
+import { fetchAllBranchEpisodes, fetchSnapshotVersion } from './nico/snapshot.mjs'
 import { assertSnapshotOk } from './nico/assert.mjs'
 import {
   fetchAllStaticJsons,
@@ -22,7 +22,7 @@ import {
   extractSeriesTitle,
   provisionalSeriesId,
 } from './nico/list.mjs'
-import { fetchSeriesData, mapNvapiEpisodes } from './nico/nvapi.mjs'
+import { fetchSeriesData, mapNvapiEpisodes, isBranchSeries } from './nico/nvapi.mjs'
 import { fetchRssMultiPage, extractWatchId } from './nico/rss.mjs'
 
 import { deriveSeriesTagsFromStore } from './etl/tags.mjs'
@@ -164,7 +164,7 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
     const sid = contentToSeries.get(cid)
     if (sid != null) {
       const ep = store.episodes.get(cid)
-      if (ep && ep.seriesId == null) {
+      if (ep && (ep.seriesId == null || ep.seriesId < 0)) {
         ep.seriesId = sid
         store._dirtySeries.add(sid)
       }
@@ -311,17 +311,6 @@ async function runFullJS() {
     return
   }
 
-  {
-    const prevViews = {}
-    for (const ep of store.episodes.values()) {
-      if (ep.prevViewCounter != null) prevViews[ep.contentId] = ep.prevViewCounter
-    }
-    mkdirSync(stateDir, { recursive: true })
-    writeFileSync(join(stateDir, 'prev-views.json') + '.tmp', JSON.stringify(prevViews), 'utf-8')
-    renameSync(join(stateDir, 'prev-views.json') + '.tmp', join(stateDir, 'prev-views.json'))
-    logger.info('fetch', '[JS] prev-views.json saved', { count: Object.keys(prevViews).length })
-  }
-
   logger.info('fetch', '[JS] phase A: snapshot')
   const { episodes: snapEps, newVersion } = snapResult
   assertSnapshotOk({ meta: { status: 200, totalCount: snapEps.length }, data: snapEps }, null)
@@ -339,7 +328,8 @@ async function runFullJS() {
   const snapshotContentIds = new Set(mappedEps.map((ep) => ep.contentId))
   const missedContentIds = new Set()
   for (const ep of mappedEps) {
-    if (store.episodes.get(ep.contentId)?.seriesId == null) {
+    const sid = store.episodes.get(ep.contentId)?.seriesId
+    if (sid == null || sid < 0) {
       missedContentIds.add(ep.contentId)
     }
   }
@@ -384,6 +374,11 @@ async function runFullJS() {
       logger.warn('fetch', '[JS] B3 nvapi failed', { seriesId, err: err.message })
       continue
     }
+    if (!isBranchSeries(data?.detail)) {
+      logger.warn('fetch', '[JS] B3 non-branch series skipped', { seriesId })
+      store.series.delete(seriesId)
+      continue
+    }
     const seriesTitle = data?.detail?.title ?? ''
     if (seriesTitle) {
       const s = store.series.get(seriesId)
@@ -416,36 +411,38 @@ async function runFullJS() {
   }
   logger.info('fetch', '[JS] B4 col_key + isAvailable done', { inListJson: inListJson.size })
 
-  {
-    const listIndexArr = [...listBySeriesId.entries()].map(([seriesId, title]) => ({
-      seriesId,
-      title,
-    }))
-    if (listIndexArr.length > 0) {
-      const listIndexPath = join(stateDir, 'list-index.json')
-      writeFileSync(listIndexPath + '.tmp', JSON.stringify(listIndexArr), 'utf-8')
-      renameSync(listIndexPath + '.tmp', listIndexPath)
-      logger.info('fetch', '[JS] B5 list-index.json saved', { count: listIndexArr.length })
-    } else {
-      logger.warn(
-        'fetch',
-        '[JS] B5 list-index.json: empty (list.json fetch failed?) -> skip overwrite',
-        {}
-      )
-    }
-  }
+  const listIndexArr = [...listBySeriesId.entries()].map(([seriesId, title]) => ({
+    seriesId,
+    title,
+  }))
+  // list-index.json の書込は detectShrink 通過後に実施（異常時の部分前進を防ぐ）
 
   {
+    // allTitles: 正規化タイトル → 正整数 seriesId（exact + extractSeriesTitle 正規化の両方を登録）
     const allTitles = new Map()
     for (const [sid, s] of store.series) {
-      if (sid > 0 && s.title) allTitles.set(s.title, sid)
+      if (sid > 0 && s.title) {
+        allTitles.set(s.title, sid)
+        const norm = extractSeriesTitle(s.title)
+        if (norm !== s.title) allTitles.set(norm, sid)
+      }
     }
     let reconciledCount = 0
     for (const [sid] of [...store.series]) {
       if (sid >= 0) continue
       const s = store.series.get(sid)
       if (!s) continue
-      const realId = allTitles.get(s.title)
+      // 1. 仮シリーズの title そのまま照合
+      let realId = allTitles.get(s.title)
+      // 2. ep のタイトルから extractSeriesTitle で照合（仮シリーズ title と nvapi title の乖離を吸収）
+      if (!realId) {
+        for (const ep of store.episodes.values()) {
+          if (ep.seriesId !== sid) continue
+          const extracted = extractSeriesTitle(ep.title)
+          realId = allTitles.get(extracted)
+          if (realId) break
+        }
+      }
       if (!realId) continue
 
       for (const ep of store.episodes.values()) {
@@ -552,6 +549,21 @@ async function runFullJS() {
     return
   }
 
+  // detectShrink 通過後に list-index.json を書込（ガード前に書くと異常時に部分前進）
+  mkdirSync(stateDir, { recursive: true })
+  if (listIndexArr.length > 0) {
+    const listIndexPath = join(stateDir, 'list-index.json')
+    writeFileSync(listIndexPath + '.tmp', JSON.stringify(listIndexArr), 'utf-8')
+    renameSync(listIndexPath + '.tmp', listIndexPath)
+    logger.info('fetch', '[JS] B5 list-index.json saved', { count: listIndexArr.length })
+  } else {
+    logger.warn(
+      'fetch',
+      '[JS] B5 list-index.json: empty (list.json fetch failed?) -> skip overwrite',
+      {}
+    )
+  }
+
   logger.info('fetch', '[JS] phase F+G: project all')
   await writeBackStore(store, DATA_DIR, { now })
   await projectAll(store, DATA_DIR, now)
@@ -630,8 +642,10 @@ async function runHourlyJS() {
     const seriesId = resolveByTitle(title, listIndexByTitle)
 
     if (seriesId) {
-      const resolvedCid = contentIdFromThumbnail(rssEntry.thumbnailUrl ?? null) ?? `so${watchId}`
-      storeUpdateRssResolution(store, watchId, resolvedCid, 'resolved')
+      const resolvedCid = contentIdFromThumbnail(rssEntry.thumbnailUrl ?? null)
+      if (resolvedCid) {
+        storeUpdateRssResolution(store, watchId, resolvedCid, 'resolved')
+      }
       resolvedSeriesIds.add(seriesId)
       if (!resolvedSeriesTitles.has(seriesId)) resolvedSeriesTitles.set(seriesId, '')
     } else {
@@ -665,6 +679,11 @@ async function runHourlyJS() {
         data = await fetchSeriesData(seriesId)
       } catch (err) {
         logger.warn('fetch', '[JS] hourly D3: nvapi failed', { seriesId, err: err.message })
+        continue
+      }
+      if (!isBranchSeries(data?.detail)) {
+        logger.warn('fetch', '[JS] hourly D3: non-branch series skipped', { seriesId })
+        store.series.delete(seriesId)
         continue
       }
       const seriesTitle = data?.detail?.title ?? ''
@@ -725,7 +744,16 @@ async function runHourlyJS() {
   logger.info('fetch', '[JS] hourly done', { now, insertedEpisodes })
 }
 
-const runner = CLI_MODE === 'hourly' ? runHourlyJS() : runFullJS()
+async function runCheckVersionJS() {
+  const version = await fetchSnapshotVersion()
+  logger.info('fetch', '[JS] check-version: snapshot version', { version })
+}
+
+const runner = CLI_ARGS.includes('--check-version')
+  ? runCheckVersionJS()
+  : CLI_MODE === 'hourly'
+    ? runHourlyJS()
+    : runFullJS()
 runner.catch((err) => {
   logger.error('fetch', err.message, err.assertFields ?? {})
   process.exit(1)

@@ -61,6 +61,7 @@ import { stripHtml } from '../etl/series.mjs'
  * @property {string|null} titleNorm
  * @property {string|null} link
  * @property {string|null} description    RSS <description> HTML CDATA as-is（暫定あらすじ）
+ * @property {string|null} thumbnailUrl   RSS <media:thumbnail> URL（contentId 復元に使う）
  * @property {string|null} resolvedContentId
  * @property {string} resolutionStatus   'pending'|'resolved'
  */
@@ -298,6 +299,7 @@ async function _loadState(store, stateDir) {
         titleNorm: item.titleNorm ?? null,
         link: item.link ?? null,
         description: item.description ?? null,
+        thumbnailUrl: item.thumbnailUrl ?? null,
         resolvedContentId: item.resolvedContentId ?? null,
         resolutionStatus: item.resolutionStatus === 'resolved' ? 'resolved' : 'pending',
       })
@@ -360,11 +362,11 @@ export async function writeBackStore(store, dataDir, opts = {}) {
   }
 
   // ── state/prev-views.json ────────────────────────────────────────
-  // 全 episodes の prevViewCounter を書き出す（hourly も含めて常に全量更新）
+  // 現在の viewCounter を保存 → 次回 loadStore で prevViewCounter にセット → delta 計算に使う
   const prevViews = {}
   for (const ep of store.episodes.values()) {
-    if (ep.prevViewCounter != null) {
-      prevViews[ep.contentId] = ep.prevViewCounter
+    if (ep.viewCounter != null) {
+      prevViews[ep.contentId] = ep.viewCounter
     }
   }
   await _writeJsonCompact(path.join(stateDir, 'prev-views.json'), prevViews)
@@ -757,6 +759,7 @@ export function upsertRssItems(store, items) {
       existing.titleNorm = item.titleNorm ?? existing.titleNorm
       existing.link = item.link ?? existing.link
       if (item.description != null) existing.description = item.description
+      existing.thumbnailUrl = existing.thumbnailUrl ?? item.thumbnailUrl ?? null
       // resolvedContentId / status は updateRssResolution で管理
     } else {
       store.rss.set(wid, {
@@ -767,6 +770,7 @@ export function upsertRssItems(store, items) {
         titleNorm: item.titleNorm ?? null,
         link: item.link ?? null,
         description: item.description ?? null,
+        thumbnailUrl: item.thumbnailUrl ?? null,
         resolvedContentId: item.resolvedContentId ?? null,
         resolutionStatus: item.resolutionStatus === 'resolved' ? 'resolved' : 'pending',
       })

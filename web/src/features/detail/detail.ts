@@ -244,8 +244,8 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     pendingBtn.type = 'button'
     pendingBtn.className = 'btn-primary official-series-link official-series-link--pending'
     pendingBtn.setAttribute('aria-disabled', 'true')
-    pendingBtn.title = '未取得'
-    pendingBtn.dataset.tooltip = '未取得'
+    pendingBtn.title = '公式シリーズ情報を取得中です'
+    pendingBtn.dataset.tooltip = '公式シリーズ情報を取得中です'
     pendingBtn.addEventListener('click', (e) => e.preventDefault())
     pendingBtn.appendChild(icon('play', 16))
     pendingBtn.appendChild(document.createTextNode('公式シリーズページ（取得中）'))

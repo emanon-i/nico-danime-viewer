@@ -149,7 +149,7 @@ jobs:
 
       # ── 状態保存（デプロイ成功後のみ） ───────────────────────────
       # GITHUB_TOKEN で認証。state ブランチを clone（無ければ orphan 初期化）し、
-      # data/（build.sqlite は再生成可能なため除外）を反映して push。
+      # data/ を反映して push。
       - name: Save state to state branch
         if: success()
         env:
@@ -162,7 +162,7 @@ jobs:
           else
             mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --delete --exclude='.git' --exclude='build.sqlite' --exclude='*.sqlite' src/data/. state_pub/
+          rsync -av --delete --exclude='.git' --exclude='*.sqlite' src/data/. state_pub/
           cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
