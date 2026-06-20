@@ -708,7 +708,8 @@ async function runHourlyJS() {
       }
       resolvedSeriesIds.add(seriesId)
       if (!resolvedSeriesTitles.has(seriesId)) resolvedSeriesTitles.set(seriesId, '')
-    } else {
+    } else if (listIndexByTitle.size > 0) {
+      // list-index が空の場合は仮シリーズを作らず pending のまま据え置く（日次で正規解決）
       const sid = registerProvisionalSeries(store, watchId, rssEntry)
       if (sid != null) resolvedSeriesIds.add(sid)
     }
