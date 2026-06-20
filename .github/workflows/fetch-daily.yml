@@ -1,6 +1,9 @@
 # F-0046: 日次フルフェッチ＆Pages デプロイ ワークフロー
-# 実行タイミング: JST 06:00（UTC 21:00）/ 手動起動
-# ※ snapshot 索引は AM5:00 頃に更新されるため、5:00 ジャストより 6:00 の方が鮮度が良い
+# 実行タイミング: JST 07:30（UTC 22:30）/ 手動起動
+# ※ snapshot 索引の last_modified は実測で ~07:06 JST（~22:06 UTC）に更新される。
+#   旧設定の 06:00 JST（21:00 UTC）では索引更新前に走るため、cron ジッタ次第で
+#   version ゲートが「unchanged」と判定し full fetch を丸ごと skip していた（新規シリーズ
+#   作成・description 補完・再生数更新が止まる）。索引更新後に確実に走る時刻へ後ろ倒し。
 # 起動条件: M7 完走確認後に有効化
 #
 # 状態の真実源: state ブランチ（series/*.json / state/*.json を永続化）
@@ -11,8 +14,8 @@ name: Daily Full Fetch & Deploy
 
 on:
   schedule:
-    # UTC 21:00 = JST 06:00（snapshot 索引更新完了後）。発見系＝日次フル（version ゲート・period 全季・503 バックオフ）。
-    - cron: '0 21 * * *'
+    # UTC 22:30 = JST 07:30（snapshot 索引更新 ~22:06 UTC の後・ジッタ余裕込み）。発見系＝日次フル（version ゲート・period 全季・503 バックオフ）。
+    - cron: '30 22 * * *'
   workflow_dispatch:
     inputs:
       mode:

@@ -705,7 +705,7 @@ function detectShrinkFromStore(store, dataDir, threshold = 0.9) {
 // Store ベース クールパイプライン（M3）
 // ────────────────────────────────────────────────────────────────────────────
 
-async function runCoursPipelineFromStore(store, now) {
+async function runCoursPipelineFromStore(store, now, cachedProgramlist = null) {
   // 0. クリア（is_available シリーズのみ）。cours が変化したものを dirty 追跡。
   for (const s of store.series.values()) {
     if (s.isAvailable && s.cours !== null) {
@@ -725,8 +725,8 @@ async function runCoursPipelineFromStore(store, now) {
   }
   logger.info('fetch', 'E3 cours from tags (primary)', { count: tagMap.size })
 
-  // 2. 補完 = 今季 programlist
-  const programlist = await fetchProgramlist()
+  // 2. 補完 = 今季 programlist（Phase B で取得済みなら再利用）
+  const programlist = cachedProgramlist ?? (await fetchProgramlist())
   const coursLabel = makeCoursLabel(new Date(now).getFullYear(), currentSeason(now))
   const curMap = mapCurrentCours(programlist, coursLabel)
   let curAdded = 0
@@ -961,9 +961,26 @@ async function runFullJS() {
     })
   }
 
-  // list.json 外のシリーズを unavailable にマーク（変化した場合のみ dirty）
+  // programlist.json から今季新規シリーズを補完取得（list.json の更新遅延を吸収）。
+  // list.json に未収録でも programlist に存在する current-season series は mint して
+  // Phase C の nvapi seed 対象に含める。isAvailable=true のまま保持。
+  const programlist = await fetchProgramlist()
+  const programlistSeriesIds = new Set()
+  const mintFromProgramlist = []
+  for (const item of programlist) {
+    if (!item.series) continue
+    const sid = Number(item.series)
+    programlistSeriesIds.add(sid)
+    if (!listSeriesIds.has(sid)) {
+      // list.json にない series → 新規 mint（title は item.title、nvapi で後補完）
+      mintFromProgramlist.push({ seriesId: sid, title: item.title ?? '', isAvailable: true })
+    }
+  }
+
+  // list.json 外かつ programlist 外のシリーズのみ unavailable にマーク
+  // （programlist 由来の新規 series は isAvailable のまま維持する）
   for (const s of store.series.values()) {
-    if (!listSeriesIds.has(s.seriesId) && s.isAvailable) {
+    if (!listSeriesIds.has(s.seriesId) && !programlistSeriesIds.has(s.seriesId) && s.isAvailable) {
       s.isAvailable = false
       store._dirtySeries.add(s.seriesId)
     }
@@ -975,7 +992,17 @@ async function runFullJS() {
     if (item.colKey)
       storeUpdateSeries(store, item.seriesId, { colKey: item.colKey, isAvailable: true })
   }
-  logger.info('fetch', '[JS] list.json done', { count: seriesFromList.length })
+  // programlist 由来の新規シリーズを mint
+  if (mintFromProgramlist.length > 0) {
+    storeUpsertSeries(store, mintFromProgramlist)
+    logger.info('fetch', '[JS] programlist: new series minted', {
+      count: mintFromProgramlist.length,
+    })
+  }
+  logger.info('fetch', '[JS] list.json done', {
+    count: seriesFromList.length,
+    programlistMint: mintFromProgramlist.length,
+  })
 
   // ── Phase C: nvapi seed（§S1: 対象限定。全件は週次/force のみ）──────────────
   // 孤児発生時は title 前方一致で対応 series に限定（nvapi が ep を未収録でも無駄打ちしない）。
@@ -1017,6 +1044,13 @@ async function runFullJS() {
     await seedAllSeries(seedTargets, async (seriesId, data) => {
       const updates = mapNvapiItems(seriesId, data.items ?? [])
       if (updates.length > 0) storeLinkEps(store, updates)
+      // nvapi detail.title で title が空の series を補完（programlist mint した新規 series 用）
+      if (data.detail?.title) {
+        const s = store.series.get(seriesId)
+        if (s && !s.title) {
+          storeUpdateSeries(store, seriesId, { title: data.detail.title })
+        }
+      }
     })
     storeUpdateMeta(store, { lastSeedAt: now })
   } else {
@@ -1075,8 +1109,8 @@ async function runFullJS() {
   }
   logger.info('fetch', '[JS] E2 series tags done', { count: seriesTags.length })
 
-  // E3: Cours
-  await runCoursPipelineFromStore(store, now)
+  // E3: Cours（Phase B で取得済みの programlist を再利用して重複 fetch を回避）
+  await runCoursPipelineFromStore(store, now, programlist)
 
   // E4: Franchise keys
   const seriesTagsMap = getSeriesTagsMapFromStore(store)
@@ -1261,18 +1295,19 @@ async function runHourlyJS() {
           if (!preExisting.has(ep.contentId)) insertedEpisodes++
         }
 
+        // RSS 解決は常に実行（新規エピソードの有無にかかわらず、既存 episodes でも
+        // rss_only を resolved に昇格できる。insertedEpisodes=0 でも解決が必要なケースあり）
+        resolveRssItemsFromStore(seedStore)
+        // 解決結果を rssStore に同期（state/rss.json の書き出しに反映）
+        for (const [k, v] of seedStore.rss) rssStore.rss.set(k, v)
+        if (seedStore.meta.rssLastGuid) {
+          storeUpdateMeta(rssStore, { rssLastGuid: seedStore.meta.rssLastGuid })
+        }
+
         if (insertedEpisodes > 0) {
           // サムネ・タイムスタンプ同期
           storeSyncThumbs(seedStore)
           storeSyncTimestamps(seedStore)
-
-          // rss_only → resolved に昇格
-          resolveRssItemsFromStore(seedStore)
-          // 解決結果を rssStore に同期（state/rss.json の書き出しに反映）
-          for (const [k, v] of seedStore.rss) rssStore.rss.set(k, v)
-          if (seedStore.meta.rssLastGuid) {
-            storeUpdateMeta(rssStore, { rssLastGuid: seedStore.meta.rssLastGuid })
-          }
 
           // 影響シリーズの series/*.json のみ書き出し（prev-views/series-index は触らない）
           await writeSeriesFiles(seedStore, DATA_DIR, [...matchedSeriesIds])
