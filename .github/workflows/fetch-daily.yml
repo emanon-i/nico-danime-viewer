@@ -7,7 +7,7 @@
 # 起動条件: M7 完走確認後に有効化
 #
 # 状態の真実源: state ブランチ（series/*.json / state/*.json を永続化）
-# SQLite は廃止（PH-0008 M5）。正本データは純 JSON + メモリ JS ETL。
+# 正本データは純 JSON + メモリ JS ETL。
 # 状態書き込みは concurrency group "state-writer" で直列化
 
 name: Daily Full Fetch & Deploy
@@ -162,7 +162,7 @@ jobs:
           else
             mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --delete --exclude='.git' --exclude='*.sqlite' src/data/. state_pub/
+          rsync -av --delete --exclude='.git' src/data/. state_pub/
           cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'

@@ -132,7 +132,7 @@ jobs:
           else
             mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --delete --exclude='.git' --exclude='*.sqlite' --exclude='.deploy-needed' src/data/. state_pub/
+          rsync -av --delete --exclude='.git' --exclude='.deploy-needed' src/data/. state_pub/
           cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
