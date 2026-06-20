@@ -157,7 +157,7 @@ function registerProvisionalSeries(store, watchId, rssEntry) {
   return sid
 }
 
-async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitle) {
+async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitle, dataDir = null) {
   if (missedContentIds.size === 0) return
 
   for (const cid of [...missedContentIds]) {
@@ -213,7 +213,6 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
 
     if (!isBranchSeries(nvapiData?.detail)) {
       logger.warn('fetch', '[JS] A2 rescue: non-branch series, skip', { seriesId })
-      for (const cid of cids) missedContentIds.delete(cid)
       continue
     }
 
@@ -254,6 +253,19 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
     store._dirtySeries.add(sid)
     missedContentIds.delete(cid)
     logger.info('fetch', '[JS] A2 provisional registered', { cid, seriesTitle, sid })
+  }
+
+  if (dataDir) {
+    for (const [neg] of [...store.series]) {
+      if (neg >= 0) continue
+      const stillUsed = [...store.episodes.values()].some((e) => e.seriesId === neg)
+      if (!stillUsed) {
+        store.series.delete(neg)
+        const provFile = join(dataDir, 'series', `${neg}.json`)
+        if (existsSync(provFile)) unlinkSync(provFile)
+        logger.info('fetch', '[JS] A2 empty provisional cleaned', { neg })
+      }
+    }
   }
 
   logger.info('fetch', '[JS] A2 rescue done', { remaining: missedContentIds.size })
@@ -515,7 +527,7 @@ async function runFullJS() {
     for (const ep of store.episodes.values()) {
       if (ep.seriesId != null && ep.seriesId > 0) contentToSeries.set(ep.contentId, ep.seriesId)
     }
-    await rescueMissingEps(store, missedContentIds, contentToSeries, listByTitle)
+    await rescueMissingEps(store, missedContentIds, contentToSeries, listByTitle, DATA_DIR)
     logger.info('fetch', '[JS] phase A2: done', { remaining: missedContentIds.size })
   }
 

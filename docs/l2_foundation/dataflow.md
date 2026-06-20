@@ -115,7 +115,7 @@ flowchart TD
     B2 --> B3["B3: store 未保有の新 seriesId → nvapi v2/series authoritative\n全話取得・シリーズタイトル取得\n→ storeUpsertEps + storeUpsertSeries"]
     B3 --> B4["B4: list.json 掲載シリーズに\ncol_key パッチ + isAvailable=true 強制"]
     B4 --> B5["B5: list-index.json 保存\n（タイトル→seriesId Map・毎時 D2 が参照）"]
-    B5 --> B6["B6: 仮シリーズ(seriesId<0) × allTitles 完全一致 reconciliation\n→ ep の seriesId を実 ID に付け替え\n→ store.series.delete(仮 id)\n→ data/series/<neg>.json 削除（再インジェスト防止）"]
+    B5 --> B6["B6: 仮シリーズ(seriesId<0) × allTitles 完全一致 reconciliation\n→ nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）\n→ 検証 OK: ep の seriesId を実 ID に付け替え\n→ store.series.delete(仮 id)\n→ data/series/<neg>.json 削除（再インジェスト防止）"]
     B6 --> A2["Phase A2: 取得漏れ救出\n① store の contentId→seriesId Map で直接解決\n② タグ/タイトル照合（最終手段）→ nvapi → ep 付け替え\n③ 全失敗 → 仮シリーズ登録（thumbnailUrl→contentId・負数 seriesId）"]
     A2 --> LS["lastSeenAt = now\n（snapshot 出現シリーズのうち seriesId > 0）"]
     LS --> E["Phase E: ETL 派生\nE1: descriptionFirst（最古話 description）\nE2: tags 正規化（dアニメ接頭/接尾除去）\nE3: cours（タグ主源）\nE4: franchiseKey + relatedSeries\nE5: timestamps 同期\nE6: thumbnails 同期\nE7: isAvailable grace\n    snapshotFetchedAt > 3日前 → 評価スキップ\n    lastSeenAt < (snapshotFetchedAt - 2日) → false\n    ※ seriesId < 0（仮）は grace スキップ（isAvailable 固定 true）"]
