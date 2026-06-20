@@ -9,8 +9,14 @@ const WATCH_BASE = 'https://www.nicovideo.jp/watch'
 
 /**
  * watch ページ HTML から seriesId / contentId / channelId / seriesTitle を返す。
+ *
+ * 戻り値の意味:
+ *   - null                        → fetch 失敗 / bot block (video.id=null) → 呼び出し側は unresolved 維持でリトライ
+ *   - { seriesId: null, ... }     → 本物の非シリーズ (PV・単話投稿等) → 呼び出し側は rss_only 確定
+ *   - { seriesId: number, ... }   → 正常解決 → 呼び出し側は resolved 確定
+ *
  * @param {string} watchIdOrContentId  watchId（数値文字列）または contentId（so…）
- * @returns {Promise<{seriesId:number,contentId:string,channelId:string|null,seriesTitle:string|null}|null>}
+ * @returns {Promise<{seriesId:number|null,contentId:string,channelId:string|null,seriesTitle:string|null}|null>}
  */
 export async function fetchWatchSeriesInfo(watchIdOrContentId) {
   let resp
@@ -59,9 +65,18 @@ export async function fetchWatchSeriesInfo(watchIdOrContentId) {
   const channelId = r?.channel?.id ?? null // 文字列 "ch2632720"
   const seriesTitle = r?.series?.title ?? null
 
-  if (!seriesId || !contentId) {
-    logger.info('watch', 'no series', { id: watchIdOrContentId, contentId })
+  if (!contentId) {
+    // video.id=null = bot block（DC IP ソフトブロック）または削除済み動画
+    // → null を返して呼び出し側が unresolved 維持・リトライできるようにする
+    logger.warn('watch', 'no contentId (bot block?)', { id: watchIdOrContentId })
     return null
+  }
+
+  if (!seriesId) {
+    // contentId あり・seriesId なし = 本物の非シリーズ（PV・単話投稿・告知等）
+    // → seriesId:null オブジェクトを返して呼び出し側が rss_only 確定できるようにする
+    logger.info('watch', 'no series', { id: watchIdOrContentId, contentId })
+    return { seriesId: null, contentId: String(contentId), channelId, seriesTitle }
   }
 
   return {

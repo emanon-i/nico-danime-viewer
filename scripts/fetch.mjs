@@ -673,11 +673,18 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries) {
     const info = await fetchWatchSeriesInfo(cid)
     watchCount++
 
-    if (!info || info.channelId !== 'ch2632720') {
-      // 支店外 or エラー → この contentId はスキップ
-      logger.info('fetch', '[JS] A2 watch: not branch or null, skip', {
+    if (info === null) {
+      // bot block / fetch 失敗 → スキップ（無限ループ防止のため Set から除去）
+      logger.warn('fetch', '[JS] A2 watch: null (bot block?) → skip', { cid })
+      missedContentIds.delete(cid)
+      continue
+    }
+
+    if (!info.seriesId || info.channelId !== 'ch2632720') {
+      // 本物の非シリーズ or 別チャンネル → スキップ
+      logger.info('fetch', '[JS] A2 watch: no series or non-branch → skip', {
         cid,
-        channelId: info?.channelId,
+        channelId: info.channelId,
       })
       missedContentIds.delete(cid)
       continue
@@ -999,10 +1006,10 @@ async function runHourlyJS() {
   if (newLastGuid) storeUpdateMeta(store, { rssLastGuid: newLastGuid })
 
   // ── Phase D2: 未解決 RSS → watch → seriesId 解決 ─────────────────────────
-  // resolved 済みはスキップ。rss_only + unresolved はすべて watch を試みる
+  // unresolved のみ対象。rss_only = 確定非シリーズ（再試行不要）
   const toWatch = new Map() // watchId → rssEntry
   for (const r of store.rss.values()) {
-    if (r.resolutionStatus !== 'resolved') {
+    if (r.resolutionStatus === 'unresolved') {
       toWatch.set(r.watchId, r)
     }
   }
@@ -1016,7 +1023,12 @@ async function runHourlyJS() {
 
   for (const [watchId] of toWatch) {
     const info = await fetchWatchSeriesInfo(watchId)
-    if (!info || info.channelId !== 'ch2632720') {
+    if (info === null) {
+      // null = bot block / fetch 失敗 → unresolved 維持してリトライ（rss_only にしない）
+      continue
+    }
+    if (!info.seriesId || info.channelId !== 'ch2632720') {
+      // 本物の非シリーズ (PV 等) or 別チャンネル → rss_only 確定
       storeUpdateRssResolution(store, watchId, null, 'rss_only')
       continue
     }
