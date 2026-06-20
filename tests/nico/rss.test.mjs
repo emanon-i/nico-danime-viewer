@@ -1,18 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   parseRssXml,
   filterNewRssItems,
   assertRssOk,
   extractWatchId,
   normalizeTitleForMatch,
-  resolveRssItems,
 } from '../../scripts/nico/rss.mjs'
-import {
-  openDatabase,
-  createSchema,
-  bulkUpsertEpisodes,
-  bulkUpsertRssItems,
-} from '../../scripts/db/db.mjs'
 
 const SAMPLE_RSS = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -121,105 +114,5 @@ describe('normalizeTitleForMatch (F-0019)', () => {
 
   it('小文字変換する', () => {
     expect(normalizeTitleForMatch('ABC')).toBe('abc')
-  })
-})
-
-describe('resolveRssItems (F-0019)', () => {
-  let db
-
-  beforeEach(() => {
-    db = openDatabase(':memory:')
-    createSchema(db)
-  })
-
-  it('test_rss_title_match: タイトル正規化突合で contentId を解決する', () => {
-    // episodes に突合先を追加
-    bulkUpsertEpisodes(
-      db,
-      [
-        {
-          contentId: 'so1001',
-          title: 'ゆるキャン△ 第1話',
-          viewCounter: 100,
-          startTime: '2026-06-01T00:00:00+09:00',
-        },
-      ],
-      '2026-06-16T00:00:00Z'
-    )
-
-    // rss_items に未解決アイテムを追加
-    bulkUpsertRssItems(db, [
-      {
-        watchId: '9876543210',
-        title: 'ゆるキャン△ 第1話',
-        pubDate: '2026-06-01T10:00:00+09:00',
-        guid: null,
-        titleNorm: null,
-        link: null,
-      },
-    ])
-
-    resolveRssItems(db)
-
-    const resolved = db.prepare('SELECT * FROM rss_items WHERE watch_id = ?').get('9876543210')
-    expect(resolved.resolution_status).toBe('resolved')
-    expect(resolved.resolved_content_id).toBe('so1001')
-  })
-
-  it('test_rss_only_when_no_match: エピソードにないタイトルは rss_only', () => {
-    bulkUpsertRssItems(db, [
-      {
-        watchId: '1111111111',
-        title: '存在しないアニメ 第1話',
-        pubDate: '2026-06-01T10:00:00+09:00',
-        guid: null,
-        titleNorm: null,
-        link: null,
-      },
-    ])
-
-    resolveRssItems(db)
-
-    const item = db.prepare('SELECT * FROM rss_items WHERE watch_id = ?').get('1111111111')
-    expect(item.resolution_status).toBe('rss_only')
-    expect(item.resolved_content_id).toBeNull()
-  })
-
-  it('rss_only は後から episode が追加されたら再解決される（§D）', () => {
-    // 突合先がまだ無い状態で rss_item を入れる → rss_only
-    bulkUpsertRssItems(db, [
-      {
-        watchId: '2222222222',
-        title: '新番組 第1話',
-        pubDate: '2026-06-10T10:00:00+09:00',
-        guid: null,
-        titleNorm: null,
-        link: null,
-      },
-    ])
-    resolveRssItems(db)
-    expect(
-      db.prepare('SELECT resolution_status FROM rss_items WHERE watch_id=?').get('2222222222')
-        .resolution_status
-    ).toBe('rss_only')
-
-    // 後から該当 episode が追加される（nvapi 解決/snapshot 回収相当）
-    bulkUpsertEpisodes(
-      db,
-      [
-        {
-          contentId: 'so2002',
-          title: '新番組 第1話',
-          viewCounter: 50,
-          startTime: '2026-06-10T09:00:00+09:00',
-        },
-      ],
-      '2026-06-16T00:00:00Z'
-    )
-    // 再解決＝rss_only も対象に含むので resolved になる
-    resolveRssItems(db)
-    const after = db.prepare('SELECT * FROM rss_items WHERE watch_id=?').get('2222222222')
-    expect(after.resolution_status).toBe('resolved')
-    expect(after.resolved_content_id).toBe('so2002')
   })
 })

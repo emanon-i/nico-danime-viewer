@@ -9,7 +9,6 @@
   },
   "scripts": {
     "fetch": "node scripts/fetch.mjs",
-    "backfill": "node scripts/backfill.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -34,18 +33,15 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
       "esbuild",
       "simple-git-hooks"
     ]
   },
   "dependencies": {
-    "@fontsource/ibm-plex-sans-jp": "^5.2.8",
-    "better-sqlite3": "^11.0.0"
+    "@fontsource/ibm-plex-sans-jp": "^5.2.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.0.0",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",

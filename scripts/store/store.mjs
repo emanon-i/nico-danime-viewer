@@ -62,7 +62,7 @@ import { stripHtml } from '../etl/series.mjs'
  * @property {string|null} link
  * @property {string|null} description    RSS <description> HTML CDATA as-is（暫定あらすじ）
  * @property {string|null} resolvedContentId
- * @property {string} resolutionStatus   'unresolved'|'resolved'|'rss_only'
+ * @property {string} resolutionStatus   'pending'|'resolved'
  */
 
 /**
@@ -299,7 +299,7 @@ async function _loadState(store, stateDir) {
         link: item.link ?? null,
         description: item.description ?? null,
         resolvedContentId: item.resolvedContentId ?? null,
-        resolutionStatus: item.resolutionStatus ?? 'unresolved',
+        resolutionStatus: item.resolutionStatus === 'resolved' ? 'resolved' : 'pending',
       })
     }
   } catch {
@@ -768,7 +768,7 @@ export function upsertRssItems(store, items) {
         link: item.link ?? null,
         description: item.description ?? null,
         resolvedContentId: item.resolvedContentId ?? null,
-        resolutionStatus: item.resolutionStatus ?? 'unresolved',
+        resolutionStatus: item.resolutionStatus === 'resolved' ? 'resolved' : 'pending',
       })
     }
   }

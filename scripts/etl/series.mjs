@@ -36,54 +36,6 @@ export function extractSeriesIdFromUrl(url) {
 }
 
 /**
- * DB から各シリーズの第1話（最古話）の description を取得して HTML 除去済みで返す。
- * @param {import('better-sqlite3').Database} db
- * @returns {{ seriesId: number, descriptionFirst: string }[]}
- */
-export function deriveSeriesOverviews(db) {
-  const rows = db
-    .prepare(
-      `SELECT e.series_id, e.description
-       FROM episodes e
-       WHERE e.series_id IS NOT NULL
-         AND e.content_id = (
-           SELECT e2.content_id FROM episodes e2
-           WHERE e2.series_id = e.series_id
-           ORDER BY e2.start_time ASC, COALESCE(e2.episode_no, 9999) ASC, e2.content_id ASC
-           LIMIT 1
-         )`
-    )
-    .all()
-
-  return rows.map((row) => ({
-    seriesId: row.series_id,
-    descriptionFirst: stripHtml(row.description),
-  }))
-}
-
-/**
- * series_id → タグ名[] のマップを DB から取得（フランチャイズ計算用）
- * @param {import('better-sqlite3').Database} db
- * @returns {Map<number, string[]>}
- */
-export function getSeriesTagsMap(db) {
-  const rows = db
-    .prepare(
-      `SELECT st.series_id, t.name
-       FROM series_tags st
-       JOIN tags t ON st.tag_id = t.tag_id`
-    )
-    .all()
-
-  const map = new Map()
-  for (const row of rows) {
-    if (!map.has(row.series_id)) map.set(row.series_id, [])
-    map.get(row.series_id).push(row.name)
-  }
-  return map
-}
-
-/**
  * タイトルを「作品の語幹」に正規化する（続編/形式マーカーを除去）。
  * 例「劇場版「進撃の巨人」Season 1 前編～紅蓮の弓矢～」→「進撃の巨人」。
  * 続編束ねの主シグナル。短すぎる語幹（汎用）は呼び出し側で弾く。

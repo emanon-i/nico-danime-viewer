@@ -99,12 +99,18 @@ export function parseRssXml(xml) {
       )
       return tm ? (tm[1] ?? tm[2] ?? '').trim() : ''
     }
+    // サムネ: <media:thumbnail url="..."> または description 内 <img src="...">
+    const thumbM =
+      block.match(/<media:thumbnail[^>]+url="([^"]+)"/) ??
+      block.match(/<img[^>]+src="([^"]+thumbnails\/\d+\/[^"]+)"/)
+    const thumbnailUrl = thumbM ? thumbM[1] : null
     items.push({
       title: get('title'),
       link: get('link'),
       guid: get('guid'),
       pubDate: get('pubDate'),
       description: get('description') || null,
+      thumbnailUrl,
     })
   }
 
@@ -155,51 +161,4 @@ export function assertRssOk(items, channelTitle) {
       throw new Error(`[assert:rss] invalid link format: "${item.link}"`)
     }
   }
-}
-
-/**
- * title+pubDate 突合で RSS watch id を contentId に解決する（DB 内 episodes から）
- * @param {import('better-sqlite3').Database} db
- * @param {{ watchId: string, title: string, pubDate: string }[]} rssItems
- */
-export function resolveRssItems(db) {
-  // unresolved に加え rss_only も再解決対象に含める（§D）。後から episodes が追加（nvapi 解決/
-  // snapshot 回収）されると、以前 rss_only だった新着が contentId に解決できるようになるため。
-  const unresolved = db
-    .prepare(
-      `SELECT watch_id, title, pub_date FROM rss_items WHERE resolution_status IN ('unresolved', 'rss_only')`
-    )
-    .all()
-
-  if (!unresolved.length) return
-
-  // episodes から正規化タイトルインデックスを構築
-  const episodes = db
-    .prepare('SELECT content_id, title, start_time FROM episodes WHERE title IS NOT NULL')
-    .all()
-
-  const index = new Map()
-  for (const ep of episodes) {
-    const key = normalizeTitleForMatch(ep.title)
-    if (key) index.set(key, ep.content_id)
-  }
-
-  const updateStmt = db.prepare(
-    'UPDATE rss_items SET resolved_content_id = ?, resolution_status = ? WHERE watch_id = ?'
-  )
-  const run = db.transaction(() => {
-    for (const item of unresolved) {
-      const key = normalizeTitleForMatch(item.title)
-      const contentId = index.get(key) ?? null
-      const status = contentId ? 'resolved' : 'rss_only'
-      updateStmt.run(contentId, status, item.watch_id)
-    }
-  })
-  run()
-
-  const resolved = unresolved.filter((i) => {
-    const key = normalizeTitleForMatch(i.title)
-    return index.has(key)
-  }).length
-  logger.info('rss', 'resolution complete', { total: unresolved.length, resolved })
 }

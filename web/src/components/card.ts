@@ -182,6 +182,18 @@ export function card(
     extLink.setAttribute('aria-label', '公式シリーズページを開く')
     extLink.appendChild(icon('external-link', 16))
     el.appendChild(extLink)
+  } else if (seriesId < 0) {
+    // 仮シリーズ（seriesId < 0）: 公式 URL 未確定のため無効ボタンを出す
+    const pendingBtn = document.createElement('button')
+    pendingBtn.type = 'button'
+    pendingBtn.className = 'icon-btn card-external card-external--pending'
+    pendingBtn.setAttribute('aria-disabled', 'true')
+    pendingBtn.setAttribute('aria-label', '公式シリーズページ（未取得）')
+    pendingBtn.title = '未取得'
+    pendingBtn.dataset.tooltip = '未取得'
+    pendingBtn.addEventListener('click', (e) => e.preventDefault())
+    pendingBtn.appendChild(icon('external-link', 16))
+    el.appendChild(pendingBtn)
   }
 
   return el

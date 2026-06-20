@@ -105,7 +105,7 @@ export interface NewItem {
   title: string
   pubDate: string
   resolvedContentId: string | null
-  resolutionStatus: 'resolved' | 'rss_only' | 'unresolved'
+  resolutionStatus: 'resolved' | 'pending'
   /** 解決済み話のサムネ（episodes.thumbnail_url を resolved_content_id で join）。未解決はサムネ無し→null */
   thumbnailUrl: string | null
   /** 話番号（episodes.episode_no）。「第N話」表示に使う。nvapi 未解決なら null */

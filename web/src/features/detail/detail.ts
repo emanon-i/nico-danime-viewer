@@ -238,6 +238,18 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     offLink.appendChild(icon('play', 16))
     offLink.appendChild(document.createTextNode('公式シリーズページ'))
     infoDiv.appendChild(offLink)
+  } else if (series.seriesId < 0) {
+    // 仮シリーズ（seriesId < 0）: 公式 URL 未確定のため無効ボタンを出す
+    const pendingBtn = document.createElement('button')
+    pendingBtn.type = 'button'
+    pendingBtn.className = 'btn-primary official-series-link official-series-link--pending'
+    pendingBtn.setAttribute('aria-disabled', 'true')
+    pendingBtn.title = '未取得'
+    pendingBtn.dataset.tooltip = '未取得'
+    pendingBtn.addEventListener('click', (e) => e.preventDefault())
+    pendingBtn.appendChild(icon('play', 16))
+    pendingBtn.appendChild(document.createTextNode('公式シリーズページ（取得中）'))
+    infoDiv.appendChild(pendingBtn)
   }
 
   const marksDiv = document.createElement('div')

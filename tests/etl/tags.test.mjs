@@ -1,16 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   normalizeTagName,
   extractTagsFromRaw,
   processEpisodeTags,
-  deriveSeriesTags,
 } from '../../scripts/etl/tags.mjs'
-import {
-  openDatabase,
-  createSchema,
-  bulkUpsertEpisodes,
-  bulkUpsertSeries,
-} from '../../scripts/db/db.mjs'
 
 describe('normalizeTagName (F-0013)', () => {
   it('全角英数を半角に変換する', () => {
@@ -110,76 +103,5 @@ describe('キュレーション is_curated 識別 (F-0013)', () => {
     const adventure = result.find((t) => t.name === '冒険')
     expect(drama?.isCurated).toBe(true)
     expect(adventure?.isCurated).toBe(false)
-  })
-})
-
-describe('deriveSeriesTags (F-0013)', () => {
-  let db
-
-  beforeEach(() => {
-    db = openDatabase(':memory:')
-    createSchema(db)
-    bulkUpsertSeries(db, [{ seriesId: 1, title: 'テスト' }], '2026-01-01T00:00:00Z')
-  })
-
-  it('test_series_tags_union_all_episodes: 全話タグの和集合を使う（後続話のタグも含む・§A）', () => {
-    bulkUpsertEpisodes(
-      db,
-      [
-        {
-          contentId: 'so1',
-          seriesId: 1,
-          title: '第1話',
-          viewCounter: 100,
-          startTime: '2020-01-01T00:00:00+09:00',
-          tags: 'アクション',
-        },
-        {
-          contentId: 'so2',
-          seriesId: 1,
-          title: '第2話',
-          viewCounter: 90,
-          startTime: '2020-01-08T00:00:00+09:00',
-          tags: '第2話専用タグ アクション',
-        },
-      ],
-      '2026-06-16T00:00:00Z'
-    )
-
-    const result = deriveSeriesTags(db)
-    expect(result).toHaveLength(1)
-    const tagNames = result[0].tags.map((t) => t.name)
-    // 第1話・後続話どちらのタグも含む（distinct union）
-    expect(tagNames).toContain('アクション')
-    expect(tagNames).toContain('第2話専用タグ')
-    // 重複は 1 つに（union＝distinct）
-    expect(tagNames.filter((n) => n === 'アクション')).toHaveLength(1)
-  })
-
-  it('全話 union でも除外タグ（アニメ/第1話）は残らない（§A）', () => {
-    bulkUpsertEpisodes(
-      db,
-      [
-        {
-          contentId: 'so1',
-          seriesId: 1,
-          title: '第1話',
-          viewCounter: 100,
-          startTime: '2020-01-01T00:00:00+09:00',
-          tags: 'アニメ 第1話 アクション',
-        },
-        {
-          contentId: 'so2',
-          seriesId: 1,
-          title: '第2話',
-          viewCounter: 90,
-          startTime: '2020-01-08T00:00:00+09:00',
-          tags: 'アニメ 日常',
-        },
-      ],
-      '2026-06-16T00:00:00Z'
-    )
-    const tagNames = deriveSeriesTags(db)[0].tags.map((t) => t.name)
-    expect(tagNames.sort()).toEqual(['アクション', '日常'])
   })
 })
