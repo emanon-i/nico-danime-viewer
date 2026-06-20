@@ -7,6 +7,22 @@ import { logger } from '../lib/logger.mjs'
 
 const WATCH_BASE = 'https://www.nicovideo.jp/watch'
 
+// Actions (DC IP) のソフトブロック回避のためブラウザ風ヘッダを使用する。
+// 識別 UA より回避優先。IP 起因の場合は効果なし（その際は Fix-A cookieへ移行）。
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+  'Accept-Encoding': 'gzip, deflate, br',
+  Referer: 'https://www.nicovideo.jp/',
+  'Upgrade-Insecure-Requests': '1',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'same-origin',
+  'Sec-Fetch-User': '?1',
+}
+
 /**
  * watch ページ HTML から seriesId / contentId / channelId / seriesTitle を返す。
  *
@@ -22,10 +38,7 @@ export async function fetchWatchSeriesInfo(watchIdOrContentId) {
   let resp
   try {
     resp = await fetchWithToS(`${WATCH_BASE}/${watchIdOrContentId}`, {
-      headers: {
-        Accept: 'text/html,application/xhtml+xml,*/*;q=0.9',
-        'Accept-Language': 'ja,en-US;q=0.9',
-      },
+      headers: BROWSER_HEADERS,
       redirect: 'follow',
     })
   } catch (e) {
