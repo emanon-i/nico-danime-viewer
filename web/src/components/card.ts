@@ -33,6 +33,11 @@ export interface CardOpts {
    * 既定 false ＝本体はうちの詳細 `?series=`・右上 ↗ で公式（一覧用）。
    */
   externalWhole?: boolean
+  /**
+   * false のとき「取得不可」バッジを表示しサムネをグレースケールにする（§PH-0013）。
+   * undefined / true は通常表示。
+   */
+  isAvailable?: boolean
 }
 
 /**
@@ -58,8 +63,13 @@ export function card(
   const externalHref = officialHref ?? seriesLink(seriesId) ?? ''
   const externalWhole = opts?.externalWhole === true && externalHref !== ''
 
+  const unavailable = opts?.isAvailable === false
+
   const el = document.createElement('div')
-  el.className = 'series-card' + (externalWhole ? ' card-external-whole' : '')
+  el.className =
+    'series-card' +
+    (externalWhole ? ' card-external-whole' : '') +
+    (unavailable ? ' unavailable' : '')
   el.dataset.seriesId = String(seriesId)
 
   // ── 主: カード本体（サムネ＋オーバーレイ文字）──────────────
@@ -132,6 +142,14 @@ export function card(
 
   overlay.appendChild(textWrap)
   bodyLink.appendChild(overlay)
+
+  if (unavailable) {
+    const badge = document.createElement('div')
+    badge.className = 'card-unavailable-badge'
+    badge.textContent = '取得不可'
+    bodyLink.appendChild(badge)
+  }
+
   el.appendChild(bodyLink)
 
   // ── 左上: ♥ お気に入り / ✓ 見た（トグル）─────────────────

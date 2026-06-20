@@ -35,6 +35,8 @@ export interface Work {
   totalViews?: number
   /** Hot 生スコア（0..1）。炎ティア（§64）を ranking.hotTiers と突合して算出する */
   hotScore?: number
+  /** snapshot 由来の配信可否（false = soft tombstone・非公式・配信終了など） */
+  isAvailable?: boolean
   relatedSeries: RelatedSeries[]
 }
 

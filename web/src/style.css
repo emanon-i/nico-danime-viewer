@@ -695,6 +695,24 @@
       color: var(--text-muted);
     }
 
+    /* 取得不可 (isAvailable=false) ─ サムネグレースケール＋中央バッジ */
+    &.unavailable .card-img {
+      filter: grayscale(100%) opacity(0.45);
+    }
+    .card-unavailable-badge {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--text-l3);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: oklch(0.97 0 0);
+      background: oklch(0.3 0 0 / 0.55);
+      pointer-events: none;
+    }
+
     /* 下端の文字裏 scrim（文字の高さぶんだけ暗くする） */
     .card-overlay {
       position: absolute;

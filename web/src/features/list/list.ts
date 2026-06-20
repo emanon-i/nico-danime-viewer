@@ -818,7 +818,11 @@ export function renderList(
       const officialHref = seriesLink(work.seriesId) ?? ''
       const cell = document.createElement('div')
       cell.className = 'card-cell'
-      cell.appendChild(createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref))
+      cell.appendChild(
+        createCard(work.seriesId, work.title, work.thumbnailUrl, officialHref, undefined, {
+          isAvailable: work.isAvailable,
+        })
+      )
       // カード外枠下の常時メタ（§93）＝[film]話数 ＋ [play]総再生回数 ＋ [history]投稿日(最新話)。
       // この 3 点は常に出す。並び替え連動メタ（§32）は、現在の sort 値がこの 3 点に
       // 含まれない場合だけ追加する（views=総再生 / new=投稿日 は二重表示しないため cardMetric が

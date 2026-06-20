@@ -1,8 +1,8 @@
-# PH-0001: データ取得基盤＋SQLite ビルドDB
+﻿# PH-0001: データ取得基盤＋SQLite ビルドDB
 
 ## 目的
 
-ToS を厳守した nico API 取得層・支店フィルタ・snapshot 日次フル取得・SQLite ビルドDB（スキーマ／UPSERT／前日比 delta）・上流変更検知を実装し、`pnpm fetch` で支店各話を SQLite に取り込める状態にする。L2 §1.2/§1.3・dataflow.md・db-design.md 準拠。
+ToS を厳守した nico API 取得層・支店フィルタ・snapshot 日次フル取得・SQLite ビルドDB（スキーマ／UPSERT／前日比 delta）・上流変更検知を実装し、`pnpm fetch` で支店各話を SQLite に取り込める状態にする。L2 §1.2/§1.3・dataflow.md 準拠。
 
 ## 機能一覧
 
@@ -15,13 +15,13 @@ ToS を厳守した nico API 取得層・支店フィルタ・snapshot 日次フ
 **受け入れ条件**:
 
 - [x] すべての外部リクエストに User-Agent ヘッダが付与される
-  - 検証: テスト `test_request_has_user_agent` パス ✓ (2026-06-16)
+- 検証: テスト `test_request_has_user_agent` パス ✓ (2026-06-16)
 - [x] リクエストは逐次（同時並列で外部を叩かない）で、前回レスポンス時間ぶん待機する
-  - 検証: テスト `test_sequential_with_adaptive_delay` パス ✓ (2026-06-16)
+- 検証: テスト `test_sequential_with_adaptive_delay` パス ✓ (2026-06-16)
 - [x] 503 受信時に 5 分以上のバックオフへ入る
-  - 検証: テスト `test_503_backoff` パス ✓ (2026-06-16)
+- 検証: テスト `test_503_backoff` パス ✓ (2026-06-16)
 - [x] 取得コードは `scripts/` 配下のみに存在し、`web/` から外部 API/RSS を呼ぶ箇所が無い
-  - 検証: `web/` 内に nicovideo API/RSS 直叩きが0件（構造テストで確認）✓ (2026-06-16)
+- 検証: `web/` 内に nicovideo API/RSS 直叩きが0件（構造テストで確認）✓ (2026-06-16)
 
 ---
 
@@ -31,16 +31,16 @@ ToS を厳守した nico API 取得層・支店フィルタ・snapshot 日次フ
 
 snapshot は `q=dアニメストア&targets=tagsExact` で取得し、`channelId` は filter 不可のため**取得後にクライアント側で `channelId==2632720`** を絞ってから `episodes` へ insert する。本店（docomo）データを混ぜない。`contentId` は filter 可能（個別話直引き）。
 
-> 注: `episodes` スキーマ（db-design.md §1）に `channelId` 列は持たない（支店判定済みのみ格納）。検証は**フィルタ境界（insert 前のステージング）**で行う。
+> 注: `episodes` スキーマ（）に `channelId` 列は持たない（支店判定済みのみ格納）。検証は**フィルタ境界（insert 前のステージング）**で行う。
 
 **受け入れ条件**:
 
 - [x] フィルタ段で `channelId!=2632720` の行が除外され、`episodes` insert へ渡らない
-  - 検証: テスト `test_branch_filter_excludes_non_2632720` パス ✓ (2026-06-16)
+- 検証: テスト `test_branch_filter_excludes_non_2632720` パス ✓ (2026-06-16)
 - [x] `contentId` 直引き（`filters[contentId][0]=so…`）で個別話を取得できる
-  - 検証: テスト（1件フィクスチャで contentId 一致確認）パス ✓ (2026-06-16)
+- 検証: テスト（1件フィクスチャで contentId 一致確認）パス ✓ (2026-06-16)
 - [x] 支店のみ混在フィクスチャ投入後、`episodes` の件数が支店該当数と一致する
-  - 検証: テスト `test_branch_only_rows_inserted` パス ✓ (2026-06-16)
+- 検証: テスト `test_branch_only_rows_inserted` パス ✓ (2026-06-16)
 
 ---
 
@@ -53,49 +53,49 @@ snapshot は `q=dアニメストア&targets=tagsExact` で取得し、`channelId
 **受け入れ条件**:
 
 - [x] `filters[startTime]` に TZ 無しを渡さない（必ず `+09:00` 付き）
-  - 検証: テスト `test_starttime_filter_has_timezone` パス ✓ (2026-06-16)
+- 検証: テスト `test_starttime_filter_has_timezone` パス ✓ (2026-06-16)
 - [x] `startTime` 期間ウィンドウ分割で全件を `_offset`≤100000 / `_limit`≤100 の範囲で取得する
-  - 検証: テスト `test_window_split_covers_all` パス ✓ (2026-06-16)
+- 検証: テスト `test_window_split_covers_all` パス ✓ (2026-06-16)
 - [x] version ゲート: `last_modified` が前回と同じなら日次フルをスキップする
-  - 検証: テスト `test_version_gate_skips_when_unchanged` パス ✓ (2026-06-16)
+- 検証: テスト `test_version_gate_skips_when_unchanged` パス ✓ (2026-06-16)
 - [x] 期間ウィンドウ分割の境界がフィクスチャで全件カバーする（重複/欠落 0）
-  - 検証: テスト `test_window_split_no_gap_no_overlap` パス ✓ (2026-06-16)
+- 検証: テスト `test_window_split_no_gap_no_overlap` パス ✓ (2026-06-16)
 
 ---
 
 ### F-0009: SQLite ビルドDB（スキーマ・PRAGMA・一括ロード）
 
-**対応REQ**: 非機能（db-design.md §1/§2/§5）
+**対応REQ**: 非機能（§2/§5）
 
-db-design.md のスキーマ（`series` / `episodes` / `rss_items` / `tags` / `series_tags` / `meta_state` / `series_metrics`）を作成。**一括 INSERT は `BEGIN…COMMIT` でまとめ**、prepared statement ＋バッチ、**インデックスは一括ロード後に作成**、ロード後 `ANALYZE`。PRAGMA は再生成可能な中間物前提で速度優先。DB は配信に出さない。
+のスキーマ（`series` / `episodes` / `rss_items` / `tags` / `series_tags` / `meta_state` / `series_metrics`）を作成。**一括 INSERT は `BEGIN…COMMIT` でまとめ**、prepared statement ＋バッチ、**インデックスは一括ロード後に作成**、ロード後 `ANALYZE`。PRAGMA は再生成可能な中間物前提で速度優先。DB は配信に出さない。
 
 **受け入れ条件**:
 
-- [x] db-design.md §1 のテーブル/列が作成される（`episode_view_history` は将来用として未使用で可）
-  - 検証: `PRAGMA table_info` で全8テーブル・必須列を確認 ✓ (2026-06-16)
+- [x] のテーブル/列が作成される（`episode_view_history` は将来用として未使用で可）
+- 検証: `PRAGMA table_info` で全8テーブル・必須列を確認 ✓ (2026-06-16)
 - [x] 一括ロードがトランザクションでまとまり、インデックスはロード後に作成される
-  - 検証: テスト `test_bulk_load_uses_transaction_then_index` パス ✓ (2026-06-16)
+- 検証: テスト `test_bulk_load_uses_transaction_then_index` パス ✓ (2026-06-16)
 - [x] PRAGMA（WAL/synchronous/temp_store/cache_size/foreign_keys）が設定される
-  - 検証: 一時ファイルDBで PRAGMA journal_mode=wal / foreign_keys=1 確認 ✓ (2026-06-16)
+- 検証: 一時ファイルDBで PRAGMA journal_mode=wal / foreign_keys=1 確認 ✓ (2026-06-16)
 - [x] SQLite ファイルが `data/*.json` の配信出力に含まれない（中間生成物）
-  - 検証: `/data/` を .gitignore 除外済み、export 関数に `.sqlite` 無し ✓ (2026-06-16)
+- 検証: `/data/` を .gitignore 除外済み、export 関数に `.sqlite` 無し ✓ (2026-06-16)
 
 ---
 
 ### F-0010: UPSERT と前日比 delta（1スロット bounded）
 
-**対応REQ**: REQ-0002（db-design.md §3, foundation §1.2）
+**対応REQ**: REQ-0002（, foundation §1.2）
 
 `INSERT … ON CONFLICT(content_id) DO UPDATE` で**旧 `view_counter` を `prev_view_counter` に退避**しつつ最新へ更新する（無制限履歴を持たない＝1スロット bounded）。`delta = view_counter − prev_view_counter`。初回は `prev=NULL` → delta は2回目更新（翌日）から有効。
 
 **受け入れ条件**:
 
 - [x] 2回目の取り込みで `prev_view_counter` に前回値が退避され、`view_counter` が新値になる
-  - 検証: テスト `test_upsert_shifts_prev_view_counter` パス ✓ (2026-06-16)
+- 検証: テスト `test_upsert_shifts_prev_view_counter` パス ✓ (2026-06-16)
 - [x] 初回取り込み時は `prev_view_counter` が NULL で delta が無効扱い
-  - 検証: テスト `test_first_load_delta_inactive` パス ✓ (2026-06-16)
+- 検証: テスト `test_first_load_delta_inactive` パス ✓ (2026-06-16)
 - [x] 7スロット ring（`episode_view_history`）は v1 では生成・参照しない
-  - 検証: テスト `test_7slot_ring_not_written_v1` パス（count=0）✓ (2026-06-16)
+- 検証: テスト `test_7slot_ring_not_written_v1` パス（count=0）✓ (2026-06-16)
 
 ---
 
@@ -108,21 +108,21 @@ db-design.md のスキーマ（`series` / `episodes` / `rss_items` / `tags` / `s
 **受け入れ条件**:
 
 - [x] snapshot: `meta.status==200`／`data[]` 非空／必須フィールド存在／`channelId==2632720` が一定数以上／`totalCount` が前回比で急減していない を検査
-  - 検証: テスト `test_assert_snapshot_ok` / `test_assert_snapshot_fails_on_empty` 全8件パス ✓ (2026-06-16)
+- 検証: テスト `test_assert_snapshot_ok` / `test_assert_snapshot_fails_on_empty` 全8件パス ✓ (2026-06-16)
 - [x] しきい値（下限件数・急減率）が設定値として外出しされている
-  - 検証: テスト（設定値差し替えで判定が変わる）パス ✓ (2026-06-16)
+- 検証: テスト（設定値差し替えで判定が変わる）パス ✓ (2026-06-16)
 - [x] アサート失敗時は非ゼロ終了し、既存の公開物を上書きしない
-  - 検証: テスト `test_fail_keeps_previous_output` パス ✓ (2026-06-16)
+- 検証: テスト `test_fail_keeps_previous_output` パス ✓ (2026-06-16)
 
 ---
 
 ## Exit Criteria
 
 - [x] `pnpm fetch`（snapshot 経路）で支店各話が SQLite に取り込まれる構成が完成（`scripts/fetch.mjs` オーケストレータ実装済み）
-  - 実 API 呼び出しは ToS 遵守のため data phases 完了後に1回のみ実施予定
+- 実 API 呼び出しは ToS 遵守のため data phases 完了後に1回のみ実施予定
 - [x] 2回実行で `prev_view_counter`／delta が期待どおり遷移する
-  - 検証: テスト `test_upsert_shifts_prev_view_counter` パス ✓ (2026-06-16)
+- 検証: テスト `test_upsert_shifts_prev_view_counter` パス ✓ (2026-06-16)
 - [x] 変更検知アサートが空/壊れレスポンスで fail し、前回出力を保持する
-  - 検証: テスト `test_fail_keeps_previous_output` / `test_assert_snapshot_fails_on_empty` パス ✓ (2026-06-16)
+- 検証: テスト `test_fail_keeps_previous_output` / `test_assert_snapshot_fails_on_empty` パス ✓ (2026-06-16)
 - [x] `pnpm test` / `pnpm typecheck` / `pnpm lint` が通る
-  - 検証: 55 tests passed, typecheck OK, lint OK, build OK ✓ (2026-06-16)
+- 検証: 55 tests passed, typecheck OK, lint OK, build OK ✓ (2026-06-16)

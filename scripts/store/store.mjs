@@ -24,6 +24,7 @@ import { stripHtml } from '../etl/series.mjs'
  * @property {string|null} descriptionFirst
  * @property {string|null} firstSeen
  * @property {string|null} lastSeen
+ * @property {string|null} lastSeenAt  snapshot に最後に登場した ISO 8601（Phase E7 で isAvailable 評価に使う）
  * @property {string|null} cours
  * @property {string|null} franchiseKey
  * @property {boolean} isAvailable
@@ -59,6 +60,7 @@ import { stripHtml } from '../etl/series.mjs'
  * @property {string|null} title
  * @property {string|null} titleNorm
  * @property {string|null} link
+ * @property {string|null} description    RSS <description> HTML CDATA as-is（暫定あらすじ）
  * @property {string|null} resolvedContentId
  * @property {string} resolutionStatus   'unresolved'|'resolved'|'rss_only'
  */
@@ -69,6 +71,7 @@ import { stripHtml } from '../etl/series.mjs'
  * @property {string|null} snapshotLastStartTime
  * @property {string|null} snapshotVersionLastModified
  * @property {string|null} lastSeedAt
+ * @property {string|null} snapshotFetchedAt  Phase A 完全実行が完了した ISO 8601（version gate skip 時は更新しない）
  */
 
 /**
@@ -94,6 +97,7 @@ export function createStore() {
       snapshotLastStartTime: null,
       snapshotVersionLastModified: null,
       lastSeedAt: null,
+      snapshotFetchedAt: null,
     },
     _dirtySeries: new Set(),
   }
@@ -212,6 +216,7 @@ function _ingestSeriesJson(store, json) {
     descriptionFirst: json.descriptionFirst ?? existing?.descriptionFirst ?? null,
     firstSeen: json.firstSeen ?? existing?.firstSeen ?? null,
     lastSeen: json.lastSeen ?? existing?.lastSeen ?? null,
+    lastSeenAt: json.lastSeenAt ?? existing?.lastSeenAt ?? null,
     cours: json.cours ?? existing?.cours ?? null,
     franchiseKey: json.franchiseKey ?? existing?.franchiseKey ?? null,
     isAvailable: json.isAvailable !== false,
@@ -261,6 +266,7 @@ async function _loadState(store, stateDir) {
       snapshotLastStartTime: meta.snapshotLastStartTime ?? null,
       snapshotVersionLastModified: meta.snapshotVersionLastModified ?? null,
       lastSeedAt: meta.lastSeedAt ?? null,
+      snapshotFetchedAt: meta.snapshotFetchedAt ?? null,
     })
   } catch {
     /* 初回 bootstrap では存在しない */
@@ -291,6 +297,7 @@ async function _loadState(store, stateDir) {
         title: item.title ?? null,
         titleNorm: item.titleNorm ?? null,
         link: item.link ?? null,
+        description: item.description ?? null,
         resolvedContentId: item.resolvedContentId ?? null,
         resolutionStatus: item.resolutionStatus ?? 'unresolved',
       })
@@ -412,6 +419,7 @@ function _buildSeriesJson(store, seriesId) {
     isAvailable: s.isAvailable,
     firstSeen: s.firstSeen,
     lastSeen: s.lastSeen,
+    lastSeenAt: s.lastSeenAt ?? null,
     episodes: episodes.map((ep) => ({
       contentId: ep.contentId,
       episodeNo: ep.episodeNo,
@@ -748,6 +756,7 @@ export function upsertRssItems(store, items) {
       existing.title = item.title ?? existing.title
       existing.titleNorm = item.titleNorm ?? existing.titleNorm
       existing.link = item.link ?? existing.link
+      if (item.description != null) existing.description = item.description
       // resolvedContentId / status は updateRssResolution で管理
     } else {
       store.rss.set(wid, {
@@ -757,6 +766,7 @@ export function upsertRssItems(store, items) {
         title: item.title ?? null,
         titleNorm: item.titleNorm ?? null,
         link: item.link ?? null,
+        description: item.description ?? null,
         resolvedContentId: item.resolvedContentId ?? null,
         resolutionStatus: item.resolutionStatus ?? 'unresolved',
       })

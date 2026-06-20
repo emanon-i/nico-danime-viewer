@@ -77,12 +77,17 @@ export interface FilterOpts {
   watchedIds?: Set<number>
   /** 空シェル（episodeCount 0）も一覧に含めるか（§63・既定 false＝除外）。 */
   includeEmpty?: boolean
+  /** isAvailable=false（配信終了・取得不可）の作品も表示するか（§PH-0013・既定 false＝非表示）。 */
+  showUnavailable?: boolean
 }
 
 export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts): Work[] {
+  // isAvailable=false の作品は既定で非表示（showUnavailable トグルで表示切替）
+  let result = opts?.showUnavailable ? works : works.filter((w) => w.isAvailable !== false)
+
   // 実体に解決できない空シェル（話数 0＝サムネ/最新話/初出すべて欠落）は既定で除外（§59）。
   // トグル（§63・includeEmpty）が ON のときは保持したまま表示する（データは消さない）。
-  let result = opts?.includeEmpty ? works : works.filter((w) => (w.episodeCount ?? 0) > 0)
+  result = opts?.includeEmpty ? result : result.filter((w) => (w.episodeCount ?? 0) > 0)
 
   if (state.q) {
     // 素のワード検索は「シリーズタイトルの部分一致のみ」（§87）。タグは対象外。

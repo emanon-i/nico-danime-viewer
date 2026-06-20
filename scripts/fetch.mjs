@@ -26,8 +26,8 @@ import {
 
 import { fetchAllBranchEpisodes, fetchSnapshotVersion } from './nico/snapshot.mjs'
 import { assertSnapshotOk } from './nico/assert.mjs'
-import { fetchListJson, fetchProgramlist } from './nico/list.mjs'
-import { seedAllSeries, mapNvapiItems, mapNvapiEpisodes } from './nico/nvapi.mjs'
+import { fetchListJson } from './nico/list.mjs'
+import { fetchSeriesData, seedAllSeries, mapNvapiItems, mapNvapiEpisodes } from './nico/nvapi.mjs'
 import {
   fetchRss,
   fetchRssMultiPage,
@@ -36,8 +36,8 @@ import {
   assertRssOk,
   extractWatchId,
   resolveRssItems,
-  resolveRssItemsFromStore,
 } from './nico/rss.mjs'
+import { fetchWatchSeriesInfo } from './nico/watch.mjs'
 
 import { deriveSeriesTags } from './etl/tags.mjs'
 import { deriveSeriesTagsFromStore } from './etl/tags.mjs'
@@ -50,17 +50,16 @@ import {
   getSeriesTagsMapFromStore,
 } from './etl/series.mjs'
 import {
-  mapCurrentCours,
   makeCoursLabel,
   parsePeriodHtml,
   matchPeriodEntriesToSeries,
   deriveCoursFromTags,
   deriveCoursFromTagsFromStore,
 } from './etl/cours.mjs'
-import { fetchPeriodHtml, enumeratePastSeasons, seasonOfMonth } from './nico/period.mjs'
+import { fetchPeriodHtml, enumeratePastSeasons } from './nico/period.mjs'
 import { recalcSeriesMetrics } from './etl/metrics.mjs'
 import { exportAll } from './export/export.mjs'
-import { selfHealEmptySeries, backfillSeries } from './backfill.mjs'
+import { selfHealEmptySeries } from './backfill.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -72,15 +71,13 @@ import {
   writeSeriesFiles,
   upsertEpisodes as storeUpsertEps,
   upsertSeries as storeUpsertSeries,
-  linkEpisodes as storeLinkEps,
   updateSeries as storeUpdateSeries,
   syncSeriesThumbnails as storeSyncThumbs,
   syncSeriesTimestamps as storeSyncTimestamps,
   updateMetaState as storeUpdateMeta,
   upsertRssItems as storeUpsertRss,
+  updateRssResolution as storeUpdateRssResolution,
   replaceSeriesTags as storeReplaceSeriesTags,
-  countOrphanEpisodes,
-  selectSeedTargets,
   countSeriesWithEpisodes,
   chronoSort,
 } from './store/store.mjs'
@@ -93,15 +90,6 @@ const DB_PATH = join(DATA_DIR, 'build.sqlite')
 const CLI_ARGS = process.argv.slice(2)
 const CLI_MODE = CLI_ARGS.find((a) => a.startsWith('--mode='))?.split('=')[1] ?? 'full'
 const CLI_CHECK_VERSION = CLI_ARGS.includes('--check-version')
-
-/** 現在の日付から季節を返す */
-function currentSeason(date) {
-  const m = new Date(date).getMonth() + 1
-  if (m <= 3) return 'winter'
-  if (m <= 6) return 'spring'
-  if (m <= 9) return 'summer'
-  return 'autumn'
-}
 
 // 過去季クールを遡る下限の年（dアニメ支店の配信開始相当）。環境変数で調整可。
 const COURS_FROM_YEAR = Number(process.env.NICO_COURS_FROM_YEAR ?? 2016)
@@ -215,16 +203,7 @@ async function runCoursPipeline(db, now) {
   for (const [id, cours] of tagMap) updateSeriesFields(db, id, { cours, updated_at: now })
   logger.info('fetch', 'E3 cours from tags (primary)', { count: tagMap.size })
 
-  // 2. 補完＝今季 programlist（タグに季が無い作品のみ）
-  const programlist = await fetchProgramlist()
-  const coursLabel = makeCoursLabel(new Date(now).getFullYear(), currentSeason(now))
-  const curMap = mapCurrentCours(programlist, coursLabel)
-  const fillStmt = db.prepare(
-    'UPDATE series SET cours = ?, updated_at = ? WHERE series_id = ? AND cours IS NULL AND is_available = 1'
-  )
-  let curAdded = 0
-  for (const [id] of curMap) curAdded += fillStmt.run(coursLabel, now, id).changes
-  logger.info('fetch', 'E3b cours from programlist (fill)', { added: curAdded })
+  // 2. 補完＝今季 programlist（廃止 → スキップ）
 
   // 3. 補完＝period 日本語タイトル突合（さらに欠落分・derivePastCours は cours NULL のみ埋める）
   const pastCours = await derivePastCours(db, now)
@@ -356,21 +335,8 @@ async function runHourly() {
   // 対応付け → そのシリーズだけ nvapi v2/series を取得して各話を挿入（§85 backfillSeries 流用）。
   // ＝新規話が再生数/投稿時間/サムネ/シリーズ紐付き付きで DB に入る。新規シリーズや舞台等で
   // 対応シリーズが無いものは rss_only 据え置き（日次 full の snapshot で回収）。
+  // Phase D2: matchRssOnlyToSeries は廃止（JS 版に移行済み）
   let insertedEpisodes = 0
-  const targetSeries = matchRssOnlyToSeries(db)
-  if (targetSeries.length > 0) {
-    logger.info('fetch', 'phase D2: resolve new episodes via nvapi', {
-      series: targetSeries.length,
-    })
-    const stats = await backfillSeries(db, targetSeries, { dryRun: false })
-    insertedEpisodes = stats.episodes
-    if (insertedEpisodes > 0) {
-      syncSeriesThumbnails(db)
-      syncSeriesTimestamps(db)
-      resolveRssItems(db) // 挿入後に再解決＝rss_only→resolved（サムネ/再生数付き新着に）
-    }
-    logger.info('fetch', 'phase D2 done', { ...stats })
-  }
 
   // ── 回帰ガード（§G）：痩せたDBから export して state/live を縮小しないよう検査 ──
   // 既存 works.json（復元済みの完全データ）より各話あり series が大きく減るなら、export
@@ -397,102 +363,6 @@ async function runHourly() {
     writeFileSync(join(DATA_DIR, '.deploy-needed'), `${insertedEpisodes}\n`)
   }
   logger.info('fetch', 'hourly done', { now, insertedEpisodes })
-}
-
-/**
- * rss_only の RSS アイテムを series-titles Map でマッチ（§D2 hourly）。
- * タイトル形式: "シリーズ名 第N話 サブタイトル" → series.title が RSS title の先頭一致（最長一致）。
- * 境界チェック: prefix 直後が空白・「第」・数字・文字列終端であること（誤食い防止）。
- * @param {import('./store/store.mjs').RssEntry[]} rssOnlyItems
- * @param {Map<number, string>} seriesTitles - seriesId → title（series-titles.json から）
- * @returns {Set<number>} マッチした seriesId の集合
- */
-function matchRssOnlyFromTitles(rssOnlyItems, seriesTitles) {
-  const norm = (s) => (s ?? '').replace(/\s+/gu, ' ').trim()
-  const isBoundary = (str, pos) => {
-    if (pos >= str.length) return true
-    const c = str[pos]
-    return c === ' ' || c === '第' || /\d/.test(c)
-  }
-  const matched = new Set()
-  for (const item of rssOnlyItems) {
-    const t = norm(item.title ?? '')
-    if (!t) continue
-    let best = null
-    for (const [sid, title] of seriesTitles) {
-      const nt = norm(title)
-      if (!nt) continue
-      if (t.startsWith(nt) && isBoundary(t, nt.length)) {
-        if (!best || nt.length > best.len) best = { sid, len: nt.length }
-      }
-    }
-    if (best) matched.add(best.sid)
-  }
-  return matched
-}
-
-/**
- * Store の孤児エピソード（seriesId == null）を既存シリーズにタイトル前方一致で対応付ける（§S1）。
- * エピソードタイトルは「<シリーズ名> 第N話 <サブタイトル>」形式。最長一致で seriesId を特定。
- * @param {import('./store/store.mjs').Store} store
- * @returns {Set<number>} 対応できた seriesId の集合
- */
-function matchOrphanEpsToSeries(store) {
-  const norm = (s) => (s ?? '').replace(/\s+/gu, ' ').trim()
-  const orphanTitles = []
-  for (const ep of store.episodes.values()) {
-    if (ep.seriesId == null && ep.title) orphanTitles.push(norm(ep.title))
-  }
-  if (orphanTitles.length === 0) return new Set()
-
-  const series = []
-  for (const s of store.series.values()) {
-    if (s.isAvailable && s.title) series.push({ sid: s.seriesId, t: norm(s.title) })
-  }
-
-  const ids = new Set()
-  for (const t of orphanTitles) {
-    let best = null
-    for (const s of series) {
-      if (s.t.length > 0 && t.startsWith(s.t) && (!best || s.t.length > best.len)) {
-        best = { sid: s.sid, len: s.t.length }
-      }
-    }
-    if (best) ids.add(best.sid)
-  }
-  return ids
-}
-
-/**
- * 未解決(rss_only)の新着 RSS を、既存シリーズに title 前方一致（最長一致）で対応付ける（§D）。
- * RSS title は「<シリーズ名> 第N話 <サブタイトル>」形式。先頭がどの series.title で始まるかで判定。
- * @param {import('better-sqlite3').Database} db
- * @returns {number[]} 重複除去した対応シリーズ id
- */
-function matchRssOnlyToSeries(db) {
-  const norm = (s) => (s ?? '').replace(/\s+/gu, ' ').trim()
-  const rssOnly = db
-    .prepare(
-      "SELECT title FROM rss_items WHERE resolution_status = 'rss_only' AND title IS NOT NULL"
-    )
-    .all()
-  if (rssOnly.length === 0) return []
-  const series = db
-    .prepare('SELECT series_id, title FROM series WHERE is_available = 1 AND title IS NOT NULL')
-    .all()
-    .map((s) => ({ id: s.series_id, t: norm(s.title) }))
-    .filter((s) => s.t.length > 0)
-  const ids = new Set()
-  for (const r of rssOnly) {
-    const t = norm(r.title)
-    let best = null
-    for (const s of series) {
-      if (t.startsWith(s.t) && (!best || s.t.length > best.len))
-        best = { id: s.id, len: s.t.length }
-    }
-    if (best) ids.add(best.id)
-  }
-  return [...ids]
 }
 
 async function main() {
@@ -702,19 +572,18 @@ function detectShrinkFromStore(store, dataDir, threshold = 0.9) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Store ベース クールパイプライン（M3）
+// Store ベース E3 クール（タグ主源のみ・programlist/period は廃止）
 // ────────────────────────────────────────────────────────────────────────────
 
-async function runCoursPipelineFromStore(store, now, cachedProgramlist = null) {
-  // 0. クリア（is_available シリーズのみ）。cours が変化したものを dirty 追跡。
+function runCoursFromTagsOnly(store) {
+  // クリア（全シリーズの cours を null に）
   for (const s of store.series.values()) {
-    if (s.isAvailable && s.cours !== null) {
+    if (s.cours !== null) {
       s.cours = null
       store._dirtySeries.add(s.seriesId)
     }
   }
-
-  // 1. 主源 = 第1話タグの「YYYY年<季>アニメ」から放送季を導出
+  // 主源 = 第1話タグの「YYYY年<季>アニメ」から放送季を導出
   const tagMap = deriveCoursFromTagsFromStore(store, chronoSort)
   for (const [id, cours] of tagMap) {
     const s = store.series.get(id)
@@ -723,188 +592,172 @@ async function runCoursPipelineFromStore(store, now, cachedProgramlist = null) {
       store._dirtySeries.add(id)
     }
   }
-  logger.info('fetch', 'E3 cours from tags (primary)', { count: tagMap.size })
-
-  // 2. 補完 = 今季 programlist（Phase B で取得済みなら再利用）
-  const programlist = cachedProgramlist ?? (await fetchProgramlist())
-  const coursLabel = makeCoursLabel(new Date(now).getFullYear(), currentSeason(now))
-  const curMap = mapCurrentCours(programlist, coursLabel)
-  let curAdded = 0
-  for (const [id] of curMap) {
-    const s = store.series.get(id)
-    if (s && s.isAvailable && s.cours == null) {
-      s.cours = coursLabel
-      store._dirtySeries.add(id)
-      curAdded++
-    }
-  }
-  logger.info('fetch', 'E3b cours from programlist (fill)', { added: curAdded })
-
-  // 3. 補完 = period 日本語タイトル突合（cours IS NULL のみ）
-  const pastCours = await derivePastCoursFromStore(store, now)
-  logger.info('fetch', 'E3c cours from period (fill)', pastCours)
-}
-
-async function derivePastCoursFromStore(store, now) {
-  // S3: period-cache.json で過去季 HTML のパース結果をキャッシュ。
-  // 現行季の直近1季（前季）のみ毎日再取得。月次で全季リフレッシュ。
-  const { readFile: rf, writeFile: wf, mkdir: md, rename: rn } = await import('node:fs/promises')
-  const stateDir = join(DATA_DIR, 'state')
-  const cachePath = join(stateDir, 'period-cache.json')
-  const monthKey = now.slice(0, 7) // 'YYYY-MM'
-
-  let cache = { format: 1, monthlyRefreshKey: monthKey, seasons: {} }
-  try {
-    const raw = JSON.parse(await rf(cachePath, 'utf-8'))
-    if (raw.format === 1 && raw.monthlyRefreshKey === monthKey) cache = raw
-    // monthlyRefreshKey が変わった場合 → seasons を空にしてフルリフレッシュ
-  } catch {
-    /* キャッシュなし → 初回 */
-  }
-
-  // 直近1季（前季）を特定 → 必ず再取得する季
-  const nowDate = new Date(now)
-  const curYear = nowDate.getFullYear()
-  const curSeason = seasonOfMonth(nowDate.getMonth() + 1)
-  const SEASON_ORDER = ['winter', 'spring', 'summer', 'autumn']
-  const curIdx = SEASON_ORDER.indexOf(curSeason)
-  const prevSeason =
-    curIdx === 0
-      ? { year: curYear - 1, season: 'autumn' }
-      : { year: curYear, season: SEASON_ORDER[curIdx - 1] }
-
-  const assigned = new Set()
-  for (const s of store.series.values()) {
-    if (s.isAvailable && s.cours != null) assigned.add(s.seriesId)
-  }
-  const seriesMap = new Map()
-  for (const s of store.series.values()) {
-    if (s.isAvailable) seriesMap.set(s.seriesId, s.title)
-  }
-
-  const seasons = enumeratePastSeasons(nowDate, COURS_FROM_YEAR)
-  let assignedCount = 0
-  let seasonsWithData = 0
-  let cacheHits = 0
-
-  for (const { year, season } of seasons) {
-    const key = `${year}-${season}`
-    const mustRefetch = year === prevSeason.year && season === prevSeason.season
-
-    let cachedData = cache.seasons[key]
-
-    if (!mustRefetch && cachedData) {
-      // キャッシュヒット: HTTP 省略（series 突合のみ実行）
-      cacheHits++
-    } else {
-      // HTTP 取得 + キャッシュ更新
-      let parsedResult
-      try {
-        const res = await fetchPeriodHtml(year, season)
-        if (res.status !== 200 || !res.body) continue
-        parsedResult = parsePeriodHtml(res.body, key)
-      } catch (err) {
-        logger.warn('fetch', 'period fetch failed (skip season)', {
-          year,
-          season,
-          error: err.message,
-        })
-        continue
-      }
-      if (!parsedResult.title.includes('dアニメストア') || parsedResult.slugs.length < 1) continue
-      cachedData = {
-        entries: parsedResult.entries,
-        title: parsedResult.title,
-        slugs: parsedResult.slugs,
-      }
-      cache.seasons[key] = cachedData
-    }
-
-    if (!cachedData) continue
-    seasonsWithData++
-
-    const coursLabel = makeCoursLabel(year, season)
-    const matches = matchPeriodEntriesToSeries(cachedData.entries, seriesMap)
-    let seasonAssigned = 0
-    for (const m of matches) {
-      if (m.seriesId == null || m.confidence < COURS_MATCH_MIN) continue
-      if (assigned.has(m.seriesId)) continue
-      const s = store.series.get(m.seriesId)
-      if (!s || !s.isAvailable) continue
-      s.cours = coursLabel
-      store._dirtySeries.add(m.seriesId)
-      assigned.add(m.seriesId)
-      assignedCount++
-      seasonAssigned++
-    }
-    logger.info('fetch', 'period season done', {
-      cours: coursLabel,
-      entries: cachedData.entries.length,
-      assigned: seasonAssigned,
-      cached: !mustRefetch && cacheHits > 0,
-    })
-  }
-
-  // キャッシュ保存（書き込み失敗は非致命的）
-  try {
-    await md(stateDir, { recursive: true })
-    const tmpPath = cachePath + '.tmp'
-    await wf(tmpPath, JSON.stringify(cache), 'utf-8')
-    await rn(tmpPath, cachePath)
-  } catch (err) {
-    logger.warn('fetch', 'period-cache write failed (non-fatal)', { error: err.message })
-  }
-
-  logger.info('fetch', 'period parse done', { cacheHits, seasonsWithData, assignedCount })
-  return { seasons: seasonsWithData, assigned: assignedCount }
+  logger.info('fetch', '[JS] E3 cours from tags (primary)', { count: tagMap.size })
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Store 版 self-heal（C4: §85 パリティ）
+// Phase E7: isAvailable grace（snapshot 由来）
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * ep=0 のシリーズを nvapi で reseed する（Store 版 selfHealEmptySeries）。
- * @param {import('./store/store.mjs').Store} store
- * @param {{ limit?: number }} opts
+ * lastSeenAt ＋ snapshotFetchedAt ＋ 2日猶予で isAvailable を評価する。
+ * snapshotFetchedAt が 3日以上前の場合は評価しない（連続 version gate skip 保護）。
  */
-async function selfHealEmptySeriesJS(store, opts = {}) {
-  const epCountBySeriesId = new Map()
-  for (const ep of store.episodes.values()) {
-    if (ep.seriesId != null)
-      epCountBySeriesId.set(ep.seriesId, (epCountBySeriesId.get(ep.seriesId) ?? 0) + 1)
-  }
-  let targets = [...store.series.values()]
-    .filter((s) => s.isAvailable && (epCountBySeriesId.get(s.seriesId) ?? 0) === 0)
-    .map((s) => s.seriesId)
+function applyIsAvailableGrace(store) {
+  const fetched = store.meta.snapshotFetchedAt
+  if (!fetched) return
+  const fetchedMs = new Date(fetched).getTime()
+  const staleMs = 3 * 24 * 60 * 60 * 1000 // 3日
+  const graceMs = 2 * 24 * 60 * 60 * 1000 // 2日猶予
 
-  if (opts.limit != null) targets = targets.slice(0, opts.limit)
-  if (targets.length === 0) {
-    logger.info('fetch', '[JS] self-heal: no empty series', {})
-    return { processed: 0, inserted: 0 }
+  if (Date.now() - fetchedMs > staleMs) {
+    logger.info('fetch', '[JS] E7 isAvailable grace: snapshotFetchedAt too old → skip', {
+      snapshotFetchedAt: fetched,
+    })
+    return
   }
-  logger.info('fetch', '[JS] self-heal: empty series found', { count: targets.length })
 
-  let inserted = 0
-  await seedAllSeries(targets, async (seriesId, data) => {
-    const eps = mapNvapiEpisodes(seriesId, data.items ?? [])
-    if (eps.length > 0) {
-      storeUpsertEps(store, eps)
-      inserted += eps.length
-      store._dirtySeries.add(seriesId)
+  const cutoff = new Date(fetchedMs - graceMs).toISOString()
+  let toFalse = 0
+  let toTrue = 0
+  for (const s of store.series.values()) {
+    const seen = s.lastSeenAt
+    const shouldBeAvailable = seen != null && seen >= cutoff
+    if (!shouldBeAvailable && s.isAvailable) {
+      s.isAvailable = false
+      store._dirtySeries.add(s.seriesId)
+      toFalse++
+    } else if (shouldBeAvailable && !s.isAvailable) {
+      s.isAvailable = true
+      store._dirtySeries.add(s.seriesId)
+      toTrue++
     }
-  })
-  logger.info('fetch', '[JS] self-heal: nvapi done', { processed: targets.length, inserted })
-  return { processed: targets.length, inserted }
+  }
+  logger.info('fetch', '[JS] E7 isAvailable grace applied', { toFalse, toTrue, cutoff })
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// M3: --mode=full-js  Store ベース フルパイプライン
+// Phase A2: 取得漏れ救出ループ
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * snapshot で seriesId=null になった ep を最小 watch 数で救出する。
+ * @param {import('./store/store.mjs').Store} store
+ * @param {Set<string>} missedContentIds  救出対象 contentId（変更される）
+ * @param {Map<string,number>} contentToSeries  既知の contentId→seriesId インデックス（更新される）
+ */
+async function rescueMissingEps(store, missedContentIds, contentToSeries) {
+  if (missedContentIds.size === 0) return
+
+  // ① series-index に既にある contentId → 直接解決（watch 不要）
+  for (const cid of [...missedContentIds]) {
+    const sid = contentToSeries.get(cid)
+    if (sid != null) {
+      const ep = store.episodes.get(cid)
+      if (ep && ep.seriesId == null) {
+        ep.seriesId = sid
+        store._dirtySeries.add(sid)
+      }
+      missedContentIds.delete(cid)
+    }
+  }
+  logger.info('fetch', '[JS] A2 direct resolve', {
+    directResolved: contentToSeries.size,
+    remaining: missedContentIds.size,
+  })
+
+  // ② 残りを最小 watch 数ループ: 1watch → seriesId → nvapi → Set 交差
+  let watchCount = 0
+  while (missedContentIds.size > 0) {
+    const cid = [...missedContentIds][0]
+    const info = await fetchWatchSeriesInfo(cid)
+    watchCount++
+
+    if (!info || info.channelId !== 'ch2632720') {
+      // 支店外 or エラー → この contentId はスキップ
+      logger.info('fetch', '[JS] A2 watch: not branch or null, skip', {
+        cid,
+        channelId: info?.channelId,
+      })
+      missedContentIds.delete(cid)
+      continue
+    }
+
+    const { seriesId, seriesTitle } = info
+
+    // 新規シリーズなら Store に追加
+    if (!store.series.has(seriesId)) {
+      storeUpsertSeries(store, [{ seriesId, title: seriesTitle ?? '', isAvailable: true }])
+    }
+
+    // nvapi v2/series → 全話 contentId 一覧
+    let nvapiData
+    try {
+      nvapiData = await fetchSeriesData(seriesId)
+    } catch (err) {
+      logger.warn('fetch', '[JS] A2 nvapi failed', { seriesId, err: err.message })
+      missedContentIds.delete(cid)
+      continue
+    }
+
+    const eps = mapNvapiEpisodes(seriesId, nvapiData?.items ?? [])
+    storeUpsertEps(store, eps)
+
+    const allContentIds = new Set(eps.map((e) => e.contentId))
+    // 交差で同一シリーズの取得漏れを一括解決
+    for (const missed of [...missedContentIds]) {
+      if (allContentIds.has(missed)) {
+        const ep = store.episodes.get(missed)
+        if (ep && ep.seriesId == null) {
+          ep.seriesId = seriesId
+          store._dirtySeries.add(seriesId)
+        }
+        contentToSeries.set(missed, seriesId)
+        missedContentIds.delete(missed)
+      }
+    }
+    contentToSeries.set(cid, seriesId)
+    // cid が nvapi の episode 一覧にない場合（削除済み等）も Set から除去して無限ループ防止
+    missedContentIds.delete(cid)
+  }
+  logger.info('fetch', '[JS] A2 rescue done', { watchCount })
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// rss.json trim（200件・oldest/resolved優先削除）
+// ────────────────────────────────────────────────────────────────────────────
+
+function _trimRss(store, maxItems = 200) {
+  const all = [...store.rss.values()]
+  if (all.length <= maxItems) return
+
+  const byDate = (a, b) => {
+    if (!a.pubDate && !b.pubDate) return 0
+    if (!a.pubDate) return -1 // pubDate なし = 古い扱い
+    if (!b.pubDate) return 1
+    return a.pubDate < b.pubDate ? -1 : a.pubDate > b.pubDate ? 1 : 0
+  }
+
+  // resolved を先に削除候補に（oldest first）、続いて rss_only / unresolved（oldest first）
+  const resolved = all.filter((r) => r.resolutionStatus === 'resolved').sort(byDate)
+  const unresolved = all.filter((r) => r.resolutionStatus !== 'resolved').sort(byDate)
+  const toDelete = [...resolved, ...unresolved].slice(0, all.length - maxItems)
+  for (const r of toDelete) {
+    store.rss.delete(r.watchId)
+  }
+  if (toDelete.length > 0) {
+    logger.info('fetch', '[JS] rss trim', { deleted: toDelete.length, remaining: store.rss.size })
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// M3: --mode=full-js  Store ベース フルパイプライン（新設計）
 // ────────────────────────────────────────────────────────────────────────────
 
 async function runFullJS() {
   mkdirSync(DATA_DIR, { recursive: true })
   const now = new Date().toISOString()
+  const stateDir = join(DATA_DIR, 'state')
 
   logger.info('fetch', '[JS] loadStore start')
   const store = await loadStore(DATA_DIR)
@@ -914,185 +767,100 @@ async function runFullJS() {
     rss: store.rss.size,
   })
 
-  // ── Phase A: Snapshot ──────────────────────────────────────────────────────
-  logger.info('fetch', '[JS] phase A: snapshot')
+  // ── version gate ──────────────────────────────────────────────────────────
   const forceSnapshot = process.env.NICO_FORCE_SNAPSHOT === '1'
-  const storedVersion = forceSnapshot ? null : (store.meta.snapshotVersionLastModified ?? null)
   if (forceSnapshot) logger.info('fetch', '[JS] NICO_FORCE_SNAPSHOT=1: version gate bypassed', {})
+  const storedVersion = forceSnapshot ? null : (store.meta.snapshotVersionLastModified ?? null)
   const snapResult = await fetchAllBranchEpisodes(storedVersion)
 
-  if (!snapResult.skipped) {
-    const { episodes, newVersion } = snapResult
-    assertSnapshotOk({ meta: { status: 200, totalCount: episodes.length }, data: episodes }, null)
-    // snapshot の生タグ文字列 → processEpisodeTags でタグ配列化
-    // （fetch.mjs では tags は space-separated string → Store は string[]）
-    const { processEpisodeTags } = await import('./etl/tags.mjs')
-    const mappedEps = episodes.map((ep) => {
-      const processedTags = processEpisodeTags(ep.tags ?? '', null)
-      return {
-        ...ep,
-        tags: processedTags.map((t) => t.name),
-        tagsCurated: processedTags.filter((t) => t.isCurated).map((t) => t.name),
-        // lastUpdated は upsertEpisodes の実変化チェックで設定（無条件の now を排除）
-      }
+  if (snapResult.skipped) {
+    logger.info('fetch', '[JS] snapshot version unchanged → immediate exit', {
+      version: storedVersion,
     })
-    storeUpsertEps(store, mappedEps)
-    storeUpdateMeta(store, { snapshotVersionLastModified: newVersion })
-    logger.info('fetch', '[JS] snapshot done', { count: episodes.length })
-  } else {
-    logger.info('fetch', '[JS] snapshot version unchanged, skipping')
+    return
   }
 
-  // ── Phase B: list.json → col_key + series 登録 + is_available 同期 ──────
-  logger.info('fetch', '[JS] phase B: list.json')
-  const listJson = await fetchListJson()
-  const listSeriesIds = new Set()
-  const seriesFromList = []
-
-  for (const item of listJson) {
-    const seriesId = extractSeriesIdFromUrl(item.url)
-    if (!seriesId) continue
-    listSeriesIds.add(seriesId)
-    seriesFromList.push({
-      seriesId,
-      title: item.title,
-      colKey: item.col_key ?? null,
-      isAvailable: true,
-    })
+  // ── prev-views.json 保存（Phase A 前・hot delta 用）───────────────────────
+  {
+    const prevViews = {}
+    for (const ep of store.episodes.values()) {
+      if (ep.prevViewCounter != null) prevViews[ep.contentId] = ep.prevViewCounter
+    }
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, 'prev-views.json') + '.tmp', JSON.stringify(prevViews), 'utf-8')
+    renameSync(join(stateDir, 'prev-views.json') + '.tmp', join(stateDir, 'prev-views.json'))
+    logger.info('fetch', '[JS] prev-views.json saved', { count: Object.keys(prevViews).length })
   }
 
-  // programlist.json から今季新規シリーズを補完取得（list.json の更新遅延を吸収）。
-  // list.json に未収録でも programlist に存在する current-season series は mint して
-  // Phase C の nvapi seed 対象に含める。isAvailable=true のまま保持。
-  const programlist = await fetchProgramlist()
-  const programlistSeriesIds = new Set()
-  const mintFromProgramlist = []
-  for (const item of programlist) {
-    if (!item.series) continue
-    const sid = Number(item.series)
-    programlistSeriesIds.add(sid)
-    if (!listSeriesIds.has(sid)) {
-      // list.json にない series → 新規 mint（title は item.title、nvapi で後補完）
-      mintFromProgramlist.push({ seriesId: sid, title: item.title ?? '', isAvailable: true })
+  // ── Phase A: Snapshot ─────────────────────────────────────────────────────
+  logger.info('fetch', '[JS] phase A: snapshot')
+  const { episodes: snapEps, newVersion } = snapResult
+  assertSnapshotOk({ meta: { status: 200, totalCount: snapEps.length }, data: snapEps }, null)
+
+  const { processEpisodeTags } = await import('./etl/tags.mjs')
+  const mappedEps = snapEps.map((ep) => {
+    const processedTags = processEpisodeTags(ep.tags ?? '', null)
+    return {
+      ...ep,
+      tags: processedTags.map((t) => t.name),
+      tagsCurated: processedTags.filter((t) => t.isCurated).map((t) => t.name),
+    }
+  })
+  storeUpsertEps(store, mappedEps)
+
+  // lastSeenAt 収集 + missedContentIds（seriesId=null の ep）
+  const snapshotContentIds = new Set(mappedEps.map((ep) => ep.contentId))
+  const missedContentIds = new Set()
+  for (const ep of mappedEps) {
+    if (store.episodes.get(ep.contentId)?.seriesId == null) {
+      missedContentIds.add(ep.contentId)
     }
   }
 
-  // list.json 外かつ programlist 外のシリーズのみ unavailable にマーク
-  // （programlist 由来の新規 series は isAvailable のまま維持する）
-  for (const s of store.series.values()) {
-    if (!listSeriesIds.has(s.seriesId) && !programlistSeriesIds.has(s.seriesId) && s.isAvailable) {
-      s.isAvailable = false
-      store._dirtySeries.add(s.seriesId)
-    }
-  }
-  // list.json 収録シリーズを upsert（新規は追加、既存は title/colKey 更新）
-  storeUpsertSeries(store, seriesFromList)
-  // colKey を明示的に設定（upsertSeries は colKey を保護しないので直接更新）
-  for (const item of seriesFromList) {
-    if (item.colKey)
-      storeUpdateSeries(store, item.seriesId, { colKey: item.colKey, isAvailable: true })
-  }
-  // programlist 由来の新規シリーズを mint
-  if (mintFromProgramlist.length > 0) {
-    storeUpsertSeries(store, mintFromProgramlist)
-    logger.info('fetch', '[JS] programlist: new series minted', {
-      count: mintFromProgramlist.length,
-    })
-  }
-  logger.info('fetch', '[JS] list.json done', {
-    count: seriesFromList.length,
-    programlistMint: mintFromProgramlist.length,
+  storeUpdateMeta(store, { snapshotVersionLastModified: newVersion, snapshotFetchedAt: now })
+  logger.info('fetch', '[JS] snapshot done', {
+    count: snapEps.length,
+    missed: missedContentIds.size,
   })
 
-  // ── Phase C: nvapi seed（§S1: 対象限定。全件は週次/force のみ）──────────────
-  // 孤児発生時は title 前方一致で対応 series に限定（nvapi が ep を未収録でも無駄打ちしない）。
-  // snapshot が先にインデックス化した新着 ep は nvapi 側が追いつくまで seriesId=null のまま
-  // 残るが、週次 / force の全件 seed で自然解消する。閾値起動の全件 seed は廃止。
-  const orphans = countOrphanEpisodes(store)
-  const daysSinceRefresh = store.meta.lastSeedAt
-    ? (Date.now() - new Date(store.meta.lastSeedAt).getTime()) / 86400000
-    : Infinity
-  const forceSeed = process.env.NICO_FORCE_SEED === '1'
-  const weeklyOrForce = forceSeed || daysSinceRefresh >= 7
-
-  let seedTargets
-  let seedMode
-  if (weeklyOrForce) {
-    // 全件 seed（週次 / force のみ）
-    seedTargets = [...store.series.keys()].filter((sid) => store.series.get(sid).isAvailable)
-    seedMode = forceSeed ? 'force' : 'weekly'
-  } else if (orphans > 0) {
-    // 孤児をタイトル前方一致で対応シリーズに限定 + 新規のみ（ep=0）
-    const orphanMatched = matchOrphanEpsToSeries(store)
-    const newOnly = selectSeedTargets(store, { insufficientThreshold: 0, allIfOrphans: false })
-    const combined = new Set([...orphanMatched, ...newOnly])
-    seedTargets = [...combined]
-    seedMode = 'targeted'
-  } else {
-    // 孤児ゼロ：新規（ep=0）のみ。ep≤3の再照合は週次（weeklyOrForce）で実行
-    seedTargets = selectSeedTargets(store, { insufficientThreshold: 0, allIfOrphans: false })
-    seedMode = 'new-only'
-  }
-
-  if (seedTargets.length > 0) {
-    logger.info('fetch', '[JS] phase C: nvapi seed', {
-      mode: seedMode,
-      total: seedTargets.length,
-      orphans,
-      daysSinceRefresh: Math.round(daysSinceRefresh),
-    })
-    await seedAllSeries(seedTargets, async (seriesId, data) => {
-      const updates = mapNvapiItems(seriesId, data.items ?? [])
-      if (updates.length > 0) storeLinkEps(store, updates)
-      // nvapi detail.title で title が空の series を補完（programlist mint した新規 series 用）
-      if (data.detail?.title) {
-        const s = store.series.get(seriesId)
-        if (s && !s.title) {
-          storeUpdateSeries(store, seriesId, { title: data.detail.title })
-        }
-      }
-    })
-    storeUpdateMeta(store, { lastSeedAt: now })
-  } else {
-    logger.info('fetch', '[JS] phase C: nvapi seed skipped', {
-      orphans,
-      daysSinceRefresh: Math.round(daysSinceRefresh),
-    })
-  }
-
-  // ── Phase D: RSS 新着 ──────────────────────────────────────────────────────
-  logger.info('fetch', '[JS] phase D: RSS')
-  const rssResult = await fetchRss()
-  if (rssResult.status === 200 && rssResult.body) {
-    const { channelTitle, items } = parseRssXml(rssResult.body)
-    assertRssOk(items, channelTitle)
-    const newItems = filterNewRssItems(items, store.meta.rssLastGuid ?? null)
-    const rssRows = newItems
-      .map((item) => {
-        const watchId = extractWatchId(item.link)
-        if (!watchId) return null
-        return {
-          watchId,
-          guid: item.guid ?? null,
-          pubDate: item.pubDate ?? null,
-          title: item.title ?? null,
-          titleNorm: null,
-          link: item.link ?? null,
-        }
-      })
-      .filter(Boolean)
-    if (rssRows.length > 0) {
-      storeUpsertRss(store, rssRows)
-      resolveRssItemsFromStore(store)
-      logger.info('fetch', '[JS] RSS new items inserted', { count: rssRows.length })
+  // ── Phase A2: 取得漏れ救出 ────────────────────────────────────────────────
+  if (missedContentIds.size > 0) {
+    logger.info('fetch', '[JS] phase A2: rescue missing eps', { count: missedContentIds.size })
+    const contentToSeries = new Map()
+    for (const ep of store.episodes.values()) {
+      if (ep.seriesId != null) contentToSeries.set(ep.contentId, ep.seriesId)
     }
-    const newLastGuid = items[0]?.guid ?? store.meta.rssLastGuid
-    if (newLastGuid) storeUpdateMeta(store, { rssLastGuid: newLastGuid })
-  } else if (rssResult.status === 304) {
-    logger.info('fetch', '[JS] RSS 304 not modified, skipping')
+    await rescueMissingEps(store, missedContentIds, contentToSeries)
+    logger.info('fetch', '[JS] phase A2: done', { remaining: missedContentIds.size })
   }
 
-  // ── Phase E: ETL 派生 ──────────────────────────────────────────────────────
+  // Phase A/A2 完了後: 今回の snapshot に含まれた ep の series に lastSeenAt を記録
+  for (const cid of snapshotContentIds) {
+    const ep = store.episodes.get(cid)
+    if (ep?.seriesId != null) {
+      const s = store.series.get(ep.seriesId)
+      if (s && s.lastSeenAt !== now) {
+        s.lastSeenAt = now
+        store._dirtySeries.add(ep.seriesId)
+      }
+    }
+  }
+
+  // ── Phase B: list.json → col_key パッチのみ ──────────────────────────────
+  logger.info('fetch', '[JS] phase B: list.json (col_key patch only)')
+  const listJson = await fetchListJson()
+  for (const item of listJson) {
+    const seriesId = extractSeriesIdFromUrl(item.url)
+    if (!seriesId || !item.col_key) continue
+    const s = store.series.get(seriesId)
+    if (s && s.colKey !== item.col_key) {
+      s.colKey = item.col_key
+      store._dirtySeries.add(seriesId)
+    }
+  }
+  logger.info('fetch', '[JS] phase B done', { count: listJson.length })
+
+  // ── Phase E: ETL 派生 ─────────────────────────────────────────────────────
   logger.info('fetch', '[JS] phase E: ETL derivation')
 
   // E1: Series overviews
@@ -1109,8 +877,8 @@ async function runFullJS() {
   }
   logger.info('fetch', '[JS] E2 series tags done', { count: seriesTags.length })
 
-  // E3: Cours（Phase B で取得済みの programlist を再利用して重複 fetch を回避）
-  await runCoursPipelineFromStore(store, now, programlist)
+  // E3: Cours（タグ主源のみ）
+  runCoursFromTagsOnly(store)
 
   // E4: Franchise keys
   const seriesTagsMap = getSeriesTagsMapFromStore(store)
@@ -1119,7 +887,6 @@ async function runFullJS() {
     if (s.isAvailable) titleMap.set(s.seriesId, s.title)
   }
   const franchiseKeys = computeFranchiseKeys(seriesTagsMap, titleMap)
-  // franchiseKey null クリア（変化した series のみ dirty）
   for (const s of store.series.values()) {
     if (s.franchiseKey !== null) {
       s.franchiseKey = null
@@ -1129,7 +896,6 @@ async function runFullJS() {
   for (const [seriesId, franchiseKey] of franchiseKeys) {
     storeUpdateSeries(store, seriesId, { franchiseKey })
   }
-  // franchise = Store の relatedSeries を再計算（直接変更のため dirty 追跡）
   const byFranchise = new Map()
   for (const s of store.series.values()) {
     if (!s.franchiseKey) continue
@@ -1153,51 +919,33 @@ async function runFullJS() {
   storeSyncThumbs(store)
   logger.info('fetch', '[JS] E6 thumbnails synced')
 
-  // E7: self-heal（任意・§85）。0話シリーズが残っていれば nvapi で reseed。
-  // 既定 OFF → --self-heal / NICO_SELF_HEAL=1 で有効
-  // --self-heal-limit= / NICO_SELF_HEAL_LIMIT= で 1 回の件数上限を絞れる
-  if (CLI_ARGS.includes('--self-heal') || process.env.NICO_SELF_HEAL === '1') {
-    const limitRaw =
-      CLI_ARGS.find((a) => a.startsWith('--self-heal-limit='))?.split('=')[1] ??
-      process.env.NICO_SELF_HEAL_LIMIT ??
-      null
-    const limit = limitRaw ? Number(limitRaw) : undefined
-    const healStats = await selfHealEmptySeriesJS(store, { limit })
-    logger.info('fetch', '[JS] E7 self-heal done', healStats)
-  }
+  // E7: isAvailable grace（snapshot 由来・lastSeenAt + snapshotFetchedAt + 2日猶予）
+  applyIsAvailableGrace(store)
 
-  // ── 回帰ガード ───────────────────────────────────────────────────────────
+  // ── 回帰ガード ────────────────────────────────────────────────────────────
   const guard = detectShrinkFromStore(store, DATA_DIR)
   if (guard.shrink) {
     logger.error('fetch', '[JS] REGRESSION GUARD: full-js would shrink → skip export', guard)
+    // snapshotFetchedAt / snapshotVersionLastModified だけは保全する
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, 'meta.json') + '.tmp', JSON.stringify(store.meta), 'utf-8')
+    renameSync(join(stateDir, 'meta.json') + '.tmp', join(stateDir, 'meta.json'))
     logger.info('fetch', '[JS] all done (guarded)', { now })
     return
   }
 
-  // ── Phase F + G: metrics + export ─────────────────────────────────────────
+  // ── Phase F+G: write-back + export ───────────────────────────────────────
   logger.info('fetch', '[JS] phase F+G: project all')
   await writeBackStore(store, DATA_DIR, { now })
   await projectAll(store, DATA_DIR, now)
 
-  // series-titles.json: hourly D2 の title prefix matching 用索引（isAvailable のみ）
-  {
-    const titlesObj = {}
-    for (const s of store.series.values()) {
-      if (s.isAvailable) titlesObj[s.seriesId] = s.title
-    }
-    const titlesPath = join(DATA_DIR, 'state', 'series-titles.json')
-    writeFileSync(titlesPath + '.tmp', JSON.stringify(titlesObj), 'utf-8')
-    renameSync(titlesPath + '.tmp', titlesPath)
-    logger.info('fetch', '[JS] series-titles.json written', {
-      count: Object.keys(titlesObj).length,
-    })
-  }
-
+  // 日次は常にデプロイ
+  writeFileSync(join(DATA_DIR, '.deploy-needed'), 'daily\n')
   logger.info('fetch', '[JS] all done', { now, ep0: guard.ep0 })
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// M4: --mode=hourly-js  Store ベース 毎時 RSS パイプライン
+// M4: --mode=hourly-js  Store ベース 毎時 RSS パイプライン（新設計）
 // ────────────────────────────────────────────────────────────────────────────
 
 async function runHourlyJS() {
@@ -1205,10 +953,8 @@ async function runHourlyJS() {
   const now = new Date().toISOString()
   const stateDir = join(DATA_DIR, 'state')
 
-  // ── Phase D: RSS 新着取得（meta + rss + series-index のみロード）────────────
   logger.info('fetch', '[JS] phase D: RSS (hourly)')
-
-  const { store: rssStore, contentToSeries } = await loadPartialStore(DATA_DIR, [])
+  const { store, contentToSeries } = await loadPartialStore(DATA_DIR, [])
 
   // series-index が空 = 初回 or 壊れた状態 → 日次 full に委ねる
   if (contentToSeries.size === 0) {
@@ -1216,135 +962,144 @@ async function runHourlyJS() {
     return
   }
 
-  // B: 複数ページ取得（最大3ページ・約72h窓）でcronの飛びを吸収
-  const lastGuid = rssStore.meta.rssLastGuid ?? null
-  const { items: newRssItems, newLastGuid } = await fetchRssMultiPage(lastGuid)
+  // ── Phase D: RSS 複数ページ取得（maxPages=5 ≈ 100件・約120h窓）─────────────
+  const lastGuid = store.meta.rssLastGuid ?? null
+  const { items: newRssItems, newLastGuid } = await fetchRssMultiPage(lastGuid, 5)
 
-  if (newRssItems.length > 0) {
-    const rssRows = newRssItems
-      .map((item) => {
-        const watchId = extractWatchId(item.link)
-        if (!watchId) return null
-        return {
-          watchId,
-          guid: item.guid ?? null,
-          pubDate: item.pubDate ?? null,
-          title: item.title ?? null,
-          titleNorm: null,
-          link: item.link ?? null,
-        }
-      })
-      .filter(Boolean)
-    if (rssRows.length > 0) {
-      storeUpsertRss(rssStore, rssRows)
-      logger.info('fetch', '[JS] hourly: new RSS items', { count: rssRows.length })
-    }
-    if (newLastGuid) storeUpdateMeta(rssStore, { rssLastGuid: newLastGuid })
-  } else {
-    logger.info('fetch', '[JS] hourly: RSS no new items', {})
+  if (newRssItems.length === 0) {
+    logger.info('fetch', '[JS] hourly: RSS no new items → exit', {})
+    // meta + rss の state だけ保存（rssLastGuid 確認のため）
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(stateDir, 'meta.json') + '.tmp', JSON.stringify(store.meta), 'utf-8')
+    renameSync(join(stateDir, 'meta.json') + '.tmp', join(stateDir, 'meta.json'))
+    return
   }
 
-  let insertedEpisodes = 0
+  // 新着アイテムを description 付きで upsert
+  const rssRows = newRssItems
+    .map((item) => {
+      const watchId = extractWatchId(item.link)
+      if (!watchId) return null
+      return {
+        watchId,
+        guid: item.guid ?? null,
+        pubDate: item.pubDate ?? null,
+        title: item.title ?? null,
+        titleNorm: null,
+        link: item.link ?? null,
+        description: item.description ?? null,
+      }
+    })
+    .filter(Boolean)
 
-  // ── Phase D2: rss_only → series title match → nvapi seed ──────────────────
-  // series-titles.json（daily full が生成）で title 前方一致マッチ → 該当シリーズのみ nvapi。
-  // works.json は書かない（全量 projection を避ける）。series/{id}.json + new.json のみ更新。
-  const rssOnlyItems = [...rssStore.rss.values()].filter(
-    (r) => r.resolutionStatus === 'rss_only' && r.title
-  )
+  if (rssRows.length > 0) {
+    storeUpsertRss(store, rssRows)
+    logger.info('fetch', '[JS] hourly: new RSS items upserted', { count: rssRows.length })
+  }
+  if (newLastGuid) storeUpdateMeta(store, { rssLastGuid: newLastGuid })
 
-  if (rssOnlyItems.length > 0) {
-    let seriesTitlesObj = {}
-    try {
-      seriesTitlesObj = JSON.parse(readFileSync(join(stateDir, 'series-titles.json'), 'utf-8'))
-    } catch {
-      logger.info(
-        'fetch',
-        '[JS] hourly: series-titles.json not found → D2 skip (next daily will resolve)',
-        {}
-      )
+  // ── Phase D2: 未解決 RSS → watch → seriesId 解決 ─────────────────────────
+  // resolved 済みはスキップ。rss_only + unresolved はすべて watch を試みる
+  const toWatch = new Map() // watchId → rssEntry
+  for (const r of store.rss.values()) {
+    if (r.resolutionStatus !== 'resolved') {
+      toWatch.set(r.watchId, r)
     }
-    const seriesTitles = new Map(Object.entries(seriesTitlesObj).map(([id, t]) => [Number(id), t]))
+  }
 
-    if (seriesTitles.size > 0) {
-      const matchedSeriesIds = matchRssOnlyFromTitles(rssOnlyItems, seriesTitles)
-      logger.info('fetch', '[JS] hourly D2: rss_only match', {
-        rssOnlyCount: rssOnlyItems.length,
-        matched: matchedSeriesIds.size,
-      })
+  // D2 前のインデックスを保存（D2 で追加した watchItem の contentId を新規カウントから除外するため）
+  const preD2Index = new Set(contentToSeries.keys())
 
-      if (matchedSeriesIds.size > 0) {
-        // マッチしたシリーズの series/*.json を読み込む（lightweight partial load）
-        const { store: seedStore } = await loadPartialStore(DATA_DIR, [...matchedSeriesIds])
-        // 更新済み RSS 状態を伝播（rssStore で upsert した内容）
-        for (const [k, v] of rssStore.rss) seedStore.rss.set(k, v)
-        seedStore.meta = { ...rssStore.meta }
+  const resolvedSeriesIds = new Set()
+  const resolvedSeriesTitles = new Map() // seriesId → title（新規シリーズ upsert 用）
+  logger.info('fetch', '[JS] hourly D2: watch resolution', { candidates: toWatch.size })
 
-        // 挿入前の contentId セット（新規カウント用）
-        const preExisting = new Set(seedStore.episodes.keys())
+  for (const [watchId] of toWatch) {
+    const info = await fetchWatchSeriesInfo(watchId)
+    if (!info || info.channelId !== 'ch2632720') {
+      storeUpdateRssResolution(store, watchId, null, 'rss_only')
+      continue
+    }
+    storeUpdateRssResolution(store, watchId, info.contentId, 'resolved')
+    resolvedSeriesIds.add(info.seriesId)
+    contentToSeries.set(info.contentId, info.seriesId)
+    if (!resolvedSeriesTitles.has(info.seriesId)) {
+      resolvedSeriesTitles.set(info.seriesId, info.seriesTitle ?? '')
+    }
+  }
 
-        // nvapi seed（支店判定付き）
-        logger.info('fetch', '[JS] hourly D2: nvapi seed', { series: matchedSeriesIds.size })
-        await seedAllSeries([...matchedSeriesIds], async (seriesId, data) => {
-          const eps = mapNvapiEpisodes(seriesId, data.items ?? [])
-          if (eps.length > 0) storeUpsertEps(seedStore, eps)
-        })
+  logger.info('fetch', '[JS] hourly D2: watch done', { resolved: resolvedSeriesIds.size })
 
-        // 本当に新しいエピソードのみカウント
-        for (const ep of seedStore.episodes.values()) {
-          if (!preExisting.has(ep.contentId)) insertedEpisodes++
-        }
+  // ── Phase D3: nvapi → 全話 upsert ────────────────────────────────────────
+  let insertedEpisodes = 0
+  if (resolvedSeriesIds.size > 0) {
+    logger.info('fetch', '[JS] hourly D3: nvapi seed', { series: resolvedSeriesIds.size })
 
-        // RSS 解決は常に実行（新規エピソードの有無にかかわらず、既存 episodes でも
-        // rss_only を resolved に昇格できる。insertedEpisodes=0 でも解決が必要なケースあり）
-        resolveRssItemsFromStore(seedStore)
-        // 解決結果を rssStore に同期（state/rss.json の書き出しに反映）
-        for (const [k, v] of seedStore.rss) rssStore.rss.set(k, v)
-        if (seedStore.meta.rssLastGuid) {
-          storeUpdateMeta(rssStore, { rssLastGuid: seedStore.meta.rssLastGuid })
-        }
+    // writeSeriesFiles のためにシリーズデータをロード（loadPartialStore は RSS/meta のみ保持のため）
+    const { store: seriesStore } = await loadPartialStore(DATA_DIR, [...resolvedSeriesIds])
+    for (const [k, v] of seriesStore.series) store.series.set(k, v)
+    for (const [k, v] of seriesStore.episodes) store.episodes.set(k, v)
 
-        if (insertedEpisodes > 0) {
-          // サムネ・タイムスタンプ同期
-          storeSyncThumbs(seedStore)
-          storeSyncTimestamps(seedStore)
-
-          // 影響シリーズの series/*.json のみ書き出し（prev-views/series-index は触らない）
-          await writeSeriesFiles(seedStore, DATA_DIR, [...matchedSeriesIds])
-
-          // series-index.json に新 contentId → seriesId エントリをマージ
-          const idxPath = join(stateDir, 'series-index.json')
-          let existingIdx = {}
-          try {
-            existingIdx = JSON.parse(readFileSync(idxPath, 'utf-8'))
-          } catch {
-            /* 初回は空 */
-          }
-          for (const ep of seedStore.episodes.values()) {
-            if (ep.seriesId != null) existingIdx[ep.contentId] = ep.seriesId
-          }
-          writeFileSync(idxPath + '.tmp', JSON.stringify(existingIdx), 'utf-8')
-          renameSync(idxPath + '.tmp', idxPath)
-
-          logger.info('fetch', '[JS] hourly D2: done', {
-            insertedEpisodes,
-            series: matchedSeriesIds.size,
-          })
-        } else {
-          logger.info('fetch', '[JS] hourly D2: no new episodes (all already known)', {})
-        }
+    // ファイル未存在の新規シリーズを watch 情報から upsert（_buildSeriesJson が null を返さないよう）
+    for (const [seriesId, title] of resolvedSeriesTitles) {
+      if (!store.series.has(seriesId)) {
+        storeUpsertSeries(store, [{ seriesId, title, isAvailable: true }])
       }
     }
+
+    for (const seriesId of resolvedSeriesIds) {
+      let data
+      try {
+        data = await fetchSeriesData(seriesId)
+      } catch (err) {
+        logger.warn('fetch', '[JS] hourly D3: nvapi failed', { seriesId, err: err.message })
+        continue
+      }
+      const eps = mapNvapiEpisodes(seriesId, data?.items ?? [])
+      // preD2Index にない contentId = 本当に新規のエピソード（D2 で追加分も除外）
+      for (const ep of eps) {
+        if (!preD2Index.has(ep.contentId)) insertedEpisodes++
+      }
+      storeUpsertEps(store, eps)
+      store._dirtySeries.add(seriesId)
+    }
+    logger.info('fetch', '[JS] hourly D3: done', {
+      insertedEpisodes,
+      series: resolvedSeriesIds.size,
+    })
   }
 
-  // ── new.json（常に更新）────────────────────────────────────────────────────
-  await exportNewStore(rssStore, DATA_DIR, now)
+  // ── rss.json trim（200件・oldest/resolved優先削除）────────────────────────
+  _trimRss(store, 200)
 
-  // ── state 書き戻し（meta + rss のみ。prev-views/series-index は daily が担当）─
+  // ── 影響シリーズ書き戻し + series-index 更新 ─────────────────────────────
+  if (store._dirtySeries.size > 0) {
+    storeSyncThumbs(store)
+    storeSyncTimestamps(store)
+    await writeSeriesFiles(store, DATA_DIR, [...store._dirtySeries])
+
+    const idxPath = join(stateDir, 'series-index.json')
+    let existingIdx = {}
+    try {
+      existingIdx = JSON.parse(readFileSync(idxPath, 'utf-8'))
+    } catch {
+      /* 初回 */
+    }
+    for (const ep of store.episodes.values()) {
+      if (ep.seriesId != null) existingIdx[ep.contentId] = ep.seriesId
+    }
+    writeFileSync(idxPath + '.tmp', JSON.stringify(existingIdx), 'utf-8')
+    renameSync(idxPath + '.tmp', idxPath)
+  }
+
+  // ── new.json ─────────────────────────────────────────────────────────────
+  await exportNewStore(store, DATA_DIR, now)
+
+  // ── state 書き戻し（meta + rss のみ）────────────────────────────────────
   mkdirSync(stateDir, { recursive: true })
-  writeFileSync(join(stateDir, 'meta.json') + '.tmp', JSON.stringify(rssStore.meta), 'utf-8')
+  writeFileSync(join(stateDir, 'meta.json') + '.tmp', JSON.stringify(store.meta), 'utf-8')
   renameSync(join(stateDir, 'meta.json') + '.tmp', join(stateDir, 'meta.json'))
-  const rssData = { lastGuid: rssStore.meta.rssLastGuid, items: [...rssStore.rss.values()] }
+  const rssData = { lastGuid: store.meta.rssLastGuid, items: [...store.rss.values()] }
   writeFileSync(join(stateDir, 'rss.json') + '.tmp', JSON.stringify(rssData), 'utf-8')
   renameSync(join(stateDir, 'rss.json') + '.tmp', join(stateDir, 'rss.json'))
 

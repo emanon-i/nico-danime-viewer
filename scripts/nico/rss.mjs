@@ -32,7 +32,7 @@ export async function fetchRss(etag = null, lastModified = null) {
  * @param {number} maxPages - 最大ページ数（デフォルト 3 ≒ 60件・約72h）
  * @returns {Promise<{items: object[], newLastGuid: string|null}>}
  */
-export async function fetchRssMultiPage(lastGuid, maxPages = 3) {
+export async function fetchRssMultiPage(lastGuid, maxPages = 5) {
   const allItems = []
   const seenGuids = new Set()
 
@@ -104,6 +104,7 @@ export function parseRssXml(xml) {
       link: get('link'),
       guid: get('guid'),
       pubDate: get('pubDate'),
+      description: get('description') || null,
     })
   }
 
@@ -201,38 +202,4 @@ export function resolveRssItems(db) {
     return index.has(key)
   }).length
   logger.info('rss', 'resolution complete', { total: unresolved.length, resolved })
-}
-
-/**
- * Store 版 resolveRssItems: unresolved/rss_only な RSS アイテムを
- * store.episodes のタイトルインデックスで contentId に解決する。
- * @param {import('../store/store.mjs').Store} store
- */
-export function resolveRssItemsFromStore(store) {
-  // 解決候補: unresolved or rss_only
-  const pending = []
-  for (const item of store.rss.values()) {
-    if (item.resolutionStatus === 'resolved') continue
-    pending.push(item)
-  }
-  if (!pending.length) return
-
-  // episodes からタイトル → contentId インデックスを構築
-  const index = new Map()
-  for (const ep of store.episodes.values()) {
-    if (!ep.title) continue
-    const key = normalizeTitleForMatch(ep.title)
-    if (key) index.set(key, ep.contentId)
-  }
-
-  let resolved = 0
-  for (const item of pending) {
-    const key = normalizeTitleForMatch(item.title ?? '')
-    const contentId = index.get(key) ?? null
-    const status = contentId ? 'resolved' : 'rss_only'
-    item.resolvedContentId = contentId
-    item.resolutionStatus = status
-    if (contentId) resolved++
-  }
-  logger.info('rss', 'resolution complete (store)', { total: pending.length, resolved })
 }

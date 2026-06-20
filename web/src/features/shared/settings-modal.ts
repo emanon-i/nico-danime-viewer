@@ -9,6 +9,10 @@ export interface SettingsModalOptions {
   showEmpty?: boolean
   /** 同トグル変更時のコールバック（§67） */
   onToggleEmpty?: (on: boolean) => void
+  /** 「取得不可の作品を表示」トグルの現在値（§PH-0013） */
+  showUnavailable?: boolean
+  /** 同トグル変更時のコールバック（§PH-0013） */
+  onToggleUnavailable?: (on: boolean) => void
 }
 
 function createModal(): HTMLElement {
@@ -51,6 +55,23 @@ function createModal(): HTMLElement {
   emptyToggleLabel.appendChild(emptyTrack)
   emptyToggleLabel.appendChild(emptyText)
   settingsSection.appendChild(emptyToggleLabel)
+
+  // 「取得不可の作品を表示」トグルスイッチ（§PH-0013・既定 OFF＝非表示）
+  const unavailToggleLabel = document.createElement('label')
+  unavailToggleLabel.className = 'settings-toggle'
+  const unavailToggle = document.createElement('input')
+  unavailToggle.type = 'checkbox'
+  unavailToggle.className = 'settings-unavail-toggle'
+  unavailToggle.setAttribute('role', 'switch')
+  const unavailTrack = document.createElement('span')
+  unavailTrack.className = 'settings-toggle-track'
+  const unavailText = document.createElement('span')
+  unavailText.className = 'settings-toggle-text'
+  unavailText.textContent = '取得不可の作品を表示'
+  unavailToggleLabel.appendChild(unavailToggle)
+  unavailToggleLabel.appendChild(unavailTrack)
+  unavailToggleLabel.appendChild(unavailText)
+  settingsSection.appendChild(unavailToggleLabel)
 
   const exportBtn = document.createElement('button')
   exportBtn.className = 'settings-export-btn'
@@ -159,6 +180,17 @@ export function initSettingsModal(
       emptyToggle.addEventListener('change', () => {
         emptyToggle.setAttribute('aria-checked', emptyToggle.checked ? 'true' : 'false')
         options.onToggleEmpty?.(emptyToggle.checked)
+      })
+    }
+
+    // 「取得不可の作品を表示」トグル（§PH-0013）
+    const unavailToggle = modal.querySelector<HTMLInputElement>('.settings-unavail-toggle')
+    if (unavailToggle) {
+      unavailToggle.checked = options.showUnavailable ?? false
+      unavailToggle.setAttribute('aria-checked', unavailToggle.checked ? 'true' : 'false')
+      unavailToggle.addEventListener('change', () => {
+        unavailToggle.setAttribute('aria-checked', unavailToggle.checked ? 'true' : 'false')
+        options.onToggleUnavailable?.(unavailToggle.checked)
       })
     }
 

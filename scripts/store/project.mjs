@@ -93,7 +93,6 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
 
   const works = []
   for (const s of store.series.values()) {
-    if (!s.isAvailable) continue
     const epCount = epCountMap.get(s.seriesId) ?? 0
     const agg = epAggMap.get(s.seriesId) ?? {}
     const m = metricsMap.get(s.seriesId)
@@ -106,6 +105,7 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       cours: s.cours,
       franchiseKey: s.franchiseKey,
       colKey: s.colKey,
+      isAvailable: s.isAvailable,
       episodeCount: epCount,
       latestAt: agg.latestAt ?? null,
       firstAt: agg.firstAt ?? null,
@@ -249,7 +249,7 @@ export async function exportCours(store, outDir, lastUpdated) {
 export async function exportKana(store, outDir, lastUpdated) {
   const grouped = new Map() // colKey → seriesId[]
   for (const s of store.series.values()) {
-    if (!s.isAvailable || !s.colKey) continue
+    if (!s.colKey) continue // isAvailable 問わず colKey があれば五十音に含める
     if (!grouped.has(s.colKey)) grouped.set(s.colKey, [])
     grouped.get(s.colKey).push({ seriesId: s.seriesId, title: s.title })
   }

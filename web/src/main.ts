@@ -66,6 +66,9 @@ let favFilter = false
 let unwatchedFilter = false
 // 空シェル（中身のない項目）も表示するか（§63・既定 OFF＝非表示・インメモリ）
 let showEmptyFilter = false
+// 取得不可の作品も表示するか（§PH-0013・既定 OFF＝非表示・localStorage 永続）
+const SHOW_UNAVAILABLE_KEY = 'nico-danime-show-unavailable'
+let showUnavailableFilter = localStorage.getItem(SHOW_UNAVAILABLE_KEY) === 'true'
 // モバイルのフィルタ/並びドロワーの開閉状態（§91・インメモリ）。SPA 再描画をまたいで保持し、
 // タグ/クールを選んでもドロワーが閉じず連続選択できるようにする。
 let filterPanelOpen = false
@@ -152,7 +155,7 @@ function buildTopData(): TopData | undefined {
   const episodeCounts: Record<number, number> = {}
   for (const w of worksArr) episodeCounts[w.seriesId] = w.episodeCount
   // 空シェル（話数0・firstAt/latestAt 無し）は Top の新着・更新列に出さない（§59 と整合）。
-  const valid = worksArr.filter((w) => (w.episodeCount ?? 0) > 0)
+  const valid = worksArr.filter((w) => (w.episodeCount ?? 0) > 0 && w.isAvailable !== false)
   // 時刻キー（ISO→ms・無効は -Infinity）。新規＝firstAt（初話）・最近更新＝latestAt（最新話）。
   const ms = (v: string | null | undefined): number => {
     const t = v ? Date.parse(v) : NaN
@@ -279,6 +282,13 @@ function wireHeaderControls(): void {
         showEmptyFilter = on
         void render()
       },
+      // 「取得不可の作品を表示」トグル（§PH-0013）
+      showUnavailable: showUnavailableFilter,
+      onToggleUnavailable: (on) => {
+        showUnavailableFilter = on
+        localStorage.setItem(SHOW_UNAVAILABLE_KEY, on ? 'true' : 'false')
+        void render()
+      },
     })
   }
 }
@@ -338,6 +348,7 @@ async function render(): Promise<void> {
       favIds,
       watchedIds,
       includeEmpty: showEmptyFilter,
+      showUnavailable: showUnavailableFilter,
     })
 
     // 投稿年の停止点。両端に「下限なし／上限なし」（§80・再生時間と同作法）。
