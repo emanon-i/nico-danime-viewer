@@ -109,8 +109,7 @@ flowchart TD
     A(["📅 full-js 起動\nJST 07:30"]) --> B["snapshot/version 取得"]
     B --> C{"version gate\nlast_modified 変化?"}
     C -->|"**変化なし → 即終了**\nB/A2/E/deploy は走らない"| ENDEARLY([" 終了（早期）"])
-    C -->|"変化あり"| PRE["prev-views.json 保存\n（Phase A の viewCounter 更新前に保存）"]
-    PRE --> D["Phase A: snapshot 全件取得\n年ウィンドウ分割 ≈17分\nupsertEps（viewCounter/tags/desc/…）\n→ missedContentIds 収集（seriesId=null の ep）\n→ meta.snapshotFetchedAt = now"]
+    C -->|"変化あり"| D["Phase A: snapshot 全件取得\n年ウィンドウ分割 ≈17分\nupsertEps（viewCounter/tags/desc/…）\n→ missedContentIds 収集（seriesId=null の ep）\n→ meta.snapshotFetchedAt = now"]
     D --> P["Phase B: 全 static JSON union（8 本）\nlist.json / programlist.json /\nexclusiveAndFastest.json / archiveExclusive.json /\ntheme1〜6.json"]
     P --> B2["B2: 各 JSON から href=/series/<id> または series:<数値> 抽出\n全 seriesId を Set に union"]
     B2 --> B3["B3: store 未保有の新 seriesId → nvapi v2/series authoritative\n全話取得・シリーズタイトル取得\n→ storeUpsertEps + storeUpsertSeries"]
@@ -272,8 +271,6 @@ version gate チェック（最初に実行・早期 exit 判定）:
               storedVersion === newVersion → **即終了**（何も書き出さない・deploy なし）
                                             B/A2/E/detectShrink/deploy は一切走らない
               新版なら: 以下を実行
-
-前処理  : prev-views.json 保存（Phase E8 が delta を読む）
 
 Phase A  : snapshot 全件取得
               storeUpsertEps: viewCounter / tags / description 等を更新

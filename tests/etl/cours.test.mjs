@@ -1,54 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parsePeriodHtml,
-  assertPeriodOk,
-  makeCoursLabel,
-  matchSlugsToSeries,
-  mapCurrentCours,
   coursFromTags,
+  normalizeTitleForMatch,
+  deriveCoursFromTagsFromStore,
 } from '../../scripts/etl/cours.mjs'
-
-const SAMPLE_PERIOD_HTML = `
-<!DOCTYPE html>
-<html>
-<head><title>2025年秋アニメ dアニメストア(ニコニコ支店)</title></head>
-<body>
-  <a href="/detail/yuru-camp/">ゆるキャン△</a>
-  <a href="/detail/sao/">ソードアート・オンライン</a>
-  <a href="/detail/yuru-camp/">重複リンク（除外）</a>
-</body>
-</html>
-`
-
-describe('parsePeriodHtml (F-0016)', () => {
-  it('test_parse_period_html: title と slug 一覧を抽出する', () => {
-    const { title, slugs } = parsePeriodHtml(SAMPLE_PERIOD_HTML, 'test')
-    expect(title).toContain('dアニメストア')
-    expect(slugs).toContain('yuru-camp')
-    expect(slugs).toContain('sao')
-    expect(slugs).toHaveLength(2) // 重複排除
-  })
-
-  it('title がない HTML は throw する', () => {
-    expect(() => parsePeriodHtml('<html><body></body></html>', 'test')).toThrow()
-  })
-})
-
-describe('assertPeriodOk (F-0016)', () => {
-  it('test_assert_period_structure: 正常 HTML はエラーなし', () => {
-    expect(() => assertPeriodOk(SAMPLE_PERIOD_HTML, 'test', 1)).not.toThrow()
-  })
-
-  it('dアニメストアを含まない title で throw する', () => {
-    const badHtml = `<html><head><title>無関係なページ</title></head><body><a href="/detail/foo/"></a></body></html>`
-    expect(() => assertPeriodOk(badHtml, 'test', 1)).toThrow()
-  })
-
-  it('slug が下限未満で throw する', () => {
-    const sparseHtml = `<html><head><title>秋アニメ dアニメストア(ニコニコ支店)</title></head><body></body></html>`
-    expect(() => assertPeriodOk(sparseHtml, 'test', 1)).toThrow()
-  })
-})
 
 describe('coursFromTags (§14・タグから放送季導出)', () => {
   it('「YYYY年<季>アニメ」から YYYY-季 を導出する', () => {
@@ -71,74 +26,136 @@ describe('coursFromTags (§14・タグから放送季導出)', () => {
   })
 })
 
-describe('makeCoursLabel (F-0016)', () => {
-  it('英語季節→日本語変換', () => {
-    expect(makeCoursLabel(2025, 'autumn')).toBe('2025-秋')
-    expect(makeCoursLabel(2026, 'spring')).toBe('2026-春')
-    expect(makeCoursLabel(2025, 'winter')).toBe('2025-冬')
-    expect(makeCoursLabel(2025, 'summer')).toBe('2025-夏')
+describe('normalizeTitleForMatch', () => {
+  it('全角スペース・記号を半角スペースに畳んで trim する', () => {
+    expect(normalizeTitleForMatch('ゆるキャン△　SEASON 3')).toBe('ゆるキャン△ season 3')
+  })
+
+  it('【】・「」・（）・句読点・！？を除去する', () => {
+    expect(normalizeTitleForMatch('【アニメ】ソードアート・オンライン！')).toBe(
+      'アニメ ソードアート オンライン'
+    )
+  })
+
+  it('null は空文字に変換する', () => {
+    expect(normalizeTitleForMatch(null)).toBe('')
+  })
+
+  it('undefined は空文字に変換する', () => {
+    expect(normalizeTitleForMatch(undefined)).toBe('')
+  })
+
+  it('英字を小文字化する', () => {
+    expect(normalizeTitleForMatch('ISEKAI')).toBe('isekai')
+  })
+
+  it('末尾スペースを trim する', () => {
+    expect(normalizeTitleForMatch('タイトル  ')).toBe('タイトル')
   })
 })
 
-describe('matchSlugsToSeries (F-0016)', () => {
-  const seriesMap = new Map([
-    [1, 'ゆるキャン△'],
-    [2, 'ソードアート・オンライン'],
-    [3, '全然関係ないアニメ'],
-  ])
+describe('deriveCoursFromTagsFromStore', () => {
+  // chronoSort: startTime 昇順（古いほど小さい）
+  const chronoSort = (a, b) => {
+    const at = a.startTime ?? ''
+    const bt = b.startTime ?? ''
+    return at < bt ? -1 : at > bt ? 1 : 0
+  }
 
-  it('test_period_series_match_confidence: 手動 override が最高信頼度で反映される', () => {
-    const overrides = { 'yuru-camp': 1 }
-    const results = matchSlugsToSeries(['yuru-camp'], seriesMap, overrides)
-    expect(results[0].seriesId).toBe(1)
-    expect(results[0].confidence).toBe(1.0)
+  const makeStore = (seriesList, episodeList) => ({
+    series: new Map(seriesList.map((s) => [s.seriesId, s])),
+    episodes: new Map(episodeList.map((ep) => [ep.contentId, ep])),
   })
 
-  it('test_period_manual_override: override テーブルが結合に反映される', () => {
-    const overrides = { 'manual-key': 99 }
-    const results = matchSlugsToSeries(['manual-key'], new Map(), overrides)
-    expect(results[0].seriesId).toBe(99)
-    expect(results[0].confidence).toBe(1.0)
+  it('isAvailable なシリーズの第1話タグからクールを導出する', () => {
+    const store = makeStore(
+      [{ seriesId: 1, isAvailable: true }],
+      [
+        {
+          contentId: 'so1',
+          seriesId: 1,
+          tags: ['2022年秋アニメ', 'ほのぼの'],
+          startTime: '2022-10-01T00:00:00+09:00',
+        },
+      ]
+    )
+    const result = deriveCoursFromTagsFromStore(store, chronoSort)
+    expect(result.get(1)).toBe('2022-秋')
   })
 
-  it('test_cours_unknown_is_null: マッチしない slug は seriesId=null', () => {
-    const results = matchSlugsToSeries(['unknown-anime-slug'], seriesMap, {})
-    expect(results[0].seriesId).toBeNull()
-    expect(results[0].confidence).toBe(0)
+  it('isAvailable=false のシリーズはスキップする', () => {
+    const store = makeStore(
+      [{ seriesId: 2, isAvailable: false }],
+      [
+        {
+          contentId: 'so2',
+          seriesId: 2,
+          tags: ['2023年春アニメ'],
+          startTime: '2023-04-01T00:00:00+09:00',
+        },
+      ]
+    )
+    const result = deriveCoursFromTagsFromStore(store, chronoSort)
+    expect(result.has(2)).toBe(false)
   })
 
-  it('短いタイトル（K / A3）は無関係 slug に偶然含まれても誤マッチしない', () => {
-    // "K"→"k", "A3"→"a3" は無関係 slug（arknights 等）に部分文字列として含まれるが、
-    // 短い側が 4 文字未満のため採用しない（長さガード）。
-    const shortMap = new Map([
-      [10, 'K'],
-      [11, 'A3'],
-      [12, 'Free!'],
-    ])
-    const results = matchSlugsToSeries(['arknights', 'idolish7-aninana3'], shortMap, {})
-    expect(results[0].seriesId).toBeNull()
-    expect(results[1].seriesId).toBeNull()
-  })
-})
-
-describe('mapCurrentCours (F-0016)', () => {
-  it('test_ingest_programlist_current_cours: series フィールドで cours を付与する', () => {
-    const programlist = [
-      { title: 'ゆるキャン△', series: 12345, imgpagh: 'https://example.com/img.jpg' },
-      { title: 'テスト', series: 67890, imgpagh: 'https://example.com/img2.jpg' },
-      { title: 'series なし', imgpagh: 'https://example.com/img3.jpg' },
-    ]
-    const result = mapCurrentCours(programlist, '2026-春')
-    expect(result.get(12345)).toBe('2026-春')
-    expect(result.get(67890)).toBe('2026-春')
-    expect(result.size).toBe(2) // series なしは含まれない
+  it('複数エピソードがある場合は最古話のタグを採用する', () => {
+    const store = makeStore(
+      [{ seriesId: 3, isAvailable: true }],
+      [
+        {
+          contentId: 'so31',
+          seriesId: 3,
+          tags: ['2024年春アニメ'],
+          startTime: '2024-04-01T00:00:00+09:00',
+        },
+        {
+          contentId: 'so32',
+          seriesId: 3,
+          tags: ['2024年夏アニメ'],
+          startTime: '2024-07-01T00:00:00+09:00',
+        },
+      ]
+    )
+    const result = deriveCoursFromTagsFromStore(store, chronoSort)
+    expect(result.get(3)).toBe('2024-春')
   })
 
-  it('test_ingest_programlist_imgpagh: imgpath ではなく imgpagh キーを参照する', () => {
-    // programlist フィクスチャ: imgpagh が正しいキー（imgpath は使わない）
-    const programlist = [{ series: 1, imgpagh: 'https://example.com/img.jpg' }]
-    // imgpagh でアクセス可能なことを確認（imgpath ではない）
-    expect(programlist[0].imgpagh).toBeDefined()
-    expect(programlist[0].imgpath).toBeUndefined()
+  it('季タグがないシリーズは結果に含まれない', () => {
+    const store = makeStore(
+      [{ seriesId: 4, isAvailable: true }],
+      [
+        {
+          contentId: 'so4',
+          seriesId: 4,
+          tags: ['アクション', 'バトル'],
+          startTime: '2022-01-01T00:00:00+09:00',
+        },
+      ]
+    )
+    const result = deriveCoursFromTagsFromStore(store, chronoSort)
+    expect(result.has(4)).toBe(false)
+  })
+
+  it('エピソードが 0 件のシリーズはスキップする', () => {
+    const store = makeStore([{ seriesId: 5, isAvailable: true }], [])
+    const result = deriveCoursFromTagsFromStore(store, chronoSort)
+    expect(result.has(5)).toBe(false)
+  })
+
+  it('_dアニメストア 接尾タグでも正しく導出する', () => {
+    const store = makeStore(
+      [{ seriesId: 6, isAvailable: true }],
+      [
+        {
+          contentId: 'so6',
+          seriesId: 6,
+          tags: ['2025年夏アニメ_dアニメストア', '日常'],
+          startTime: '2025-07-01T00:00:00+09:00',
+        },
+      ]
+    )
+    const result = deriveCoursFromTagsFromStore(store, chronoSort)
+    expect(result.get(6)).toBe('2025-夏')
   })
 })

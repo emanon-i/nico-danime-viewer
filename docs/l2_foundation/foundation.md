@@ -46,7 +46,7 @@
   **正規化**: マーカー（`_dアニメ(ストア)?$` または `^dアニメ_`）除去 → `/` 分割 → 各ラベル trim → 大小・全半角統一 → エイリアス吸収。素の `dアニメストア`（配信元）は除外。
   正規化したキュレーションタグは**通常タグと同じ平面のフラットなタグ**として扱う（別 facet にしない。品質が高いので候補の優先表示はしてよい）。
 - **クール判定**: **主源＝タグ導出**。snapshot タグの `YYYY年<季>アニメ`（例「2022年秋アニメ」）をパースして放送季を導出する（追加 fetch 不要・放送季で正確・高 recall。複数季を含む場合は最古季を採用）。**補完**＝`programlist.json`（今季）→ period HTML（過去季・`anime.nicovideo.jp/period/<年>-<季>-danime.html`）で、タグから取れなかったシリーズの `cours` を埋める。period の series 紐付けは `/detail/<slug>` の**日本語タイトル正規化＋信頼度スコア**で結合（閾値以上のみ採用）。`startTime` 推定は使わない。取得は**変更検知アサート必須**（§5.4）。
-  **実装状況**【実装済】: `scripts/etl/cours.mjs`（`deriveCoursFromTags` / `coursFromTags` / `mapCurrentCours` / `derivePastCours`・`parsePeriodHtml`・`matchPeriodEntriesToSeries`）・`scripts/fetch.mjs`（`runCoursPipeline` の3段直列）。過去季は `derivePastCours` が `COURS_FROM_YEAR`（既定 2016）以降の全季をループ。実測 約213季。
+  **実装状況**【実装済】: `scripts/etl/cours.mjs`（`coursFromTags` / `deriveCoursFromTagsFromStore`）・`scripts/fetch.mjs`（`runCoursFromTagsOnly`）。period HTML 補完・programlist 補完・slug 照合は廃止済み（タグ主源で約213季をカバー）。
 - **勢いスコアの定義**: **`hot_score = 0.5·delta_n + 0.3·velocity_n + 0.2·recency_n`**（各成分 0..1 に min-max 正規化）。
 - **delta_n**：`delta_views = Σ(view_counter − prev_view_counter)` を min-max 正規化。`prev_view_counter` は**日次 fetch ごとに旧値を退避（1 スロットの bounded 保持）**し、差分を蓄積していく。
 - **velocity_n**：`velocity = シリーズ合算再生数 ÷ max(1, 公開からの経過日数)` を `log1p` してから min-max 正規化。

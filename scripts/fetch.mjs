@@ -211,6 +211,12 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
       continue
     }
 
+    if (!isBranchSeries(nvapiData?.detail)) {
+      logger.warn('fetch', '[JS] A2 rescue: non-branch series, skip', { seriesId })
+      for (const cid of cids) missedContentIds.delete(cid)
+      continue
+    }
+
     const eps = mapNvapiEpisodes(seriesId, nvapiData?.items ?? [])
     storeUpsertEps(store, eps)
 
@@ -218,7 +224,7 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
     for (const cid of [...missedContentIds]) {
       if (allContentIds.has(cid)) {
         const ep = store.episodes.get(cid)
-        if (ep && ep.seriesId == null) {
+        if (ep && (ep.seriesId == null || ep.seriesId < 0)) {
           ep.seriesId = seriesId
           store._dirtySeries.add(seriesId)
         }
@@ -419,12 +425,20 @@ async function runFullJS() {
 
   {
     // allTitles: 正規化タイトル → 正整数 seriesId（exact + extractSeriesTitle 正規化の両方を登録）
+    // 同一キーに複数 seriesId が衝突する場合は ambiguous に追跡して除外（誤統合を防ぐ）
     const allTitles = new Map()
+    const ambiguous = new Set()
     for (const [sid, s] of store.series) {
       if (sid > 0 && s.title) {
-        allTitles.set(s.title, sid)
-        const norm = extractSeriesTitle(s.title)
-        if (norm !== s.title) allTitles.set(norm, sid)
+        for (const key of new Set([s.title, extractSeriesTitle(s.title)])) {
+          if (ambiguous.has(key)) continue
+          if (allTitles.has(key) && allTitles.get(key) !== sid) {
+            ambiguous.add(key)
+            allTitles.delete(key)
+          } else {
+            allTitles.set(key, sid)
+          }
+        }
       }
     }
     let reconciledCount = 0
@@ -445,6 +459,35 @@ async function runFullJS() {
       }
       if (!realId) continue
 
+      // 3. nvapi で統合先が支店シリーズかつ仮 ep が話一覧に存在するか検証（誤統合防止）
+      const provisionalCids = new Set()
+      for (const ep of store.episodes.values()) {
+        if (ep.seriesId === sid) provisionalCids.add(ep.contentId)
+      }
+      let mergeVerified = false
+      try {
+        const verifyData = await fetchSeriesData(realId)
+        if (!isBranchSeries(verifyData?.detail)) {
+          logger.warn('fetch', '[JS] B6 skip: realId not branch series', { sid, realId })
+          continue
+        }
+        const nvapiEps = mapNvapiEpisodes(realId, verifyData?.items ?? [])
+        const nvapiCids = new Set(nvapiEps.map((e) => e.contentId))
+        mergeVerified = [...provisionalCids].some((cid) => nvapiCids.has(cid))
+        if (mergeVerified) storeUpsertEps(store, nvapiEps)
+      } catch (err) {
+        logger.warn('fetch', '[JS] B6 nvapi verify failed', { realId, err: err.message })
+      }
+      if (!mergeVerified) {
+        logger.warn('fetch', '[JS] B6 skip: provisional eps not in realId nvapi list', {
+          sid,
+          realId,
+          title: s.title,
+        })
+        continue
+      }
+
+      // 4. 統合実施
       for (const ep of store.episodes.values()) {
         if (ep.seriesId === sid) {
           ep.seriesId = realId
@@ -467,9 +510,10 @@ async function runFullJS() {
 
   if (missedContentIds.size > 0) {
     logger.info('fetch', '[JS] phase A2: rescue missing eps', { count: missedContentIds.size })
+    // 正整数 seriesId のみ（仮シリーズ seriesId < 0 は除外して救出フローを実効化）
     const contentToSeries = new Map()
     for (const ep of store.episodes.values()) {
-      if (ep.seriesId != null) contentToSeries.set(ep.contentId, ep.seriesId)
+      if (ep.seriesId != null && ep.seriesId > 0) contentToSeries.set(ep.contentId, ep.seriesId)
     }
     await rescueMissingEps(store, missedContentIds, contentToSeries, listByTitle)
     logger.info('fetch', '[JS] phase A2: done', { remaining: missedContentIds.size })

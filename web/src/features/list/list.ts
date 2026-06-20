@@ -900,11 +900,13 @@ export function renderList(
     label: string,
     symbol: string,
     targetPage: number,
-    disabled: boolean
+    disabled: boolean,
+    navKey?: string
   ): HTMLAnchorElement => {
     const a = document.createElement('a')
     a.className = 'pagination-btn pagination-nav' + (disabled ? ' disabled' : '')
     a.setAttribute('aria-label', label)
+    if (navKey) a.dataset.nav = navKey
     if (disabled) {
       a.setAttribute('aria-disabled', 'true')
     } else {
@@ -920,7 +922,7 @@ export function renderList(
   }
 
   btnRow.appendChild(makeNavBtn('最初のページ', '«', 1, state.page <= 1))
-  btnRow.appendChild(makeNavBtn('前のページ', '‹', state.page - 1, state.page <= 1))
+  btnRow.appendChild(makeNavBtn('前のページ', '‹', state.page - 1, state.page <= 1, 'prev'))
 
   // 数字ページ＋省略（デスクトップ delta=2 / モバイル delta=1）
   const delta = window.innerWidth < 768 ? 1 : 2
@@ -949,7 +951,9 @@ export function renderList(
     }
   }
 
-  btnRow.appendChild(makeNavBtn('次のページ', '›', state.page + 1, state.page >= totalPages))
+  btnRow.appendChild(
+    makeNavBtn('次のページ', '›', state.page + 1, state.page >= totalPages, 'next')
+  )
   btnRow.appendChild(makeNavBtn('最後のページ', '»', totalPages, state.page >= totalPages))
 
   paginationNav.appendChild(btnRow)
