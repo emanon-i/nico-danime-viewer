@@ -876,9 +876,81 @@ export function getEpisodesForSeries(store, seriesId) {
   return _getEpisodesForSeriesSorted(store, seriesId)
 }
 
+// 全角アラビア数字 → 半角。
+function _toHalfWidthDigits(s) {
+  return s.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xff10 + 0x30))
+}
+
+const _KANJI_DIGIT = {
+  零: 0, '〇': 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+}
+
+// 漢数字（百の位まで）→ 整数。解釈不能なら null。例「十四」→14・「二十」→20・「百」→100。
+function _kanjiToInt(s) {
+  let total = 0
+  let cur = 0
+  let seen = false
+  for (const ch of s) {
+    if (ch in _KANJI_DIGIT) {
+      cur = _KANJI_DIGIT[ch]
+      seen = true
+    } else if (ch === '十') {
+      total += (cur || 1) * 10
+      cur = 0
+      seen = true
+    } else if (ch === '百') {
+      total += (cur || 1) * 100
+      cur = 0
+      seen = true
+    } else {
+      return null
+    }
+  }
+  return seen ? total + cur : null
+}
+
+const _EP_COUNTER = '話|回|章|幕|夜|戦|品|羽|刻|頁|球|滑走'
+
+// タイトル中の「話数表記」を高精度で拾う候補パターン（明確な話数マーカーに限定）。
+const _ORDINAL_PATTERNS = [
+  { re: new RegExp(`第\\s*([0-9０-９]+)\\s*(?:${_EP_COUNTER})`), kanji: false },
+  { re: new RegExp(`第\\s*([零〇一二三四五六七八九十百]+)\\s*(?:${_EP_COUNTER})`), kanji: true },
+  { re: /(?:EPISODE|Episode|episode|EP|Ep)\.?\s*#?\s*([0-9０-９]+)/, kanji: false },
+  {
+    re: /(?:Chapter|Stage|Phase|Scene|Act|Vol|Track|File|Mission|Site)\.?\s*#?\s*([0-9０-９]+)/i,
+    kanji: false,
+  },
+  { re: /#\s*([0-9０-９]+)/, kanji: false },
+  { re: /\b([0-9０-９]+)(?:st|nd|rd|th)\b/i, kanji: false },
+]
+
+/**
+ * エピソードタイトルから話数（序数）を推定する。拾えなければ null。
+ * 用途: episodeNo（nvapi 由来）が無い同時刻一括配信のソート・タイブレーカ。
+ * contentId はアップロード順で実際の話順と逆転し得る（例: 第1話が最大 so番号）ため、
+ * タイトルの「第N話」等の明示話数を contentId より優先する。一般則のみ（特定作品の固定値なし）。
+ * @param {string|null|undefined} title
+ * @returns {number|null}
+ */
+export function episodeOrdinalFromTitle(title) {
+  if (!title) return null
+  for (const { re, kanji } of _ORDINAL_PATTERNS) {
+    const m = title.match(re)
+    if (!m) continue
+    if (kanji) {
+      const v = _kanjiToInt(m[1])
+      if (v != null) return v
+    } else {
+      const n = parseInt(_toHalfWidthDigits(m[1]), 10)
+      if (Number.isFinite(n)) return n
+    }
+  }
+  return null
+}
+
 /**
  * エピソードのクロノロジカルソート比較関数。
- * 優先度: startTime → episodeNo → contentId（安定）
+ * 優先度: startTime → episodeNo（nvapi 確定話順）→ タイトル推定話数 → contentId（安定）
  */
 export function chronoSort(a, b) {
   if (a.startTime && b.startTime) {
@@ -892,6 +964,14 @@ export function chronoSort(a, b) {
     if (diff !== 0) return diff
   } else if (a.episodeNo != null) return -1
   else if (b.episodeNo != null) return 1
+
+  // episodeNo 欠落の同時刻一括配信向け: タイトルの「第N話」等から話数を推定して順序付け。
+  const ao = episodeOrdinalFromTitle(a.title)
+  const bo = episodeOrdinalFromTitle(b.title)
+  if (ao != null && bo != null) {
+    if (ao !== bo) return ao - bo
+  } else if (ao != null) return -1
+  else if (bo != null) return 1
 
   return a.contentId < b.contentId ? -1 : a.contentId > b.contentId ? 1 : 0
 }

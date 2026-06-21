@@ -127,6 +127,13 @@ function applyIsAvailableGrace(store) {
   logger.info('fetch', '[JS] E7 isAvailable grace applied', { toFalse, toTrue, cutoff })
 }
 
+// RFC822 など任意の日付文字列を ISO8601 へ正規化（解釈不能・null はそのまま null）。
+function toIso(value) {
+  if (!value) return null
+  const t = new Date(value).getTime()
+  return Number.isNaN(t) ? null : new Date(t).toISOString()
+}
+
 function registerProvisionalSeries(store, watchId, rssEntry) {
   const rawTitle = rssEntry.title ?? ''
   const contentId = contentIdFromThumbnail(rssEntry.thumbnailUrl ?? null)
@@ -144,7 +151,9 @@ function registerProvisionalSeries(store, watchId, rssEntry) {
       contentId,
       seriesId: sid,
       title: rawTitle,
-      startTime: rssEntry.pubDate ?? null,
+      // RSS pubDate は RFC822（"Sat, 20 Jun 2026 …"）。canonical な startTime は ISO8601 に
+      // 揃える（snapshot/nvapi 由来の実話と同形式＝firstAt の文字列比較・並びを健全に保つ）。
+      startTime: toIso(rssEntry.pubDate),
       description: rssEntry.description ?? null,
     },
   ])

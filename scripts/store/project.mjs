@@ -41,7 +41,7 @@ function soNumOf(contentId) {
 }
 
 function buildEpAggMap(store) {
-  // seriesId → {totalViews, commentTotal, mylistTotal, durationTotal, latestAt, latestContentId, firstAt, mylistFirst}
+  // seriesId → {totalViews, commentTotal, mylistTotal, durationTotal, latestAt, latestContentId, firstAt, firstContentId, mylistFirst}
   const map = new Map()
   for (const ep of store.episodes.values()) {
     if (ep.seriesId == null) continue
@@ -55,10 +55,8 @@ function buildEpAggMap(store) {
         latestAt: null,
         latestContentId: null,
         firstAt: null,
-        mylistFirst: null,
-        _firstEpNo: null, // 第1話決定用 内部フィールド
-        _firstTime: null,
-        _firstCid: null,
+        firstContentId: null,
+        mylistFirst: 0,
       }
       map.set(ep.seriesId, a)
     }
@@ -67,6 +65,7 @@ function buildEpAggMap(store) {
     a.mylistTotal += ep.mylistCounter ?? 0
     a.durationTotal += ep.lengthSeconds ?? 0
     if (ep.startTime) {
+      // latestAt = MAX(startTime)。同時刻タイは so番号大（後投稿）を採用。
       if (
         !a.latestAt ||
         ep.startTime > a.latestAt ||
@@ -75,28 +74,18 @@ function buildEpAggMap(store) {
         a.latestAt = ep.startTime
         a.latestContentId = ep.contentId
       }
-    }
-
-    // 第1話: episode_no IS NULL ASC, episode_no ASC, start_time ASC, content_id ASC（旧SQLパリティ）
-    const epNo = ep.episodeNo ?? Infinity // null → Infinity（後ろ）
-    const time = ep.startTime ?? '￿' // null → 末尾
-    const cid = ep.contentId
-    let isFirst = false
-    if (a._firstCid === null) {
-      isFirst = true
-    } else if (epNo !== a._firstEpNo) {
-      isFirst = epNo < a._firstEpNo
-    } else if (time !== a._firstTime) {
-      isFirst = time < a._firstTime
-    } else {
-      isFirst = cid < a._firstCid
-    }
-    if (isFirst) {
-      a._firstEpNo = epNo
-      a._firstTime = time
-      a._firstCid = cid
-      a.firstAt = ep.startTime ?? null
-      a.mylistFirst = ep.mylistCounter ?? 0
+      // firstAt = MIN(startTime)。同時刻タイは so番号小（先投稿）を採用。
+      // 毎時の exportWorksPartial と同一定義（日次/毎時パリティ）。episodeNo は 97% 欠落の
+      // ため第1話判定の主キーには使わず、純粋な最古話投稿時刻で「新規シリーズ」順を決める。
+      // mylistFirst は最古話のマイリス数（schema 維持・現状 web 未使用）。
+      if (!a.firstAt || ep.startTime < a.firstAt) {
+        a.firstAt = ep.startTime
+        a.firstContentId = ep.contentId
+        a.mylistFirst = ep.mylistCounter ?? 0
+      } else if (ep.startTime === a.firstAt && soNumOf(ep.contentId) < soNumOf(a.firstContentId)) {
+        a.firstContentId = ep.contentId
+        a.mylistFirst = ep.mylistCounter ?? 0
+      }
     }
   }
   return map
@@ -127,7 +116,7 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       latestAt: agg.latestAt ?? null,
       latestContentId: agg.latestContentId ?? null,
       firstAt: agg.firstAt ?? null,
-      firstContentId: agg._firstCid ?? null,
+      firstContentId: agg.firstContentId ?? null,
       commentTotal: agg.commentTotal ?? 0,
       mylistTotal: agg.mylistTotal ?? 0,
       mylistFirst: agg.mylistFirst ?? 0,

@@ -19,6 +19,7 @@ import {
   selectSeedTargets,
   getEpisodesForSeries,
   chronoSort,
+  episodeOrdinalFromTitle,
   countSeriesWithEpisodes,
 } from '../../scripts/store/store.mjs'
 
@@ -381,6 +382,49 @@ describe('chronoSort', () => {
     ]
     eps.sort(chronoSort)
     expect(eps[0].contentId).toBe('so10000001')
+  })
+
+  it('startTime 同時刻・episodeNo 欠落ならタイトルの話数で並べる（contentId 逆転を是正）', () => {
+    // 一括配信で so番号が話数と逆転している実データ相当のケース。
+    const eps = [
+      makeEp({ contentId: 'so100', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第7話 g' }),
+      makeEp({ contentId: 'so106', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第1話 a' }),
+      makeEp({ contentId: 'so103', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第4話 d' }),
+    ]
+    eps.sort(chronoSort)
+    expect(eps.map((e) => episodeOrdinalFromTitle(e.title))).toEqual([1, 4, 7])
+  })
+
+  it('startTime はタイトル話数より優先（後日投稿の話は後ろ）', () => {
+    const eps = [
+      makeEp({ contentId: 'so200', startTime: '2026-06-11T06:00:00+09:00', episodeNo: null, title: 'X 第1話' }),
+      makeEp({ contentId: 'so201', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第8話' }),
+    ]
+    eps.sort(chronoSort)
+    // 6/10 投稿の第8話が 6/11 投稿の第1話より前（startTime 昇順が主キー）
+    expect(eps[0].title).toBe('X 第8話')
+  })
+})
+
+describe('episodeOrdinalFromTitle', () => {
+  it('代表的な話数表記を拾う', () => {
+    expect(episodeOrdinalFromTitle('心臓に復讐を誓って　第1話　最高の不幸')).toBe(1)
+    expect(episodeOrdinalFromTitle('まほろまてぃっく　第10話')).toBe(10)
+    expect(episodeOrdinalFromTitle('ビビッドレッド　第二話')).toBe(2)
+    expect(episodeOrdinalFromTitle('まほろ　第十四話')).toBe(14)
+    expect(episodeOrdinalFromTitle('全角　第１２話')).toBe(12)
+    expect(episodeOrdinalFromTitle('DOG DAYS　EPISODE 7')).toBe(7)
+    expect(episodeOrdinalFromTitle('Occultic;Nine　Site 03')).toBe(3)
+    expect(episodeOrdinalFromTitle('海のトリトン　Chapter.2')).toBe(2)
+    expect(episodeOrdinalFromTitle('けいおん #4')).toBe(4)
+    expect(episodeOrdinalFromTitle('俺の友達　1st game')).toBe(1)
+  })
+
+  it('話数表記が無ければ null', () => {
+    expect(episodeOrdinalFromTitle('TARI TARI')).toBeNull()
+    expect(episodeOrdinalFromTitle('Fate/stay night')).toBeNull()
+    expect(episodeOrdinalFromTitle('')).toBeNull()
+    expect(episodeOrdinalFromTitle(null)).toBeNull()
   })
 })
 
