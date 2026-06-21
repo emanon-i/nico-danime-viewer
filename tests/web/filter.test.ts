@@ -202,19 +202,17 @@ describe('sortWorks (F-0031)', () => {
     { ...BASE_WORK, seriesId: 2, colKey: 'さ', title: 'B' },
   ]
 
-  it('test_sort_options_deterministic: hot ソートが決定的', () => {
-    const ranking: RankingJson = {
-      ...BASE_RANKING,
-      hot: [
-        { seriesId: 1, title: 'Z', thumbnailUrl: null, totalViews: 100, hotScore: 10 },
-        { seriesId: 2, title: 'B', thumbnailUrl: null, totalViews: 80, hotScore: 8 },
-        { seriesId: 3, title: 'A', thumbnailUrl: null, totalViews: 60, hotScore: 6 },
-      ],
-    }
-    const r1 = sortWorks(WORKS, 'hot', ranking).map((w) => w.seriesId)
-    const r2 = sortWorks(WORKS, 'hot', ranking).map((w) => w.seriesId)
+  it('test_sort_options_deterministic: hot ソートは hotScore 降順で決定的（§64）', () => {
+    // 各作品の hotScore（works.json 由来）で直接ソートする。ranking には依存しない。
+    const w: Work[] = [
+      { ...BASE_WORK, seriesId: 3, hotScore: 0.2, totalViews: 60 },
+      { ...BASE_WORK, seriesId: 1, hotScore: 0.5, totalViews: 100 },
+      { ...BASE_WORK, seriesId: 2, hotScore: 0.35, totalViews: 80 },
+    ]
+    const r1 = sortWorks(w, 'hot', null).map((x) => x.seriesId)
+    const r2 = sortWorks(w, 'hot', null).map((x) => x.seriesId)
     expect(r1).toEqual(r2)
-    expect(r1).toEqual([1, 2, 3])
+    expect(r1).toEqual([1, 2, 3]) // hotScore 0.5 > 0.35 > 0.2
   })
 
   it('test_sort_options_deterministic: views ソートが決定的', () => {
@@ -303,8 +301,15 @@ describe('sortWorks (F-0031)', () => {
     expect(result[1].title).toBe('B')
   })
 
-  it('ranking なしで hot ソートを呼んでも例外を投げない', () => {
-    expect(() => sortWorks(WORKS, 'hot', null)).not.toThrow()
+  it('hot ソートは ranking 非依存で hotScore 降順に並ぶ（修正案①・全順序を保証）', () => {
+    const w: Work[] = [
+      { ...BASE_WORK, seriesId: 5, hotScore: 0.1 },
+      { ...BASE_WORK, seriesId: 6, hotScore: 0.9 },
+      { ...BASE_WORK, seriesId: 7, hotScore: 0.4 },
+    ]
+    expect(() => sortWorks(w, 'hot', null)).not.toThrow()
+    // ranking.hot のトップ200索引ではなく、各作品の hotScore 値で全件を並べる
+    expect(sortWorks(w, 'hot', null).map((x) => x.seriesId)).toEqual([6, 7, 5])
   })
 
   it('仮シリーズ（seriesId < 0）は実シリーズと同じキーで混合ソートされる', () => {
@@ -356,14 +361,21 @@ describe('sortWorks (F-0031)', () => {
     expect(byCreated).toEqual([-100, 1, -300, 2])
   })
 
-  it('ランキング外の作品は末尾に積まれる', () => {
-    const ranking: RankingJson = {
-      ...BASE_RANKING,
-      hot: [{ seriesId: 1, title: '', thumbnailUrl: null, totalViews: 100, hotScore: 5 }],
-    }
-    const result = sortWorks(WORKS, 'hot', ranking).map((w) => w.seriesId)
-    expect(result[0]).toBe(1) // ランキングあり
-    // 残り2件はランキング外（末尾側）
+  it('hot ソートのタイブレークは累計再生数→seriesId（ranking.hot 生成と同基準）', () => {
+    const w: Work[] = [
+      { ...BASE_WORK, seriesId: 10, hotScore: 0.3, totalViews: 100 },
+      { ...BASE_WORK, seriesId: 11, hotScore: 0.3, totalViews: 300 }, // 同点 → totalViews 大が上
+      { ...BASE_WORK, seriesId: 9, hotScore: 0.3, totalViews: 300 }, // 同点同views → seriesId 小が上
+    ]
+    expect(sortWorks(w, 'hot', null).map((x) => x.seriesId)).toEqual([9, 11, 10])
+  })
+
+  it('hot ソート: hotScore 未設定は 0 扱いで末尾に回る', () => {
+    const w: Work[] = [
+      { ...BASE_WORK, seriesId: 1 }, // hotScore 無し → 0
+      { ...BASE_WORK, seriesId: 2, hotScore: 0.2 },
+    ]
+    expect(sortWorks(w, 'hot', null).map((x) => x.seriesId)).toEqual([2, 1])
   })
 })
 
@@ -380,16 +392,28 @@ describe('filterWorks - favIds/watchedIds (F-0034)', () => {
     expect(result.map((w) => w.seriesId)).toEqual([1, 3])
   })
 
-  it('watchedIds が指定されると 見た作品が除外される（未視聴だけ）', () => {
+  it('watchedIds が指定されると 見た作品だけに絞られる（内包）', () => {
     const opts: FilterOpts = { watchedIds: new Set([2]) }
+    const result = filterWorks(WORKS, BASE_STATE, opts)
+    expect(result.map((w) => w.seriesId)).toEqual([2])
+  })
+
+  it('wantIds が指定されると 見たい作品だけに絞られる（内包）', () => {
+    const opts: FilterOpts = { wantIds: new Set([1, 3]) }
     const result = filterWorks(WORKS, BASE_STATE, opts)
     expect(result.map((w) => w.seriesId)).toEqual([1, 3])
   })
 
-  it('favIds + watchedIds を組み合わせられる', () => {
-    const opts: FilterOpts = { favIds: new Set([1, 2, 3]), watchedIds: new Set([2]) }
+  it('wantIds + watchedIds は和集合（見たい か 見た のいずれか）', () => {
+    const opts: FilterOpts = { wantIds: new Set([1]), watchedIds: new Set([3]) }
     const result = filterWorks(WORKS, BASE_STATE, opts)
     expect(result.map((w) => w.seriesId)).toEqual([1, 3])
+  })
+
+  it('favIds + watchedIds は AND（お気に入り かつ 見た）', () => {
+    const opts: FilterOpts = { favIds: new Set([1, 2, 3]), watchedIds: new Set([2]) }
+    const result = filterWorks(WORKS, BASE_STATE, opts)
+    expect(result.map((w) => w.seriesId)).toEqual([2])
   })
 
   it('opts なしは既存動作を維持する', () => {

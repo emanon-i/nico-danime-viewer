@@ -206,7 +206,7 @@ describe('renderList - フィルタ・ソートUI (F-0028/0029/0030/0031)', () =
       totalPages: 1,
     })
     const radios = container.querySelectorAll<HTMLInputElement>('input[name="sort"]')
-    // hot/views/avgViews/new/created/comments/avgComments/kana の 8 種（§86 で平均順を追加）
+    // kana/hot/views/avgViews/new/created/comments/avgComments の 8 種（行優先順・§21/§86）
     expect(radios.length).toBe(8)
     const values = Array.from(radios).map((r) => r.value)
     expect(values).toContain('comments')

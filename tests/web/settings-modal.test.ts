@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { initSettingsModal } from '../../web/src/features/shared/settings-modal'
 import {
   toggleFavorite,
-  toggleWatched,
+  setWatchStatus,
   isFavorite,
   isWatched,
   clearUserState,
@@ -83,7 +83,7 @@ describe('F-0035: 設定/情報モーダル', () => {
 
   it('test_export_import_roundtrip: export/import ラウンドトリップで状態が一致する', () => {
     toggleFavorite(1)
-    toggleWatched(2)
+    setWatchStatus(2, 'watched')
     const exported = exportUserState()
 
     clearUserState()
@@ -96,7 +96,7 @@ describe('F-0035: 設定/情報モーダル', () => {
 
   it('test_clear_cache: clearUserState 後にお気に入り/見たが消える', () => {
     toggleFavorite(10)
-    toggleWatched(20)
+    setWatchStatus(20, 'watched')
     clearUserState()
     expect(isFavorite(10)).toBe(false)
     expect(isWatched(20)).toBe(false)

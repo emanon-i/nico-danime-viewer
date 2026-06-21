@@ -57,10 +57,11 @@ describe('F-0038: レスポンシブ構造', () => {
     expect(grid?.classList.contains('overflow-x-auto')).toBe(false)
   })
 
-  it('フィルタがお気に入り/未視聴チェックボックスを含む', () => {
+  it('フィルタがお気に入り/見たい/見たチェックボックスを含む', () => {
     renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
     expect(container.querySelector('input[name="fav"]')).not.toBeNull()
-    expect(container.querySelector('input[name="unwatched"]')).not.toBeNull()
+    expect(container.querySelector('input[name="want"]')).not.toBeNull()
+    expect(container.querySelector('input[name="watched"]')).not.toBeNull()
   })
 
   it('favFilter=true のとき fav チェックボックスが checked になる', () => {
@@ -75,16 +76,28 @@ describe('F-0038: レスポンシブ構造', () => {
     expect(favCb?.checked).toBe(true)
   })
 
-  it('unwatchedFilter=true のとき unwatched チェックボックスが checked になる', () => {
+  it('wantFilter=true のとき want チェックボックスが checked になる', () => {
     renderList(container, {
       state: BASE_STATE,
       works: [],
       totalCount: 0,
       totalPages: 1,
-      unwatchedFilter: true,
+      wantFilter: true,
     })
-    const unwatchedCb = container.querySelector<HTMLInputElement>('input[name="unwatched"]')
-    expect(unwatchedCb?.checked).toBe(true)
+    const wantCb = container.querySelector<HTMLInputElement>('input[name="want"]')
+    expect(wantCb?.checked).toBe(true)
+  })
+
+  it('watchedFilter=true のとき watched チェックボックスが checked になる', () => {
+    renderList(container, {
+      state: BASE_STATE,
+      works: [],
+      totalCount: 0,
+      totalPages: 1,
+      watchedFilter: true,
+    })
+    const watchedCb = container.querySelector<HTMLInputElement>('input[name="watched"]')
+    expect(watchedCb?.checked).toBe(true)
   })
 
   it('ヘッダが .site-header を持つ', () => {

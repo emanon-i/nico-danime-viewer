@@ -74,6 +74,9 @@ export function toggleCours(cours: string, target: string): string {
 
 export interface FilterOpts {
   favIds?: Set<number>
+  /** 「見たい」フィルタ ON のとき渡す（内包＝この集合に属する作品だけ残す）。 */
+  wantIds?: Set<number>
+  /** 「見た」フィルタ ON のとき渡す（内包＝この集合に属する作品だけ残す）。 */
   watchedIds?: Set<number>
   /** 空シェル（episodeCount 0）も一覧に含めるか（§63・既定 false＝除外）。 */
   includeEmpty?: boolean
@@ -122,8 +125,11 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
     result = result.filter((w) => opts.favIds!.has(w.seriesId))
   }
 
-  if (opts?.watchedIds) {
-    result = result.filter((w) => !opts.watchedIds!.has(w.seriesId))
+  // 視聴状態フィルタ（見たい/見た）は内包。両方指定なら和集合（いずれかに属する）。
+  // ♥お気に入りは別軸なので上の AND と組み合わさる（例: お気に入り かつ 見たい）。
+  const statusSets = [opts?.wantIds, opts?.watchedIds].filter((s): s is Set<number> => s != null)
+  if (statusSets.length > 0) {
+    result = result.filter((w) => statusSets.some((s) => s.has(w.seriesId)))
   }
 
   return result
@@ -153,13 +159,17 @@ function sortAllWorksDesc(
   sort: ListState['sort'],
   ranking: RankingJson | null
 ): Work[] {
-  if (sort === 'hot' && ranking) {
-    const order = new Map(ranking.hot.map((r, i) => [r.seriesId, i]))
-    return [...works].sort((a, b) => {
-      const ai = order.get(a.seriesId) ?? Infinity
-      const bi = order.get(b.seriesId) ?? Infinity
-      return ai !== bi ? ai - bi : a.seriesId - b.seriesId
-    })
+  if (sort === 'hot') {
+    // 各作品の hotScore（works.json に全件格納）を直接降順で並べる（§64）。ranking.hot は
+    // 全体トップ200に切り詰めた索引なので、過去クール等の絞り込みでは大半が圏外＝seriesId
+    // 順に退化し、炎ティア（hotScore percentile）と並びが食い違っていた。hotScore 値で全順序を
+    // 取ることで、どのフィルタ下でも「上ほどホット＝上から炎が付く」を保証する。
+    // タイブレークは ranking.hot 生成（exportRanking）と同基準＝累計再生数降順 → seriesId 昇順。
+    const hs = (w: Work): number => (typeof w.hotScore === 'number' ? w.hotScore : 0)
+    return [...works].sort(
+      (a, b) =>
+        hs(b) - hs(a) || (b.totalViews ?? 0) - (a.totalViews ?? 0) || a.seriesId - b.seriesId
+    )
   }
   if (sort === 'views') {
     // 累計再生数（works.json の totalViews・全作品横断・§79）降順。旧 JSON 互換で

@@ -7,7 +7,9 @@ import { renderDetail } from '../../web/src/features/detail/detail'
 import { parseScreen, buildListUrl, buildDetailUrl } from '../../web/src/features/router'
 import {
   toggleFavorite,
-  toggleWatched,
+  setWatchStatus,
+  cycleWatchStatus,
+  getWatchStatus,
   isFavorite,
   isWatched,
 } from '../../web/src/features/shared/user-state'
@@ -309,8 +311,15 @@ describe('F-0047: 総合/E2E テスト', () => {
 
     it('見たフラグが localStorage に永続化される', () => {
       expect(isWatched(102)).toBe(false)
-      toggleWatched(102)
+      setWatchStatus(102, 'watched')
       expect(isWatched(102)).toBe(true)
+    })
+
+    it('視聴状態が none→want→watched→none と循環する', () => {
+      expect(getWatchStatus(103)).toBe('none')
+      expect(cycleWatchStatus(103)).toBe('want')
+      expect(cycleWatchStatus(103)).toBe('watched')
+      expect(cycleWatchStatus(103)).toBe('none')
     })
 
     it('空データの詳細画面で empty メッセージが表示される', () => {

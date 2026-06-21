@@ -18,12 +18,15 @@ import {
 } from './features/list/filter'
 import {
   isFavorite,
-  isWatched,
   toggleFavorite,
-  toggleWatched,
+  getWatchStatus,
+  cycleWatchStatus,
   getFavoriteIds,
   getWatchedIds,
+  getWantIds,
 } from './features/shared/user-state'
+import type { WatchStatus } from './features/shared/user-state'
+import type { IconName } from './components/icon'
 import { initTheme, toggleTheme, getTheme } from './features/shared/theme'
 import { icon } from './components/icon'
 import { initTooltips, wireTruncationTooltips } from './components/tooltip'
@@ -61,9 +64,10 @@ let cache: {
   newData: NewJson | null
 } = { works: null, ranking: null, tags: null, cours: null, newData: null }
 
-// お気に入り/未視聴フィルタの状態（インメモリ・URLに出さない）
+// お気に入り/見たい/見たフィルタの状態（インメモリ・URLに出さない）
 let favFilter = false
-let unwatchedFilter = false
+let wantFilter = false
+let watchedFilter = false
 // 空シェル（中身のない項目）も表示するか（§63・既定 OFF＝非表示・インメモリ）
 let showEmptyFilter = false
 // 取得不可の作品も表示するか（§PH-0013・既定 OFF＝非表示・localStorage 永続）
@@ -189,32 +193,74 @@ function buildTopData(): TopData | undefined {
   }
 }
 
-/** 「見た」ボタンの状態を反映（circle-check・on=塗り/off=アウトラインは CSS の .active で・§45）。 */
-function setWatchedState(btn: HTMLElement, on: boolean, size = 16): void {
-  btn.classList.toggle('active', on)
-  btn.replaceChildren(icon('circle-check', size))
+// 三値トグルの見た目定義（§F-0034 拡張）。未視聴＝薄いブックマーク（非活性風）／
+// 見たい＝ブックマーク（アンバー塗り）／見た＝丸チェック（緑塗り）。色塗りは CSS の
+// .is-want / .is-watched が担当。アイコンとラベルだけ JS で差し替える。
+const WATCH_ICON: Record<WatchStatus, IconName> = {
+  none: 'bookmark',
+  want: 'bookmark',
+  watched: 'circle-check',
+}
+const WATCH_LABEL: Record<WatchStatus, string> = {
+  none: '未視聴（クリックで「見たい」）',
+  want: '見たい（クリックで「見た」）',
+  watched: '見た（クリックで未視聴に戻す）',
+}
+const WATCH_TEXT: Record<WatchStatus, string> = {
+  none: '未視聴',
+  want: '見たい',
+  watched: '見た',
 }
 
-/** カードの ♥/見た ボタンを localStorage と同期させる */
+/** 視聴状態（三値）をボタンに反映する。アイコン差し替え＋状態クラス＋aria-label を更新。
+ * context（作品タイトル）を渡すと aria-label に前置し、同一アイコンの並びでも SR で区別できる。 */
+function applyWatchState(
+  btn: HTMLElement,
+  status: WatchStatus,
+  opts: { size?: number; withText?: boolean; context?: string } = {}
+): void {
+  const { size = 16, withText = false, context } = opts
+  btn.classList.toggle('is-want', status === 'want')
+  btn.classList.toggle('is-watched', status === 'watched')
+  btn.setAttribute(
+    'aria-label',
+    context ? `${context}: ${WATCH_LABEL[status]}` : WATCH_LABEL[status]
+  )
+  const children: (Node | string)[] = [icon(WATCH_ICON[status], size)]
+  if (withText) children.push(WATCH_TEXT[status])
+  btn.replaceChildren(...children)
+}
+
+/** カードの ♥/視聴状態 ボタンを localStorage と同期させる */
 function wireCards(container: HTMLElement): void {
+  // localStorage の集合は描画ごとに 1 度だけ読む（カード数 ×2配列 の再パースを避ける）。
+  const favSet = new Set(getFavoriteIds())
+  const wantSet = new Set(getWantIds())
+  const watchedSet = new Set(getWatchedIds())
+  const statusOf = (id: number): WatchStatus =>
+    watchedSet.has(id) ? 'watched' : wantSet.has(id) ? 'want' : 'none'
+
   container.querySelectorAll<HTMLElement>('.series-card').forEach((card) => {
     const seriesId = Number(card.dataset.seriesId)
     if (!seriesId) return
+    // 同一アイコンボタンの並びを SR で区別できるよう作品名を aria に添える（§17 a11y）。
+    const title = card.querySelector('.card-title')?.textContent?.trim() || undefined
 
     const favBtn = card.querySelector<HTMLButtonElement>('.card-favorite')
     const watchedBtn = card.querySelector<HTMLButtonElement>('.card-watched')
 
     if (favBtn) {
-      if (isFavorite(seriesId)) favBtn.classList.add('active')
+      if (title) favBtn.setAttribute('aria-label', `${title}: お気に入り`)
+      if (favSet.has(seriesId)) favBtn.classList.add('active')
       favBtn.addEventListener('click', () => {
         const nowFav = toggleFavorite(seriesId)
         favBtn.classList.toggle('active', nowFav)
       })
     }
     if (watchedBtn) {
-      setWatchedState(watchedBtn, isWatched(seriesId))
+      applyWatchState(watchedBtn, statusOf(seriesId), { context: title })
       watchedBtn.addEventListener('click', () => {
-        setWatchedState(watchedBtn, toggleWatched(seriesId))
+        applyWatchState(watchedBtn, cycleWatchStatus(seriesId), { context: title })
       })
     }
   })
@@ -233,17 +279,12 @@ function wireDetailMarks(container: HTMLElement, seriesId: number): void {
     })
   }
   if (watchedBtn) {
-    // 詳細の「見た」ボタンはアイコン（circle-check）＋テキスト。アイコンのみ差し替える
-    // （on=塗り/off=アウトラインは CSS .btn-watched.active が担当＝§45/§58）。
-    const setDetailWatched = (on: boolean) => {
-      watchedBtn.classList.toggle('active', on)
-      const svg = watchedBtn.querySelector('svg')
-      const next = icon('circle-check', 16)
-      if (svg) svg.replaceWith(next)
-      else watchedBtn.insertBefore(next, watchedBtn.firstChild)
-    }
-    setDetailWatched(isWatched(seriesId))
-    watchedBtn.addEventListener('click', () => setDetailWatched(toggleWatched(seriesId)))
+    // 詳細の視聴状態ボタンはアイコン＋テキスト（未視聴/見たい/見た）。三値で循環する。
+    // 色塗りは CSS .btn-watched.is-want / .is-watched が担当（§45/§58 を拡張）。
+    applyWatchState(watchedBtn, getWatchStatus(seriesId), { withText: true })
+    watchedBtn.addEventListener('click', () => {
+      applyWatchState(watchedBtn, cycleWatchStatus(seriesId), { withText: true })
+    })
   }
 }
 
@@ -353,9 +394,11 @@ async function render(): Promise<void> {
 
     const allWorks = cache.works?.works ?? []
     const favIds = favFilter ? new Set(getFavoriteIds()) : undefined
-    const watchedIds = unwatchedFilter ? new Set(getWatchedIds()) : undefined
+    const wantIds = wantFilter ? new Set(getWantIds()) : undefined
+    const watchedIds = watchedFilter ? new Set(getWatchedIds()) : undefined
     let filtered = filterWorks(allWorks, screen.state, {
       favIds,
+      wantIds,
       watchedIds,
       includeEmpty: showEmptyFilter,
       showUnavailable: showUnavailableFilter,
@@ -490,15 +533,20 @@ async function render(): Promise<void> {
         cours: cache.cours?.cours ?? [],
       },
       favFilter,
-      unwatchedFilter,
+      wantFilter,
+      watchedFilter,
       showEmptyFilter,
       cardMetric,
       onClearFav: () => {
         favFilter = false
         void render()
       },
-      onClearUnwatched: () => {
-        unwatchedFilter = false
+      onClearWant: () => {
+        wantFilter = false
+        void render()
+      },
+      onClearWatched: () => {
+        watchedFilter = false
         void render()
       },
       onClearShowEmpty: () => {
@@ -569,7 +617,8 @@ async function render(): Promise<void> {
     })
 
     const favCb = app.querySelector<HTMLInputElement>('input[name="fav"]')
-    const unwatchedCb = app.querySelector<HTMLInputElement>('input[name="unwatched"]')
+    const wantCb = app.querySelector<HTMLInputElement>('input[name="want"]')
+    const watchedCb = app.querySelector<HTMLInputElement>('input[name="watched"]')
     if (favCb) {
       favCb.checked = favFilter
       favCb.addEventListener('change', () => {
@@ -577,10 +626,17 @@ async function render(): Promise<void> {
         void render()
       })
     }
-    if (unwatchedCb) {
-      unwatchedCb.checked = unwatchedFilter
-      unwatchedCb.addEventListener('change', () => {
-        unwatchedFilter = unwatchedCb.checked
+    if (wantCb) {
+      wantCb.checked = wantFilter
+      wantCb.addEventListener('change', () => {
+        wantFilter = wantCb.checked
+        void render()
+      })
+    }
+    if (watchedCb) {
+      watchedCb.checked = watchedFilter
+      watchedCb.addEventListener('change', () => {
+        watchedFilter = watchedCb.checked
         void render()
       })
     }

@@ -166,6 +166,8 @@
     --heart: oklch(0.62 0.21 25);
     /* 視聴済み ON の緑（circle-check 塗り＝§45・♥赤と並びで意味が一目） */
     --watched: oklch(0.62 0.15 155);
+    /* 「見たい」ON のアンバー（三値の中間状態＝bookmark 塗り・§F-0034・赤/緑と弁別） */
+    --want: oklch(0.72 0.15 75);
     /* 炎ティアの暖色（§64・勢いを一目で） */
     --flame: oklch(0.7 0.19 45);
 
@@ -832,8 +834,10 @@
       cursor: not-allowed;
     }
 
+    /* 状態 ON（お気に入り/見たい/見た）は常時表示＝未視聴だけ hover で現れる非活性見た目（§F-0034）。 */
     .card-favorite.active,
-    .card-watched.active {
+    .card-watched.is-want,
+    .card-watched.is-watched {
       opacity: 1;
       background: oklch(0 0 0 / 0.55);
     }
@@ -847,9 +851,18 @@
       }
     }
 
-    /* 見た ON＝circle-check を緑で塗り（off=アウトライン・§45）。丸を塗り、
+    /* 見たい＝ブックマークをアンバーで塗り（三値の中間状態・§F-0034） */
+    .card-watched.is-want {
+      color: var(--want);
+      svg {
+        fill: var(--want);
+        stroke: var(--want);
+      }
+    }
+
+    /* 見た＝circle-check を緑で塗り（off=アウトライン・§45）。丸を塗り、
        チェックは背景色で抜く＝「済」が一目。 */
-    .card-watched.active {
+    .card-watched.is-watched {
       color: var(--watched);
       svg circle {
         fill: var(--watched);
@@ -1870,7 +1883,7 @@
     }
   }
 
-  /* お気に入り/未視聴フィルタは横並び（§9） */
+  /* お気に入り/見たい/見たフィルタは横並び（§9） */
   .filter-mark {
     display: flex;
     flex-direction: row;
@@ -1890,6 +1903,29 @@
         margin: 0;
       }
     }
+  }
+
+  /* マークフィルタ／適用中チップの SVG アイコン（絵文字置換・§F-0034）。
+     色はボタンの active と整合: お気に入り=赤 / 見たい=アンバー / 見た=緑。 */
+  .filter-mark-icon,
+  .applied-chip-icon {
+    flex-shrink: 0;
+  }
+  .filter-mark-icon {
+    width: 1em;
+    height: 1em;
+  }
+  .filter-mark-icon.is-fav,
+  .applied-chip-icon.is-fav {
+    color: var(--heart);
+  }
+  .filter-mark-icon.is-want,
+  .applied-chip-icon.is-want {
+    color: var(--want);
+  }
+  .filter-mark-icon.is-watched,
+  .applied-chip-icon.is-watched {
+    color: var(--watched);
   }
 
   /* 並び替えを 2 列に（§21・窮屈さ解消） */
@@ -2540,7 +2576,7 @@
     }
   }
 
-  /* ♥ ON＝赤・見た ON＝accent（§20） */
+  /* ♥ ON＝赤・見たい＝アンバー・見た＝緑（§20/§F-0034） */
   .btn-favorite.active {
     color: var(--heart);
     border-color: var(--heart);
@@ -2549,7 +2585,15 @@
       stroke: var(--heart);
     }
   }
-  .btn-watched.active {
+  .btn-watched.is-want {
+    color: var(--want);
+    border-color: var(--want);
+    svg {
+      fill: var(--want);
+      stroke: var(--want);
+    }
+  }
+  .btn-watched.is-watched {
     color: var(--watched);
     border-color: var(--watched);
     svg circle {

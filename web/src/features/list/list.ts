@@ -4,6 +4,7 @@ import { buildListUrl, PAGE_SIZE_OPTIONS } from '../router'
 import { seriesLink } from '../../shared/deeplink'
 import { card as createCard } from '../../components/card'
 import { icon } from '../../components/icon'
+import type { IconName } from '../../components/icon'
 import { metaSpan, formatViews, formatRelativeTimeLatest } from '../../components/meta'
 import type { MetaSpec } from '../../components/meta'
 import { progressiveReveal } from '../../components/reveal'
@@ -13,6 +14,15 @@ export interface ListData {
   tags: Tag[]
   cours: CoursGroup[]
 }
+
+// マークフィルタ（お気に入り/見たい/見た）のアイコン・クラス・ラベル。サイドバーのチェック
+// ボックスと適用中チップで共有し、絵文字でなくボタンと同じ SVG アイコン（lucide）で揃える。
+const MARK_META: Record<'fav' | 'want' | 'watched', { icon: IconName; cls: string; text: string }> =
+  {
+    fav: { icon: 'heart', cls: 'is-fav', text: 'お気に入り' },
+    want: { icon: 'bookmark', cls: 'is-want', text: '見たい' },
+    watched: { icon: 'circle-check', cls: 'is-watched', text: '見た' },
+  }
 
 type SortKey = ListState['sort']
 
@@ -25,7 +35,7 @@ function sortLabel(sort: SortKey): string {
     case 'new':
       return '最近更新'
     case 'created':
-      return '新規'
+      return '新規シリーズ'
     case 'kana':
       return '五十音順'
     case 'comments':
@@ -414,14 +424,16 @@ export function renderList(
     totalPages: number
     data?: ListData
     favFilter?: boolean
-    unwatchedFilter?: boolean
+    wantFilter?: boolean
+    watchedFilter?: boolean
     /** 空シェル（中身のない項目）も表示するか（§63・既定 false） */
     showEmptyFilter?: boolean
     /** 選択中の並び替えに応じたカード下キャプション指標（Hot＝[flame]数値・新着＝[clock]投稿時間 等・§5） */
     cardMetric?: (work: Work) => MetaSpec | null
-    /** お気に入り/未視聴フィルタ解除（適用中バーの [×]・§16） */
+    /** お気に入り/見たい/見たフィルタ解除（適用中バーの [×]・§16） */
     onClearFav?: () => void
-    onClearUnwatched?: () => void
+    onClearWant?: () => void
+    onClearWatched?: () => void
     onClearShowEmpty?: () => void
     /** 再生時間（離散スナップ・上限なし可）/ 投稿年 のレンジ絞り込み（§23・停止点インデックス方式） */
     sliders?: { duration: SliderSpec; year: SliderSpec }
@@ -443,11 +455,13 @@ export function renderList(
     totalPages,
     data,
     favFilter = false,
-    unwatchedFilter = false,
+    wantFilter = false,
+    watchedFilter = false,
     showEmptyFilter = false,
     cardMetric,
     onClearFav,
-    onClearUnwatched,
+    onClearWant,
+    onClearWatched,
     onClearShowEmpty,
     sliders,
     onSearch,
@@ -536,11 +550,13 @@ export function renderList(
   sortInfo.appendChild(icon('info', 14))
   sortH3.appendChild(sortInfo)
   sortSection.appendChild(sortH3)
-  // 並び替え選択肢（CSS で 2 列に並べる＝§21）
+  // 並び替え選択肢（CSS で 2 列に並べる＝§21）。配列順＝grid の行優先（左→右）で、
+  // 行ごとに対比が並ぶ: 五十音|Hot / 累計再生数|平均再生数 / 最近更新|新規シリーズ /
+  // 累計コメント数|平均コメント数。
   const sortGrid = document.createElement('div')
   sortGrid.className = 'sort-options'
   ;(
-    ['hot', 'views', 'avgViews', 'new', 'created', 'comments', 'avgComments', 'kana'] as const
+    ['kana', 'hot', 'views', 'avgViews', 'new', 'created', 'comments', 'avgComments'] as const
   ).forEach((s) => {
     const label = document.createElement('label')
     const radio = document.createElement('input')
@@ -647,23 +663,25 @@ export function renderList(
 
   const markSection = document.createElement('div')
   markSection.className = 'filter-mark'
-  const favLabel = document.createElement('label')
-  const favCb = document.createElement('input')
-  favCb.type = 'checkbox'
-  favCb.name = 'fav'
-  favCb.checked = favFilter
-  favLabel.appendChild(favCb)
-  favLabel.appendChild(document.createTextNode(' ♥ お気に入り'))
-  const unwatchedLabel = document.createElement('label')
-  const unwatchedCb = document.createElement('input')
-  unwatchedCb.type = 'checkbox'
-  unwatchedCb.name = 'unwatched'
-  unwatchedCb.checked = unwatchedFilter
-  unwatchedLabel.appendChild(unwatchedCb)
-  unwatchedLabel.appendChild(document.createTextNode(' ✓ 未視聴'))
+  // マークフィルタのアイコン/ラベルはボタン側（card/detail）と同じ SVG 体系（lucide）で統一。
+  // 絵文字は使わない。色は CSS で heart=赤/want=アンバー/watched=緑（ボタンの active と整合）。
+  for (const f of [
+    { name: 'fav', checked: favFilter },
+    { name: 'want', checked: wantFilter },
+    { name: 'watched', checked: watchedFilter },
+  ] as const) {
+    const meta = MARK_META[f.name]
+    const label = document.createElement('label')
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.name = f.name
+    cb.checked = f.checked
+    const ic = icon(meta.icon, 16)
+    ic.classList.add('filter-mark-icon', meta.cls)
+    label.append(cb, ic, document.createTextNode(' ' + meta.text))
+    markSection.appendChild(label)
+  }
   // 「取得できていないシリーズも表示」(§63/§67) は設定(⚙)へ移動したのでサイドバーには出さない。
-  markSection.appendChild(favLabel)
-  markSection.appendChild(unwatchedLabel)
 
   // ── 再生時間／投稿年 レンジ絞り込み（§23）。個別に並べ替えできるよう要素化（§66）──
   const mkSlider = (spec: SliderSpec): HTMLElement =>
@@ -678,7 +696,7 @@ export function renderList(
   const durationSlider = sliders ? mkSlider(sliders.duration) : null
   const yearSlider = sliders ? mkSlider(sliders.year) : null
 
-  // サイドバーのセクション順（§66）: 並び替え → マーク(お気に入り/未視聴) → 再生時間 →
+  // サイドバーのセクション順（§66）: 並び替え → マーク(お気に入り/見たい/見た) → 再生時間 →
   // 投稿年 → クール → タグ。
   filterDiv.appendChild(sortSection)
   filterDiv.appendChild(markSection)
@@ -735,9 +753,18 @@ export function renderList(
     chip.appendChild(x)
     applied.appendChild(chip)
   }
-  const addBtnChip = (label: string, onClear?: () => void) => {
+  const addBtnChip = (
+    label: string,
+    onClear?: () => void,
+    iconSpec?: { icon: IconName; cls: string }
+  ) => {
     const chip = document.createElement('span')
     chip.className = 'applied-chip'
+    if (iconSpec) {
+      const ic = icon(iconSpec.icon, 14)
+      ic.classList.add('applied-chip-icon', iconSpec.cls)
+      chip.appendChild(ic)
+    }
     const t = document.createElement('span')
     t.textContent = label
     chip.appendChild(t)
@@ -762,8 +789,9 @@ export function renderList(
     addLinkChip(coursLabel, { ...state, cours: toggleCours(state.cours, c) })
   }
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
-  if (favFilter) addBtnChip('♥ お気に入り', onClearFav)
-  if (unwatchedFilter) addBtnChip('✓ 未視聴', onClearUnwatched)
+  if (favFilter) addBtnChip(MARK_META.fav.text, onClearFav, MARK_META.fav)
+  if (wantFilter) addBtnChip(MARK_META.want.text, onClearWant, MARK_META.want)
+  if (watchedFilter) addBtnChip(MARK_META.watched.text, onClearWatched, MARK_META.watched)
   if (showEmptyFilter) addBtnChip('取得できていないシリーズも表示', onClearShowEmpty)
   if (sliders) {
     for (const spec of [sliders.duration, sliders.year]) {
