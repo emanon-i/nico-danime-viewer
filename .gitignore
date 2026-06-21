@@ -15,6 +15,10 @@ dist/
 /data/state/
 /data/series/
 
+# --- ローカル退避バックアップ・スクラッチ（リポジトリにコミットしない）---
+data.bak-*/
+/outputs/
+
 # --- OS / エディタ ---
 .DS_Store
 Thumbs.db
