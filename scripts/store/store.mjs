@@ -11,6 +11,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { stripHtml } from '../etl/series.mjs'
+import { trimSeriesTitle } from '../nico/list.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
 // 型定義（JSDoc）
@@ -539,8 +540,11 @@ export function upsertEpisodes(store, rawEps) {
           changed = true
         }
       }
-      // snapshot description で既存の shortDescription を補完（D2 挿入 ep の説明を完全版に上書き）
-      const newDesc = raw.description ?? existing.description
+      // long-wins: より長い description を保持（nvapi shortDesc が snapshot/RSS の全文を潰さない）
+      const newDesc =
+        raw.description && raw.description.length > (existing.description?.length ?? 0)
+          ? raw.description
+          : (existing.description ?? raw.description ?? null)
       if (existing.description !== newDesc) {
         existing.description = newDesc
         changed = true
@@ -593,7 +597,7 @@ export function upsertSeries(store, seriesList) {
     if (!sid) continue
     const existing = store.series.get(sid)
     if (existing) {
-      existing.title = raw.title ?? existing.title
+      existing.title = raw.title != null ? trimSeriesTitle(raw.title) : existing.title
       existing.colKey = raw.colKey ?? existing.colKey
       // thumbnailUrl COALESCE: 既存があれば保護、null の時だけ受け入れ
       existing.thumbnailUrl = existing.thumbnailUrl ?? raw.thumbnailUrl ?? null
@@ -611,7 +615,7 @@ export function upsertSeries(store, seriesList) {
     } else {
       store.series.set(sid, {
         seriesId: sid,
-        title: raw.title ?? '',
+        title: trimSeriesTitle(raw.title ?? ''),
         colKey: raw.colKey ?? null,
         thumbnailUrl: raw.thumbnailUrl ?? null,
         descriptionFirst: raw.descriptionFirst ?? null,

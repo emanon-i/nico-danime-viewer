@@ -280,6 +280,18 @@ describe('sortWorks (F-0031)', () => {
     expect(result).toEqual([3, 2, 1])
   })
 
+  it('sort=new: 同時刻タイは latestContentId so番号降順で解決する（§毎時00分一括配信）', () => {
+    const SAME_TIME = '2026-06-21T02:00:00+09:00'
+    const works: Work[] = [
+      { ...BASE_WORK, seriesId: 556482, latestAt: SAME_TIME, latestContentId: 'so46451763' }, // 低 so番号
+      { ...BASE_WORK, seriesId: 555653, latestAt: SAME_TIME, latestContentId: 'so46451859' }, // 高 so番号
+      { ...BASE_WORK, seriesId: 555656, latestAt: SAME_TIME, latestContentId: 'so46451766' }, // 中 so番号
+    ]
+    const result = sortWorks(works, 'new', null).map((w) => w.seriesId)
+    // so番号降順: 46451859 > 46451766 > 46451763
+    expect(result).toEqual([555653, 555656, 556482])
+  })
+
   it('test_kana_sort_row_then_title: kana ソートが行順＋タイトル順', () => {
     const result = sortWorks(WORKS, 'kana', null)
     // さ行 (3=A, 2=B) → や行 (1=Z)
@@ -293,6 +305,55 @@ describe('sortWorks (F-0031)', () => {
 
   it('ranking なしで hot ソートを呼んでも例外を投げない', () => {
     expect(() => sortWorks(WORKS, 'hot', null)).not.toThrow()
+  })
+
+  it('仮シリーズ（seriesId < 0）は実シリーズと同じキーで混合ソートされる', () => {
+    const T0 = '2026-06-20T00:00:00+09:00'
+    const T1 = '2026-06-21T00:00:00+09:00'
+    const mixed: Work[] = [
+      {
+        ...BASE_WORK,
+        seriesId: -300,
+        title: 'ルパン',
+        latestAt: T0,
+        firstAt: T0,
+        latestContentId: 'so100',
+        firstContentId: 'so100',
+      },
+      {
+        ...BASE_WORK,
+        seriesId: 1,
+        title: '実作品A',
+        latestAt: T1,
+        firstAt: T1,
+        latestContentId: 'so200',
+        firstContentId: 'so200',
+      },
+      {
+        ...BASE_WORK,
+        seriesId: -100,
+        title: 'アンデッド',
+        latestAt: T1,
+        firstAt: T1,
+        latestContentId: 'so300',
+        firstContentId: 'so300',
+      },
+      {
+        ...BASE_WORK,
+        seriesId: 2,
+        title: '実作品B',
+        latestAt: T0,
+        firstAt: T0,
+        latestContentId: 'so050',
+        firstContentId: 'so050',
+      },
+    ]
+    // sort=new: latestAt 降順。T1 グループ(so300>so200)→ T0 グループ(so100>so050)
+    const byNew = sortWorks(mixed, 'new', null).map((w) => w.seriesId)
+    expect(byNew).toEqual([-100, 1, -300, 2])
+    // sort=created: firstAt 降順。同じ順序になるはず
+    const byCreated = sortWorks(mixed, 'created', null).map((w) => w.seriesId)
+    expect(byCreated).toEqual([-100, 1, -300, 2])
   })
 
   it('ランキング外の作品は末尾に積まれる', () => {

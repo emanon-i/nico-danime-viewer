@@ -21,8 +21,12 @@ export interface Work {
   episodeCount: number
   /** 最新話の投稿時刻（episodes.start_time の最大・ISO8601）。新着順・投稿時間メタに使う（旧 JSON では欠落） */
   latestAt?: string | null
+  /** 最新話の contentId（"so番号"）。sort=new の同時刻タイブレーカー用（旧 JSON では欠落） */
+  latestContentId?: string | null
   /** 最古話の投稿時刻（episodes.start_time の最小・ISO8601）。投稿時間レンジ絞り込みに使う */
   firstAt?: string | null
+  /** 最古話の contentId（"so番号"）。sort=created の同時刻タイブレーカー用 */
+  firstContentId?: string | null
   /** シリーズ合算コメント数（総コメント数順・メタ用） */
   commentTotal?: number
   /** シリーズ合算マイリスト数 */

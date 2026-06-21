@@ -177,7 +177,11 @@ snapshot に登場したが seriesId が未解決の ep を救出する。
 
 ```
 1. store の contentId→seriesId Map に既にある → 直接解決（nvapi 不要）
-2. ep のタグ/タイトル照合 → seriesId → nvapi v2/series → 全話取得 → ep 付け替え
+2. ep のタグ/タイトル照合 → seriesId 候補 → nvapi v2/series → 全話取得 → ep 付け替え
+   2b. nvapi 失敗でも list.json 掲載作品なら seriesId を確定（applyListJsonRescue）:
+       list-index.json のタイトル照合で seriesId が得られた場合、nvapi エラーでも
+       list.json 掲載＝支店公式ラインナップ確認済みを権威として seriesId を確定する。
+       nvapi 再試行なし・ep は確定 seriesId で付け替え。
 3. 全失敗 → 仮シリーズ登録（thumbnailUrl → contentId 復元・provisionalSeriesId）
 ```
 
@@ -297,7 +301,7 @@ Phase A2 : 取得漏れ救出（Phase B 後・allTitles が充実した状態で
 lastSeenAt: snapshot 出現シリーズ（seriesId > 0）に lastSeenAt = now を記録
 
 Phase E  : ETL 派生
-              E1: series.descriptionFirst（最古話 description）
+              E1: series.descriptionFirst（最古話 description・long-wins: 複数源の description は長い方を保持）
               E2: series.tags（タグ正規化・dアニメ接頭/接尾除去・作品名タグ除外）
               E3: cours（タグ主源 → 213クール・約3900作品を網羅）
               E4: franchiseKey（タイトル語幹 + シリーズタグ union-find）+ relatedSeries
@@ -511,6 +515,7 @@ Phase G  : projectAll（works / ranking / tags / kana / new 等）← 非 atomic
 | **判定**           | `series.seriesId < 0`                                                                             |
 | **カード**         | 公式シリーズページの外部リンクボタンを `disabled` + `data-tooltip="公式シリーズ情報を取得中です"` |
 | **詳細画面**       | 公式シリーズページボタンを `disabled` + ツールチップ                                              |
+| **ソート順**       | 実シリーズと**同一キーで混合ソート**（末尾分離なし）。固有の挙動は公式リンク無効のみ              |
 | **解消タイミング** | 翌日の B6 reconciliation 後に正整数 seriesId に統合 → 通常表示に戻る                              |
 
 ### カード表示仕様

@@ -161,8 +161,8 @@ format は両者同一。
 | `colKey`           | `string\|null`                          | 五十音分類キー（`list.json` 固有）                                 | Phase B4                     |
 | `thumbnailUrl`     | `string\|null`                          | サムネ URL（COALESCE: 既存があれば保護、なければ最古 ep から補完） | Phase E6 syncThumbs          |
 | `descriptionFirst` | `string\|null`                          | 最古話の HTML 剥ぎ description                                     | Phase E1                     |
-| `firstSeen`        | `string\|null`                          | 最古話 startTime ISO8601                                           | Phase E5 syncTimestamps      |
-| `lastSeen`         | `string\|null`                          | 最新話 startTime ISO8601                                           | Phase E5 syncTimestamps      |
+| `firstAt`          | `string\|null`                          | 最古話 startTime ISO8601                                           | Phase E5 syncTimestamps      |
+| `latestAt`         | `string\|null`                          | 最新話 startTime ISO8601                                           | Phase E5 syncTimestamps      |
 | `lastSeenAt`       | `string\|null`                          | snapshot に最後に登場した日時（E7 isAvailable 評価に使う）         | Phase A 日次                 |
 | `cours`            | `string\|null`                          | 放送季 `'YYYY-季'` 形式（タグ主源）                                | Phase E3                     |
 | `franchiseKey`     | `string\|null`                          | シリーズタグ union-find キー（関連シリーズ束ね）                   | Phase E4                     |
@@ -185,22 +185,22 @@ format は両者同一。
 
 **ファイル永続化フィールド**（series JSON の `episodes[]` 配列内）:
 
-| フィールド       | 型             | 内容                                             | 更新元           |
-| ---------------- | -------------- | ------------------------------------------------ | ---------------- |
-| `contentId`      | `string`       | `so…` 形式 ID（不変）                            | snapshot / RSS   |
-| `episodeNo`      | `number\|null` | 話番号（nvapi 由来・一度確定したら保護）         | nvapi            |
-| `title`          | `string`       | 話タイトル（nvapi 由来優先・一度確定したら保護） | snapshot / nvapi |
-| `viewCounter`    | `number\|null` | 再生数（snapshot 毎回上書き）                    | snapshot         |
-| `commentCounter` | `number\|null` | コメント数                                       | snapshot         |
-| `likeCounter`    | `number\|null` | いいね数                                         | snapshot         |
-| `mylistCounter`  | `number\|null` | マイリスト数                                     | snapshot         |
-| `lengthSeconds`  | `number\|null` | 尺（秒）                                         | snapshot         |
-| `startTime`      | `string\|null` | 公開日時 ISO8601（nvapi 由来優先・保護）         | snapshot / nvapi |
-| `thumbnailUrl`   | `string\|null` | サムネ URL                                       | snapshot         |
-| `description`    | `string\|null` | あらすじ生 HTML（HTML strip は projection 時）   | snapshot         |
-| `tags`           | `string[]`     | 正規化タグ名配列                                 | snapshot / E2    |
-| `tagsCurated`    | `string[]`     | キュレーションタグ部分集合（`tags` の subset）   | E2               |
-| `lastUpdated`    | `string\|null` | 実変化があった最終 ISO8601                       | 変化時           |
+| フィールド       | 型             | 内容                                                                                                                                                                                 | 更新元           |
+| ---------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
+| `contentId`      | `string`       | `so…` 形式 ID（不変）                                                                                                                                                                | snapshot / RSS   |
+| `episodeNo`      | `number\|null` | 話番号（nvapi 由来・一度確定したら保護）                                                                                                                                             | nvapi            |
+| `title`          | `string`       | 話タイトル（nvapi 由来優先・一度確定したら保護）                                                                                                                                     | snapshot / nvapi |
+| `viewCounter`    | `number\|null` | 再生数（snapshot 毎回上書き）                                                                                                                                                        | snapshot         |
+| `commentCounter` | `number\|null` | コメント数                                                                                                                                                                           | snapshot         |
+| `likeCounter`    | `number\|null` | いいね数                                                                                                                                                                             | snapshot         |
+| `mylistCounter`  | `number\|null` | マイリスト数                                                                                                                                                                         | snapshot         |
+| `lengthSeconds`  | `number\|null` | 尺（秒）                                                                                                                                                                             | snapshot         |
+| `startTime`      | `string\|null` | 公開日時 ISO8601（nvapi 由来優先・保護）                                                                                                                                             | snapshot / nvapi |
+| `thumbnailUrl`   | `string\|null` | サムネ URL                                                                                                                                                                           | snapshot         |
+| `description`    | `string\|null` | あらすじ生 HTML（HTML strip は projection 時）。複数源が競合する場合は**長い方を保持（long-wins）**: RSS HTML CDATA のリッチな説明が snapshot の短い要約に上書きされないよう保護する | snapshot / RSS   |
+| `tags`           | `string[]`     | 正規化タグ名配列                                                                                                                                                                     | snapshot / E2    |
+| `tagsCurated`    | `string[]`     | キュレーションタグ部分集合（`tags` の subset）                                                                                                                                       | E2               |
+| `lastUpdated`    | `string\|null` | 実変化があった最終 ISO8601                                                                                                                                                           | 変化時           |
 
 **メモリのみ — ファイル非永続**:
 
@@ -254,27 +254,29 @@ return h <= 0 ? h - 1 : -h // 必ず負数・0 にならない
 
 **WorkEntry フィールド**:
 
-| フィールド         | 型                                | 内容                           |
-| ------------------ | --------------------------------- | ------------------------------ |
-| `seriesId`         | `number`                          | シリーズ ID                    |
-| `title`            | `string`                          | シリーズ名                     |
-| `thumbnailUrl`     | `string\|null`                    | サムネ URL                     |
-| `descriptionFirst` | `string\|null`                    | 最古話あらすじ（HTML剥ぎ済み） |
-| `tags`             | `string[]`                        | 正規化タグ名                   |
-| `cours`            | `string\|null`                    | 放送季                         |
-| `franchiseKey`     | `string\|null`                    | フランチャイズキー             |
-| `colKey`           | `string\|null`                    | 五十音キー                     |
-| `isAvailable`      | `boolean`                         | 配信中フラグ                   |
-| `episodeCount`     | `number`                          | 話数                           |
-| `latestAt`         | `string\|null`                    | 最新話 startTime               |
-| `firstAt`          | `string\|null`                    | 最古話 startTime               |
-| `commentTotal`     | `number`                          | コメント数合計                 |
-| `mylistTotal`      | `number`                          | マイリスト数合計               |
-| `mylistFirst`      | `number`                          | 第1話マイリスト数              |
-| `durationTotal`    | `number`                          | 総尺（秒）                     |
-| `totalViews`       | `number`                          | 累計再生数                     |
-| `hotScore`         | `number`                          | 勢いスコア（0〜1）             |
-| `relatedSeries`    | `{seriesId,title,thumbnailUrl}[]` | 関連シリーズ                   |
+| フィールド         | 型                                | 内容                                                              |
+| ------------------ | --------------------------------- | ----------------------------------------------------------------- |
+| `seriesId`         | `number`                          | シリーズ ID                                                       |
+| `title`            | `string`                          | シリーズ名                                                        |
+| `thumbnailUrl`     | `string\|null`                    | サムネ URL                                                        |
+| `descriptionFirst` | `string\|null`                    | 最古話あらすじ（HTML剥ぎ済み）                                    |
+| `tags`             | `string[]`                        | 正規化タグ名                                                      |
+| `cours`            | `string\|null`                    | 放送季                                                            |
+| `franchiseKey`     | `string\|null`                    | フランチャイズキー                                                |
+| `colKey`           | `string\|null`                    | 五十音キー                                                        |
+| `isAvailable`      | `boolean`                         | 配信中フラグ                                                      |
+| `episodeCount`     | `number`                          | 話数                                                              |
+| `latestAt`         | `string\|null`                    | 最新話 startTime                                                  |
+| `latestContentId`  | `string\|null`                    | 最新話 contentId（`so番号`）。sort=new 同時刻タイブレーカー用     |
+| `firstAt`          | `string\|null`                    | 最古話 startTime                                                  |
+| `firstContentId`   | `string\|null`                    | 最古話 contentId（`so番号`）。sort=created 同時刻タイブレーカー用 |
+| `commentTotal`     | `number`                          | コメント数合計                                                    |
+| `mylistTotal`      | `number`                          | マイリスト数合計                                                  |
+| `mylistFirst`      | `number`                          | 第1話マイリスト数                                                 |
+| `durationTotal`    | `number`                          | 総尺（秒）                                                        |
+| `totalViews`       | `number`                          | 累計再生数                                                        |
+| `hotScore`         | `number`                          | 勢いスコア（0〜1）                                                |
+| `relatedSeries`    | `{seriesId,title,thumbnailUrl}[]` | 関連シリーズ                                                      |
 
 ソート: `seriesId` 昇順（決定的順序）。
 `isAvailable=false`: **含む**（UI 側でフィルタ）。

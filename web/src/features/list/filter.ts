@@ -145,6 +145,14 @@ function sortWorksDesc(
   sort: ListState['sort'],
   ranking: RankingJson | null
 ): Work[] {
+  return sortAllWorksDesc(works, sort, ranking)
+}
+
+function sortAllWorksDesc(
+  works: Work[],
+  sort: ListState['sort'],
+  ranking: RankingJson | null
+): Work[] {
   if (sort === 'hot' && ranking) {
     const order = new Map(ranking.hot.map((r, i) => [r.seriesId, i]))
     return [...works].sort((a, b) => {
@@ -169,22 +177,37 @@ function sortWorksDesc(
   }
   if (sort === 'new') {
     // 最近更新＝各シリーズの「最新話の投稿時刻」(latestAt = MAX(episode startTime)) 降順（§54/§72）。
+    // 同時刻タイ（毎時00分の一括配信）は latestContentId の so番号降順で解決（後投稿ほど大きい）、
+    // それでも同値なら seriesId 降順をフォールバック。
     const t = (w: Work): number => {
       const v = w.latestAt ?? w.firstAt
       const ms = v ? Date.parse(v) : NaN
       return Number.isNaN(ms) ? -Infinity : ms
     }
-    return [...works].sort((a, b) => t(b) - t(a) || b.seriesId - a.seriesId)
+    const cidNum = (w: Work): number => {
+      const m = (w.latestContentId ?? '').match(/(\d+)$/)
+      return m ? parseInt(m[1], 10) : -1
+    }
+    return [...works].sort(
+      (a, b) => t(b) - t(a) || cidNum(b) - cidNum(a) || b.seriesId - a.seriesId
+    )
   }
   if (sort === 'created') {
     // 新規＝各シリーズの「最古話の投稿時刻」(firstAt = MIN(episode startTime)) 降順（§72）。
     // ＝シリーズが（支店に）新しくできた近似。カード表示の日付も firstAt に揃える。
+    // 同時刻タイは firstContentId の so番号降順（後投稿ほど大きい）→ seriesId 降順。
     const t = (w: Work): number => {
       const v = w.firstAt ?? w.latestAt
       const ms = v ? Date.parse(v) : NaN
       return Number.isNaN(ms) ? -Infinity : ms
     }
-    return [...works].sort((a, b) => t(b) - t(a) || b.seriesId - a.seriesId)
+    const cidNum = (w: Work): number => {
+      const m = (w.firstContentId ?? '').match(/(\d+)$/)
+      return m ? parseInt(m[1], 10) : -1
+    }
+    return [...works].sort(
+      (a, b) => t(b) - t(a) || cidNum(b) - cidNum(a) || b.seriesId - a.seriesId
+    )
   }
   if (sort === 'comments') {
     return [...works].sort(

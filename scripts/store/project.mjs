@@ -10,6 +10,7 @@
  *                                        works.json / ranking.json / tags.json / …
  */
 
+import { readFileSync } from 'node:fs'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { recalcSeriesMetricsJS } from '../etl/metrics.mjs'
@@ -33,8 +34,14 @@ function buildEpCountMap(store) {
   return map
 }
 
+// so番号の数値（"so46451859" → 46451859）。sort=new のタイブレーカー用。
+function soNumOf(contentId) {
+  const m = (contentId ?? '').match(/(\d+)$/)
+  return m ? parseInt(m[1], 10) : -1
+}
+
 function buildEpAggMap(store) {
-  // seriesId → {totalViews, commentTotal, mylistTotal, durationTotal, latestAt, firstAt, mylistFirst}
+  // seriesId → {totalViews, commentTotal, mylistTotal, durationTotal, latestAt, latestContentId, firstAt, mylistFirst}
   const map = new Map()
   for (const ep of store.episodes.values()) {
     if (ep.seriesId == null) continue
@@ -46,6 +53,7 @@ function buildEpAggMap(store) {
         mylistTotal: 0,
         durationTotal: 0,
         latestAt: null,
+        latestContentId: null,
         firstAt: null,
         mylistFirst: null,
         _firstEpNo: null, // 第1話決定用 内部フィールド
@@ -58,7 +66,16 @@ function buildEpAggMap(store) {
     a.commentTotal += ep.commentCounter ?? 0
     a.mylistTotal += ep.mylistCounter ?? 0
     a.durationTotal += ep.lengthSeconds ?? 0
-    if (ep.startTime && (!a.latestAt || ep.startTime > a.latestAt)) a.latestAt = ep.startTime
+    if (ep.startTime) {
+      if (
+        !a.latestAt ||
+        ep.startTime > a.latestAt ||
+        (ep.startTime === a.latestAt && soNumOf(ep.contentId) > soNumOf(a.latestContentId))
+      ) {
+        a.latestAt = ep.startTime
+        a.latestContentId = ep.contentId
+      }
+    }
 
     // 第1話: episode_no IS NULL ASC, episode_no ASC, start_time ASC, content_id ASC（旧SQLパリティ）
     const epNo = ep.episodeNo ?? Infinity // null → Infinity（後ろ）
@@ -108,7 +125,9 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       isAvailable: s.isAvailable,
       episodeCount: epCount,
       latestAt: agg.latestAt ?? null,
+      latestContentId: agg.latestContentId ?? null,
       firstAt: agg.firstAt ?? null,
+      firstContentId: agg._firstCid ?? null,
       commentTotal: agg.commentTotal ?? 0,
       mylistTotal: agg.mylistTotal ?? 0,
       mylistFirst: agg.mylistFirst ?? 0,
@@ -297,6 +316,108 @@ export async function exportNew(store, outDir, lastUpdated) {
   })
 
   await writeJson(outDir, 'new.json', { lastUpdated, items })
+}
+
+// ── works.json 差分更新（毎時用）────────────────────────────────────────────
+
+/**
+ * works.json の指定シリーズを差分 upsert する（毎時・partial store で実行）。
+ * 新規シリーズ・仮シリーズを日次を待たずに即座に works.json へ反映させる。
+ * hotScore/relatedSeries は既存値を引き継ぎ（日次の full 計算には干渉しない）。
+ *
+ * @param {import('./store.mjs').Store} store
+ * @param {Set<number>} seriesIds - 追加/更新対象 seriesId（正数・負数両方可）
+ * @param {string} outDir
+ * @param {string} lastUpdated
+ */
+export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) {
+  if (seriesIds.size === 0) return
+
+  const worksPath = join(outDir, 'works.json')
+  let existing = { lastUpdated, works: [] }
+  try {
+    existing = JSON.parse(readFileSync(worksPath, 'utf-8'))
+  } catch {
+    /* first run or missing */
+  }
+
+  const worksMap = new Map(existing.works.map((w) => [w.seriesId, w]))
+
+  // 対象シリーズのエピソード集計（partial store なのでこのシリーズ分だけ存在）
+  const epAgg = new Map()
+  for (const ep of store.episodes.values()) {
+    const sid = ep.seriesId
+    if (sid == null || !seriesIds.has(sid)) continue
+    let a = epAgg.get(sid)
+    if (!a) {
+      a = {
+        count: 0,
+        totalViews: 0,
+        commentTotal: 0,
+        mylistTotal: 0,
+        durationTotal: 0,
+        latestAt: null,
+        latestContentId: null,
+        firstAt: null,
+        firstContentId: null,
+      }
+      epAgg.set(sid, a)
+    }
+    a.count++
+    a.totalViews += ep.viewCounter ?? 0
+    a.commentTotal += ep.commentCounter ?? 0
+    a.mylistTotal += ep.mylistCounter ?? 0
+    a.durationTotal += ep.lengthSeconds ?? 0
+    if (ep.startTime) {
+      if (
+        !a.latestAt ||
+        ep.startTime > a.latestAt ||
+        (ep.startTime === a.latestAt && soNumOf(ep.contentId) > soNumOf(a.latestContentId))
+      ) {
+        a.latestAt = ep.startTime
+        a.latestContentId = ep.contentId
+      }
+      if (!a.firstAt || ep.startTime < a.firstAt) {
+        a.firstAt = ep.startTime
+        a.firstContentId = ep.contentId
+      } else if (ep.startTime === a.firstAt && soNumOf(ep.contentId) < soNumOf(a.firstContentId)) {
+        a.firstContentId = ep.contentId
+      }
+    }
+  }
+
+  for (const sid of seriesIds) {
+    const s = store.series.get(sid)
+    if (!s) continue
+    const agg = epAgg.get(sid) ?? {}
+    const prev = worksMap.get(sid)
+    worksMap.set(sid, {
+      seriesId: s.seriesId,
+      title: s.title,
+      thumbnailUrl: s.thumbnailUrl,
+      descriptionFirst: s.descriptionFirst,
+      tags: s.tags.map((t) => t.name),
+      cours: s.cours,
+      franchiseKey: s.franchiseKey,
+      colKey: s.colKey,
+      isAvailable: s.isAvailable,
+      episodeCount: agg.count ?? 0,
+      latestAt: agg.latestAt ?? null,
+      latestContentId: agg.latestContentId ?? null,
+      firstAt: agg.firstAt ?? null,
+      firstContentId: agg.firstContentId ?? null,
+      commentTotal: agg.commentTotal ?? 0,
+      mylistTotal: agg.mylistTotal ?? 0,
+      mylistFirst: prev?.mylistFirst ?? 0,
+      durationTotal: agg.durationTotal ?? 0,
+      totalViews: agg.totalViews ?? 0,
+      hotScore: prev?.hotScore ?? 0,
+      relatedSeries: s.relatedSeries ?? prev?.relatedSeries ?? [],
+    })
+  }
+
+  const works = [...worksMap.values()].sort((a, b) => a.seriesId - b.seriesId)
+  await writeJson(outDir, 'works.json', { lastUpdated, works })
 }
 
 // ── 全 projection を実行 ─────────────────────────────────────────────────────

@@ -52,9 +52,9 @@ const LIST_PARAMS = ['q', 'row', 'tag', 'cours', 'sort', 'dir', 'page', 'size', 
 
 export function parseScreen(params: URLSearchParams): Screen {
   const seriesParam = params.get('series')
-  if (seriesParam !== null && /^\d+$/.test(seriesParam)) {
+  if (seriesParam !== null && /^-?\d+$/.test(seriesParam)) {
     const id = parseInt(seriesParam, 10)
-    if (id > 0) return { type: 'detail', seriesId: id }
+    if (id !== 0) return { type: 'detail', seriesId: id }
   }
 
   const hasListParam = LIST_PARAMS.some((k) => params.has(k))

@@ -14,6 +14,7 @@ import { fetchAllBranchEpisodes, fetchSnapshotVersion } from './nico/snapshot.mj
 import { assertSnapshotOk } from './nico/assert.mjs'
 import {
   fetchAllStaticJsons,
+  fetchListJson,
   buildListIndex,
   extractSeriesIdsFromItems,
   resolveByTitle,
@@ -21,6 +22,7 @@ import {
   contentIdFromThumbnail,
   extractSeriesTitle,
   provisionalSeriesId,
+  trimSeriesTitle,
 } from './nico/list.mjs'
 import { fetchSeriesData, mapNvapiEpisodes, isBranchSeries } from './nico/nvapi.mjs'
 import { fetchRssMultiPage, extractWatchId } from './nico/rss.mjs'
@@ -34,7 +36,7 @@ import {
   computeFranchiseKeys,
 } from './etl/series.mjs'
 import { deriveCoursFromTagsFromStore } from './etl/cours.mjs'
-import { projectAll, exportNew as exportNewStore } from './store/project.mjs'
+import { projectAll, exportNew as exportNewStore, exportWorksPartial } from './store/project.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -203,18 +205,38 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
       storeUpsertSeries(store, [{ seriesId, title, isAvailable: true }])
     }
 
+    // list.json でマッチした cids は支店確定（list.json 自体が支店専用カタログ）。
+    // nvapi 失敗・non-branch 判定でも这些 cid を権威的に seriesId へ割当て、仮降格を防ぐ。
+    function applyListJsonRescue(reason) {
+      let assigned = 0
+      for (const cid of cids) {
+        if (!missedContentIds.has(cid)) continue
+        const ep = store.episodes.get(cid)
+        if (ep && (ep.seriesId == null || ep.seriesId < 0)) {
+          ep.seriesId = seriesId
+          store._dirtySeries.add(seriesId)
+          assigned++
+        }
+        contentToSeries.set(cid, seriesId)
+        missedContentIds.delete(cid)
+        logger.info('fetch', '[JS] A2 rescue: list.json trust (' + reason + ')', { cid, seriesId })
+      }
+      // 割当なし＋新規追加なら不要 series を削除
+      if (assigned === 0 && wasNew) store.series.delete(seriesId)
+    }
+
     let nvapiData
     try {
       nvapiData = await fetchSeriesData(seriesId)
     } catch (err) {
       logger.warn('fetch', '[JS] A2 nvapi failed', { seriesId, err: err.message })
-      if (wasNew) store.series.delete(seriesId)
+      applyListJsonRescue('nvapi-error')
       continue
     }
 
     if (!isBranchSeries(nvapiData?.detail)) {
       logger.warn('fetch', '[JS] A2 rescue: non-branch series, skip', { seriesId })
-      if (wasNew) store.series.delete(seriesId)
+      applyListJsonRescue('non-branch')
       continue
     }
 
@@ -232,7 +254,16 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
         contentToSeries.set(cid, seriesId)
         missedContentIds.delete(cid)
       } else if (cids.includes(cid)) {
-        logger.info('fetch', '[JS] A2 rescue: title-matched but not in nvapi list -> pending', {
+        // list.json title/tag-match + isBranchSeries 確認済み → nvapi 500件上限外でも支店確定
+        // contentId が nvapi items に含まれない = 新話が未収録なだけ（limit超）。誤仮化を防ぐ。
+        const ep = store.episodes.get(cid)
+        if (ep && (ep.seriesId == null || ep.seriesId < 0)) {
+          ep.seriesId = seriesId
+          store._dirtySeries.add(seriesId)
+        }
+        contentToSeries.set(cid, seriesId)
+        missedContentIds.delete(cid)
+        logger.info('fetch', '[JS] A2 rescue: list.json trust (beyond nvapi 500-limit)', {
           cid,
           seriesId,
         })
@@ -271,19 +302,6 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
   }
 
   logger.info('fetch', '[JS] A2 rescue done', { remaining: missedContentIds.size })
-}
-
-function loadListIndexCache(stateDir) {
-  try {
-    const raw = JSON.parse(readFileSync(join(stateDir, 'list-index.json'), 'utf-8'))
-    const m = new Map()
-    for (const { seriesId, title } of Array.isArray(raw) ? raw : []) {
-      if (title && seriesId) m.set(title, Number(seriesId))
-    }
-    return m
-  } catch {
-    return new Map()
-  }
 }
 
 function _trimRss(store, maxItems = 200) {
@@ -421,6 +439,12 @@ async function runFullJS() {
     inListJson.add(seriesId)
     const s = store.series.get(seriesId)
     if (s) {
+      // list.json タイトルを正準とする（trim後）: nvapi より list.json が権威
+      const listTitle = trimSeriesTitle(item.title ?? '')
+      if (listTitle && s.title !== listTitle) {
+        s.title = listTitle
+        store._dirtySeries.add(seriesId)
+      }
       if (s.colKey !== item.col_key) {
         s.colKey = item.col_key
         store._dirtySeries.add(seriesId)
@@ -464,12 +488,11 @@ async function runFullJS() {
       if (!s) continue
       // 1. 仮シリーズの title そのまま照合
       let realId = allTitles.get(s.title)
-      // 2. ep のタイトルから extractSeriesTitle で照合（仮シリーズ title と nvapi title の乖離を吸収）
+      // 2. ep タイトルを resolveByTitle で前方一致照合（全角スペース境界ガード付き）
       if (!realId) {
         for (const ep of store.episodes.values()) {
           if (ep.seriesId !== sid) continue
-          const extracted = extractSeriesTitle(ep.title)
-          realId = allTitles.get(extracted)
+          realId = resolveByTitle(ep.title ?? '', allTitles)
           if (realId) break
         }
       }
@@ -679,13 +702,17 @@ async function runHourlyJS() {
   }
   if (newLastGuid) storeUpdateMeta(store, { rssLastGuid: newLastGuid })
 
-  const listIndexByTitle = loadListIndexCache(stateDir)
-  if (listIndexByTitle.size === 0) {
-    logger.warn(
-      'fetch',
-      '[JS] hourly D2: list-index.json empty (run daily first?) -> skip resolve',
-      {}
-    )
+  // list.json を毎時直接取得（state/list-index.json キャッシュに依存しない）
+  let listIndexByTitle = new Map()
+  try {
+    const listJson = await fetchListJson()
+    const { byTitle } = buildListIndex(listJson)
+    listIndexByTitle = byTitle
+    logger.info('fetch', '[JS] hourly D2: list.json loaded', { count: listIndexByTitle.size })
+  } catch (err) {
+    logger.warn('fetch', '[JS] hourly D2: list.json fetch failed, skip resolve', {
+      err: err.message,
+    })
   }
 
   const toPend = new Map()
@@ -697,6 +724,10 @@ async function runHourlyJS() {
   const resolvedSeriesTitles = new Map()
   logger.info('fetch', '[JS] hourly D2: list-index resolve', { candidates: toPend.size })
 
+  // D3 の loadPartialStore が store.episodes を disk から上書きするため、
+  // RSS description は D3 完了後に適用する（D2 時点で書くと消される）
+  const rssDescriptions = new Map()
+
   for (const [watchId, rssEntry] of toPend) {
     const title = rssEntry.title ?? ''
     const seriesId = resolveByTitle(title, listIndexByTitle)
@@ -705,6 +736,10 @@ async function runHourlyJS() {
       const resolvedCid = contentIdFromThumbnail(rssEntry.thumbnailUrl ?? null)
       if (resolvedCid) {
         storeUpdateRssResolution(store, watchId, resolvedCid, 'resolved')
+        // RSS description を退避（D3 完了後に long-wins で適用）
+        if (rssEntry.description) {
+          rssDescriptions.set(resolvedCid, rssEntry.description)
+        }
       }
       resolvedSeriesIds.add(seriesId)
       if (!resolvedSeriesTitles.has(seriesId)) resolvedSeriesTitles.set(seriesId, '')
@@ -768,6 +803,16 @@ async function runHourlyJS() {
     })
   }
 
+  // D3 完了後: RSS description（HTML 700+字）を long-wins で適用（snapshot/nvapi の 50字に勝つ）
+  if (rssDescriptions.size > 0) {
+    const descUpdates = [...rssDescriptions.entries()].map(([contentId, description]) => ({
+      contentId,
+      description,
+    }))
+    storeUpsertEps(store, descUpdates)
+    logger.info('fetch', '[JS] hourly D4: RSS description applied', { count: descUpdates.length })
+  }
+
   _trimRss(store, 200)
 
   if (store._dirtySeries.size > 0) {
@@ -787,6 +832,12 @@ async function runHourlyJS() {
     }
     writeFileSync(idxPath + '.tmp', JSON.stringify(existingIdx), 'utf-8')
     renameSync(idxPath + '.tmp', idxPath)
+  }
+
+  // 新規/仮シリーズを works.json へ即時反映（日次を待たずにビューアに表示）
+  if (resolvedSeriesIds.size > 0) {
+    await exportWorksPartial(store, resolvedSeriesIds, DATA_DIR, now)
+    logger.info('fetch', '[JS] hourly: works.json patched', { count: resolvedSeriesIds.size })
   }
 
   await exportNewStore(store, DATA_DIR, now)

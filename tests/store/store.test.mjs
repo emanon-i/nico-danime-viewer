@@ -122,6 +122,36 @@ describe('upsertEpisodes', () => {
     expect(ep.title).toBe('オリジナル')
     expect(ep.startTime).toBe('2024-01-01T00:00:00Z')
   })
+
+  it('description long-wins: 短い新値は長い既存値を上書きしない', () => {
+    const store = createStore()
+    const longDesc = 'A'.repeat(200)
+    upsertEpisodes(store, [makeEp({ description: longDesc })])
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: 'short' }])
+    expect(store.episodes.get('so10000001')?.description).toBe(longDesc)
+  })
+
+  it('description long-wins: 長い新値は短い既存値を上書きする', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ description: 'short' })])
+    const longDesc = 'B'.repeat(200)
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: longDesc }])
+    expect(store.episodes.get('so10000001')?.description).toBe(longDesc)
+  })
+
+  it('description long-wins: null 新値は既存値を保護する', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ description: 'existing' })])
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: null }])
+    expect(store.episodes.get('so10000001')?.description).toBe('existing')
+  })
+
+  it('description long-wins: null 既存に non-null 新値を受け入れる', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ description: null })])
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: 'new description' }])
+    expect(store.episodes.get('so10000001')?.description).toBe('new description')
+  })
 })
 
 // ────────────────────────────────────────────────────────────────────────────

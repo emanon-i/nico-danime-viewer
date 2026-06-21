@@ -161,11 +161,21 @@ function buildTopData(): TopData | undefined {
     const t = v ? Date.parse(v) : NaN
     return Number.isNaN(t) ? -Infinity : t
   }
+  const soNum = (cid: string | null | undefined): number => {
+    const m = (cid ?? '').match(/(\d+)$/)
+    return m ? parseInt(m[1], 10) : -1
+  }
   const byFirst = [...valid].sort(
-    (a, b) => ms(b.firstAt ?? b.latestAt) - ms(a.firstAt ?? a.latestAt) || b.seriesId - a.seriesId
+    (a, b) =>
+      ms(b.firstAt ?? b.latestAt) - ms(a.firstAt ?? a.latestAt) ||
+      soNum(b.firstContentId) - soNum(a.firstContentId) ||
+      b.seriesId - a.seriesId
   )
   const byLatest = [...valid].sort(
-    (a, b) => ms(b.latestAt ?? b.firstAt) - ms(a.latestAt ?? a.firstAt) || b.seriesId - a.seriesId
+    (a, b) =>
+      ms(b.latestAt ?? b.firstAt) - ms(a.latestAt ?? a.firstAt) ||
+      soNum(b.latestContentId) - soNum(a.latestContentId) ||
+      b.seriesId - a.seriesId
   )
   return {
     popular: cache.ranking?.popular ?? [],

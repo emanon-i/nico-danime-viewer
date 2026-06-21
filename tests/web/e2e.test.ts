@@ -275,8 +275,24 @@ describe('F-0047: 総合/E2E テスト', () => {
       }
     })
 
+    it('仮シリーズ（seriesId < 0）も詳細画面に遷移する', () => {
+      const url = buildDetailUrl(-78665789)
+      const params = new URLSearchParams(url.slice(1))
+      const screen = parseScreen(params)
+      expect(screen.type).toBe('detail')
+      if (screen.type === 'detail') {
+        expect(screen.seriesId).toBe(-78665789)
+      }
+    })
+
     it('無効なパラメータはトップ画面にフォールバックする', () => {
       const params = new URLSearchParams('series=abc')
+      const screen = parseScreen(params)
+      expect(screen.type).toBe('top')
+    })
+
+    it('series=0 はトップ画面にフォールバックする', () => {
+      const params = new URLSearchParams('series=0')
       const screen = parseScreen(params)
       expect(screen.type).toBe('top')
     })
