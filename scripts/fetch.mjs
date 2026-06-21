@@ -16,6 +16,7 @@ import {
   fetchAllStaticJsons,
   fetchListJson,
   buildListIndex,
+  buildWatchColKeyMap,
   extractSeriesIdsFromItems,
   resolveByTitle,
   resolveByTag,
@@ -585,6 +586,36 @@ async function runFullJS() {
     if (descriptionFirst) storeUpdateSeries(store, seriesId, { descriptionFirst })
   }
   logger.info('fetch', '[JS] E1 overviews done', { count: overviews.length })
+
+  // E1b: list.json の /watch/soXXXX（シリーズページ未付与の単体作品＝支店カタログ掲載）から
+  // 仮シリーズへ col_key（五十音）と正準タイトルを補完する。contentId 一致で堅牢に紐付け、
+  // 仮シリーズを五十音ブラウズに載せる＋抽出残りの汚れタイトル（話数列挙等）を権威名へ是正。
+  const watchColKey = buildWatchColKeyMap(listJson)
+  let watchEnriched = 0
+  for (const [cid, info] of watchColKey) {
+    const ep = store.episodes.get(cid)
+    if (!ep || ep.seriesId == null) continue
+    const s = store.series.get(ep.seriesId)
+    if (!s) continue
+    let touched = false
+    if (!s.colKey && info.colKey) {
+      s.colKey = info.colKey
+      touched = true
+    }
+    // タイトルは仮シリーズ（seriesId<0）のみ list.json 正準名へ（実シリーズは B4 で処理済）
+    if (s.seriesId < 0) {
+      const listTitle = trimSeriesTitle(info.title)
+      if (listTitle && s.title !== listTitle) {
+        s.title = listTitle
+        touched = true
+      }
+    }
+    if (touched) {
+      store._dirtySeries.add(s.seriesId)
+      watchEnriched++
+    }
+  }
+  logger.info('fetch', '[JS] E1b watch-entry col_key/title enrich', { watchEnriched })
 
   const seriesTags = deriveSeriesTagsFromStore(store)
   for (const { seriesId, tags } of seriesTags) {

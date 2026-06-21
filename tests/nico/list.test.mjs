@@ -6,7 +6,24 @@ import {
   resolveByTitle,
   sanitizeTitle,
   trimSeriesTitle,
+  buildWatchColKeyMap,
 } from '../../scripts/nico/list.mjs'
+
+describe('buildWatchColKeyMap', () => {
+  it('/watch/soXXXX エントリのみ contentId→{colKey,title} に写像（/series/ は除外）', () => {
+    const items = [
+      { title: 'ああっ女神さまっ', col_key: 'あ', url: 'https://www.nicovideo.jp/series/109288' },
+      { title: '春を抱いていた Ⅰ', col_key: 'は', url: 'https://www.nicovideo.jp/watch/so39381031' },
+      { title: 'パパンがパンダ! その2', col_key: 'は', url: 'https://www.nicovideo.jp/watch/so37527849' },
+      { title: 'col_key欠落', col_key: '', url: 'https://www.nicovideo.jp/watch/so1' },
+    ]
+    const m = buildWatchColKeyMap(items)
+    expect(m.size).toBe(2)
+    expect(m.get('so39381031')).toEqual({ colKey: 'は', title: '春を抱いていた Ⅰ' })
+    expect(m.get('so37527849')?.colKey).toBe('は')
+    expect(m.has('so1')).toBe(false) // col_key 欠落は除外
+  })
+})
 
 // ===== extractSeriesTitle =====
 // 主系は resolveByTitle（list.json 前方一致）。本関数は仮シリーズ命名専用フォールバック。

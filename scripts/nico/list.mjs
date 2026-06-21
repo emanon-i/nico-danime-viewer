@@ -98,6 +98,23 @@ export function buildListIndex(items) {
   return { byTitle, bySeriesId }
 }
 
+/**
+ * list.json の `/watch/soXXXX`（シリーズページ未付与の単体作品）を contentId→{colKey,title}
+ * に写像する。これらは支店カタログに在るが series ID を持たないため buildListIndex から漏れる。
+ * 仮シリーズへ五十音（col_key）と正準タイトルを補完する用途（contentId 一致で堅牢に紐付く）。
+ * @param {{title:string, col_key:string, url:string}[]} items fetchListJson() の戻り値
+ * @returns {Map<string, {colKey: string, title: string}>}
+ */
+export function buildWatchColKeyMap(items) {
+  const map = new Map()
+  for (const item of items) {
+    const m = item.url?.match(/\/watch\/(so\d+)/)
+    if (!m || !item.col_key) continue
+    map.set(m[1], { colKey: item.col_key, title: item.title ?? '' })
+  }
+  return map
+}
+
 // タイトル直後で語境界とみなす文字（偽陽性防止）
 // 「K 第1話」->「K」は ' ' で境界あり。「Kアニメ」->「K」は 'ア' で境界なし -> スキップ。
 const TITLE_BOUNDARY_RE = /^[\s第#（(「『[【・\d]/
