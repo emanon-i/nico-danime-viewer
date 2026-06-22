@@ -9,7 +9,7 @@ import { isHiddenTag } from '../../shared/tag-filter'
 
 /**
  * タグチップ（`.tag-chip`）を生成。クリックで `?tag=` のタグフィルタへ遷移（§82）。
- * 20ch を超えるラベルは CSS で … 省略され、全文ツールチップを直付けする（§77：
+ * 30ch を超えるラベルは CSS で … 省略され、全文ツールチップを直付けする（§77：
  * ドロワー内チップは初期 hidden で wireTruncationTooltips が計測できないため、
  * 文字数で判定して data-tooltip を確定的に付与する）。
  */
@@ -18,7 +18,7 @@ function tagChip(tag: string): HTMLAnchorElement {
   chip.className = 'tag-chip'
   chip.href = '?tag=' + encodeURIComponent(tag)
   chip.textContent = tag
-  if ([...tag].length > 20) chip.dataset.tooltip = tag
+  if ([...tag].length > 30) chip.dataset.tooltip = tag
   return chip
 }
 
@@ -198,8 +198,22 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
 
   const tagsDiv = document.createElement('div')
   tagsDiv.className = 'detail-tags'
-  // クール由来タグ（「2026年春アニメ」等）はチップに出さない（§68）
-  series.tags.filter((tag) => !isHiddenTag(tag)).forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
+  // 全話のタグを集計して表示する。シリーズ内の使用回数で降順・重複排除し、クール由来等の
+  // hidden タグ（§68）は除外。Map の挿入順保持＋ sort 安定性で、同数は初出順がタイブレーク。
+  // CSS 側で max-height（約6行）＋ overflow-y:auto に制限し、タグ過多でも詳細を圧迫しない。
+  const tagCounts = new Map<string, number>()
+  for (const ep of series.episodes) {
+    for (const tag of ep.tags ?? []) {
+      if (isHiddenTag(tag)) continue
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)
+    }
+  }
+  let detailTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).map(([tag]) => tag)
+  // 各話にタグが無い場合はシリーズタグへフォールバック（hidden 除外）。
+  if (detailTags.length === 0) {
+    detailTags = series.tags.filter((tag) => !isHiddenTag(tag))
+  }
+  detailTags.forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
   infoDiv.appendChild(tagsDiv)
 
   // シリーズメタ（§F）：詳細は圧縮しない＝文字ラベル＋実値（カンマ区切り）。

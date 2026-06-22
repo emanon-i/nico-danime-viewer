@@ -545,7 +545,8 @@
 
   /* クイックアクセス内のランダムタグ＝タグチップ型ピル（「タグ」と分かる見た目） */
   .quick-access .quick-tag {
-    max-width: 12rem;
+    /* 他ピルと同じ最大幅ポリシー（30ch）に揃える（§49） */
+    max-width: min(30ch, 100%);
     padding: var(--sp-2) var(--sp-4);
     font-size: var(--text-l3);
     flex-shrink: 0;
@@ -975,9 +976,9 @@
   /* ── タグチップ ──────────────────────────────────── */
   .tag-chip {
     display: inline-block;
-    /* ピル共通方針（§49）: 1 行・中身ぴったりに伸びる・最大 ~20ch、超えたら … 省略。
+    /* ピル共通方針（§49）: 1 行・中身ぴったりに伸びる・最大 ~30ch、超えたら … 省略。
        コンテナ(100%)も超えない。はみ出し/内部改行/見切れは禁止。 */
-    max-width: min(20ch, 100%);
+    max-width: min(30ch, 100%);
     overflow: hidden;
     text-overflow: ellipsis;
     padding: var(--sp-1) var(--sp-3);
@@ -1409,6 +1410,14 @@
       }
     }
 
+    /* 補完ドロップダウンを input 幅に揃える relative ラッパ（§35）。 */
+    .header-search-acwrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+    }
+
     .header-search-close {
       font-size: 1.25rem;
       flex-shrink: 0;
@@ -1650,8 +1659,8 @@
     border-radius: var(--r-full);
     font-size: var(--text-l4);
     color: var(--text);
-    /* ピル共通方針（§49）: 中身ぴったり・最大 ~20ch・超過はラベルを … 省略 */
-    max-width: min(20ch, 100%);
+    /* ピル共通方針（§49）: 中身ぴったり・最大 ~30ch・超過はラベルを … 省略 */
+    max-width: min(30ch, 100%);
   }
 
   .tag-pill-label {
@@ -1700,7 +1709,9 @@
     }
   }
 
-  .tag-search-listbox {
+  /* タグ補完ドロップダウン（list/ヘッダ/ヒーロー検索で共通＝§35）。
+     anchor（position:relative）の直下に絶対配置し、anchor 幅いっぱいに広げる。 */
+  .tag-ac-listbox {
     position: absolute;
     z-index: 20;
     top: calc(100% + var(--sp-1));
@@ -1716,7 +1727,7 @@
     list-style: none;
   }
 
-  .tag-search-option {
+  .tag-ac-option {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1837,8 +1848,8 @@
   .filter-tag-item,
   .filter-cours-item {
     display: inline-block;
-    /* ピル共通方針（§49）: 1 行・最大 ~20ch・列幅(100%)も超えない・超過は … 省略 */
-    max-width: min(20ch, 100%);
+    /* ピル共通方針（§49）: 1 行・最大 ~30ch・列幅(100%)も超えない・超過は … 省略 */
+    max-width: min(30ch, 100%);
     overflow: hidden;
     text-overflow: ellipsis;
     padding: var(--sp-1) var(--sp-3);
@@ -2501,6 +2512,12 @@
     flex-wrap: wrap;
     gap: var(--sp-2);
     margin-bottom: var(--sp-3);
+    /* 全話タグを集計表示するためタグ数が多くなりうる。約6行に制限し、超過は縦スクロール
+       （詳細メタ・各話一覧を圧迫しない）。1行 ≒ チップ高 1.85rem ＋ 行間 sp-2。 */
+    max-height: calc(6 * 1.85rem + 5 * var(--sp-2));
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
   }
 
   .detail-desc {

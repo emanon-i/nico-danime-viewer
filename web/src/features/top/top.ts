@@ -243,7 +243,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
       <div class="hero-search">
         <span class="hero-search-icon"></span>
         <input type="search" class="hero-search-input"
-               placeholder="作品・タグで検索…" aria-label="作品・タグで検索">
+               placeholder="作品・#タグで検索…" aria-label="作品・タグで検索">
       </div>
       <a href="?screen=list" class="btn-primary hero-browse-btn">一覧で探す</a>
     </section>

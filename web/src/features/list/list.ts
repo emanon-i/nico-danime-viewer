@@ -8,6 +8,7 @@ import type { IconName } from '../../components/icon'
 import { metaSpan, formatViews, formatRelativeTimeLatest } from '../../components/meta'
 import type { MetaSpec } from '../../components/meta'
 import { progressiveReveal } from '../../components/reveal'
+import { attachTagAutocomplete } from '../shared/tag-autocomplete'
 import { coursList, toggleCours } from './filter'
 
 export interface ListData {
@@ -197,10 +198,11 @@ function rangeSlider(opts: {
 /**
  * タグ・トークン入力（オートコンプリート付き）＝§35。
  * - 確定タグはピル表示・[×]で個別削除。複数タグは AND（router/filter 側）。
+ * - フリーワード(q)は**ピル化せず**、検索入力欄に編集可能なプレーンテキストとして残す
+ *   （ワードを直接修正できるように）。`#タグ` のみピル化する。
  * - 入力が `#` 始まりでタグモード（候補ドロップダウン）。プレーンテキストは作品名検索(q)。
- * - キーボード: ↑↓ で候補移動 / Enter で確定 / Esc で閉じる / 空 Backspace で末尾ピル削除。
- * - role=combobox + listbox（aria-expanded / aria-activedescendant）。
- * - 候補はクライアントのタグ一覧（出現頻度＝seriesCount 降順）から前方/部分一致で。
+ * - キーボード: ↑↓ で候補移動 / Enter で確定 / Esc で閉じる / 空 Backspace で末尾タグ削除。
+ * - 補完ロジックは attachTagAutocomplete（shared）に集約し、ヘッダ/ヒーロー検索と共有する。
  * - サイドバー選択・適用中バー(§16)とは同じ state.tags を見るため自動同期。
  */
 function buildTagSearch(
@@ -232,12 +234,7 @@ function buildTagSearch(
     return pill
   }
 
-  // ピル: 作品名検索(q) ＋ 選択タグ群
-  if (state.q) {
-    field.appendChild(
-      makePill(`「${state.q}」`, `検索 ${state.q}`, () => onNavigate({ ...state, q: '', page: 1 }))
-    )
-  }
+  // ピル: 選択タグ群のみ（フリーワード q はピル化せず下の input にプレーンテキストで残す）
   for (const t of state.tags) {
     field.appendChild(
       makePill(`#${t}`, `タグ ${t}`, () =>
@@ -253,145 +250,41 @@ function buildTagSearch(
   input.type = 'search'
   input.enterKeyHint = 'search'
   input.className = 'tag-search-input'
-  input.autocomplete = 'off'
-  input.setAttribute('role', 'combobox')
-  input.setAttribute('aria-expanded', 'false')
-  input.setAttribute('aria-autocomplete', 'list')
-  input.setAttribute('aria-controls', 'tag-search-listbox')
   input.setAttribute('aria-label', '作品名で検索、または # でタグを絞り込み')
-  input.placeholder =
-    state.q || state.tags.length > 0 ? 'さらに絞り込む（#タグ可）…' : '作品・#タグで検索…'
+  // フリーワード(q)は編集可能なプレーンテキストとして入力欄に残す（ピル化しない）。
+  input.value = state.q
+  input.placeholder = state.tags.length > 0 ? 'さらに絞り込む（#タグ可）…' : '作品・#タグで検索…'
   field.appendChild(input)
 
-  const listbox = document.createElement('ul')
-  listbox.className = 'tag-search-listbox'
-  listbox.id = 'tag-search-listbox'
-  listbox.setAttribute('role', 'listbox')
-  listbox.hidden = true
-  root.appendChild(listbox)
-
-  let options: Tag[] = []
-  let active = -1
-  const optId = (i: number) => `tag-opt-${i}`
-
-  const close = () => {
-    listbox.hidden = true
-    input.setAttribute('aria-expanded', 'false')
-    input.removeAttribute('aria-activedescendant')
-    active = -1
-  }
-
-  const addTag = (name: string) =>
-    onNavigate({
-      ...state,
-      tags: state.tags.includes(name) ? state.tags : [...state.tags, name],
-      page: 1,
-    })
-
-  const setActive = (i: number) => {
-    const items = listbox.querySelectorAll<HTMLElement>('.tag-search-option')
-    items.forEach((el, idx) => {
-      el.classList.toggle('active', idx === i)
-      el.setAttribute('aria-selected', idx === i ? 'true' : 'false')
-    })
-    active = i
-    if (i >= 0 && items[i]) {
-      input.setAttribute('aria-activedescendant', optId(i))
-      items[i].scrollIntoView({ block: 'nearest' })
-    } else {
-      input.removeAttribute('aria-activedescendant')
-    }
-  }
-
-  const renderOptions = (term: string) => {
-    const q = term.toLowerCase().trim()
-    const selected = new Set(state.tags)
-    options = tags
-      .filter((t) => !selected.has(t.name) && t.name.toLowerCase().includes(q))
-      .sort((a, b) => b.seriesCount - a.seriesCount)
-      .slice(0, 10)
-    listbox.innerHTML = ''
-    if (options.length === 0) {
-      close()
-      return
-    }
-    options.forEach((t, i) => {
-      const li = document.createElement('li')
-      li.className = 'tag-search-option'
-      li.id = optId(i)
-      li.setAttribute('role', 'option')
-      li.setAttribute('aria-selected', 'false')
-      const name = document.createElement('span')
-      name.className = 'opt-name'
-      name.textContent = `#${t.name}`
-      const cnt = document.createElement('span')
-      cnt.className = 'opt-count'
-      cnt.textContent = `${t.seriesCount}作品`
-      li.appendChild(name)
-      li.appendChild(cnt)
-      // mousedown（click より先・preventDefault で input の blur を防ぐ）で確定
-      li.addEventListener('mousedown', (e) => {
-        e.preventDefault()
-        addTag(t.name)
-      })
-      listbox.appendChild(li)
-    })
-    active = -1
-    listbox.hidden = false
-    input.setAttribute('aria-expanded', 'true')
-  }
-
-  input.addEventListener('input', () => {
-    const v = input.value
-    if (v.startsWith('#')) renderOptions(v.slice(1))
-    else close()
-  })
-
-  input.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'ArrowDown' && !listbox.hidden) {
-      e.preventDefault()
-      setActive(Math.min(active + 1, options.length - 1))
-    } else if (e.key === 'ArrowUp' && !listbox.hidden) {
-      e.preventDefault()
-      setActive(Math.max(active - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (!listbox.hidden && active >= 0 && options[active]) {
-        addTag(options[active].name)
-        return
-      }
-      const v = input.value.trim()
-      if (v.startsWith('#')) {
-        const term = v.slice(1).trim()
-        if (!term) return
-        const exact = tags.find((t) => t.name === term && !state.tags.includes(t.name))
-        if (exact) addTag(exact.name)
-        else if (options[0]) addTag(options[0].name)
-      } else if (v) {
-        onNavigate({ ...state, q: v, page: 1 })
-      }
-    } else if (e.key === 'Escape' && !listbox.hidden) {
-      e.preventDefault()
-      close()
-    } else if (e.key === 'Backspace' && input.value === '') {
-      // 空で Backspace → 末尾ピル（タグ優先、無ければ検索クエリ）を外す
+  attachTagAutocomplete(input, tags, {
+    anchor: root,
+    excluded: () => new Set(state.tags),
+    onSelectTag: (name) =>
+      onNavigate({
+        ...state,
+        tags: state.tags.includes(name) ? state.tags : [...state.tags, name],
+        // タグは `#...` 入力中に確定する＝入力欄は確定済み q を表示していない。残存 q を
+        // 引き継ぐと「消したはずのフリーワード」が再描画で再出現するためクリアする。
+        q: input.value.trim().startsWith('#') ? '' : state.q,
+        page: 1,
+      }),
+    // プレーンテキスト確定＝作品名検索 q を更新（空文字確定で q をクリアできる）。
+    onSubmitText: (text) => {
+      if (text !== state.q) onNavigate({ ...state, q: text, page: 1 })
+    },
+    // 空入力での Backspace → 末尾タグピルを外す。
+    onBackspaceEmpty: () => {
       if (state.tags.length > 0) {
-        e.preventDefault()
         onNavigate({ ...state, tags: state.tags.slice(0, -1), page: 1 })
-      } else if (state.q) {
-        e.preventDefault()
-        onNavigate({ ...state, q: '', page: 1 })
+        return true
       }
-    }
+      return false
+    },
   })
 
-  // フィールド余白クリックで入力へフォーカス・blur で候補を閉じる（外側クリック対策）
+  // フィールド余白クリックで入力へフォーカス（外側クリック対策）
   field.addEventListener('click', (e) => {
     if (e.target === field) input.focus()
-  })
-  input.addEventListener('blur', () => {
-    // option の mousedown は preventDefault でフォーカス維持するため、ここは外側クリック時のみ
-    window.setTimeout(close, 0)
   })
 
   return root

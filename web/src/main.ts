@@ -9,6 +9,7 @@ import { renderDetail } from './features/detail/detail'
 import { renderBreadcrumb } from './features/shared/breadcrumb'
 import { buildHeader } from './features/shared/header'
 import { initHeaderSearch } from './features/shared/search'
+import { attachTagAutocomplete } from './features/shared/tag-autocomplete'
 import {
   filterWorks,
   sortWorks,
@@ -311,7 +312,7 @@ function navigate(url: string): void {
 /** ヘッダの🔍/テーマ/⚙ を配線する（全画面共通） */
 function wireHeaderControls(): void {
   const headerBtn = app.querySelector<HTMLElement>('.header-search-btn')
-  if (headerBtn) initHeaderSearch(headerBtn, navigate)
+  if (headerBtn) initHeaderSearch(headerBtn, navigate, cache.tags?.tags ?? [])
 
   const themeBtn = app.querySelector<HTMLElement>('.theme-btn')
   if (themeBtn) {
@@ -366,12 +367,17 @@ async function render(): Promise<void> {
     renderTop(app, buildTopData())
 
     const heroInput = app.querySelector<HTMLInputElement>('.hero-search-input')
-    heroInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const q = heroInput.value.trim()
-        if (q) navigate(`?q=${encodeURIComponent(q)}`)
-      }
-    })
+    const heroSearch = app.querySelector<HTMLElement>('.hero-search')
+    if (heroInput) {
+      // `#` タグ補完を付与（list/ヘッダ検索と共通）。確定＝一覧へ遷移。
+      attachTagAutocomplete(heroInput, cache.tags?.tags ?? [], {
+        anchor: heroSearch,
+        onSelectTag: (name) => navigate(buildListUrl({ tags: [name] })),
+        onSubmitText: (text) => {
+          if (text) navigate(buildListUrl({ q: text }))
+        },
+      })
+    }
 
     wireHeaderControls()
     wireCards(app)
