@@ -550,6 +550,14 @@ export function upsertEpisodes(store, rawEps) {
         changed = true
       }
 
+      // COALESCE: episodeNo は確定値を守りつつ、null のときだけ nvapi 由来の話順で埋める。
+      // snapshot が先に作成（episodeNo=null）した既存話を、後続の nvapi seed が後埋めできるようにする。
+      // 確定済み（non-null）の episodeNo は raw で上書きしない（snapshot 由来 null の逆流防止）。
+      if (existing.episodeNo == null && raw.episodeNo != null) {
+        existing.episodeNo = raw.episodeNo
+        changed = true
+      }
+
       if (changed) {
         existing.lastUpdated = now
         if (existing.seriesId != null) store._dirtySeries.add(existing.seriesId)
@@ -882,7 +890,17 @@ function _toHalfWidthDigits(s) {
 }
 
 const _KANJI_DIGIT = {
-  零: 0, '〇': 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+  零: 0,
+  〇: 0,
+  一: 1,
+  二: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
 }
 
 // 漢数字（百の位まで）→ 整数。解釈不能なら null。例「十四」→14・「二十」→20・「百」→100。
@@ -922,6 +940,10 @@ const _ORDINAL_PATTERNS = [
   },
   { re: /#\s*([0-9０-９]+)/, kanji: false },
   { re: /\b([0-9０-９]+)(?:st|nd|rd|th)\b/i, kanji: false },
+  // 「第」なしの素の「N話」。ニコニコ支店は「タイトル[空白]16話[空白]サブ」表記が多い。
+  // 直前を行頭/空白(JS の \s は全角空白 U+3000 を含む)に限定し、直前が数字や文字の
+  // 総数表現(全12話・残り3話・各話)等を弾く。優先度は最下位(第N話・英語表記が先に当たる)。
+  { re: /(?:^|\s)([0-9０-９]+)\s*話/, kanji: false },
 ]
 
 /**

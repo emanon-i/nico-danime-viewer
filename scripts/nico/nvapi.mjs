@@ -58,7 +58,7 @@ export function mapNvapiItems(seriesId, items) {
  */
 export function mapNvapiEpisodes(seriesId, items) {
   return items
-    .map((item, i) => {
+    .map((item) => {
       const v = item.video ?? {}
       const contentId = String(v.id ?? item.meta?.id ?? '')
       if (!contentId) return null
@@ -66,7 +66,10 @@ export function mapNvapiEpisodes(seriesId, items) {
       return {
         contentId,
         seriesId,
-        episodeNo: item.meta?.order ?? i + 1,
+        // 話順は nvapi の meta.order のみ信頼する。order 欠落時に配列位置(i+1)を採ると
+        // アップロード順が話順として恒久固定され得る（COALESCE で誤値を焼き付ける）ため null。
+        // null の場合の並びは chronoSort のタイトル話数 → contentId フォールバックに委ねる。
+        episodeNo: item.meta?.order ?? null,
         title: v.title ?? null,
         viewCounter: c.view ?? 0,
         commentCounter: c.comment ?? 0,

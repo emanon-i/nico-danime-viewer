@@ -25,7 +25,7 @@ import {
   provisionalSeriesId,
   trimSeriesTitle,
 } from './nico/list.mjs'
-import { fetchSeriesData, mapNvapiEpisodes, isBranchSeries } from './nico/nvapi.mjs'
+import { fetchSeriesData, mapNvapiEpisodes, isBranchSeries, seedAllSeries } from './nico/nvapi.mjs'
 import { fetchRssMultiPage, extractWatchId } from './nico/rss.mjs'
 
 import { deriveSeriesTagsFromStore } from './etl/tags.mjs'
@@ -687,6 +687,15 @@ async function runFullJS() {
     )
   }
 
+  // NICO_FORCE_SEED=1（daily の force_seed dispatch）: 既存シリーズの episodeNo=null を
+  // nvapi seed で一括後埋め（COALESCE で確定）。通常の日次フローでは新規シリーズしか nvapi を
+  // 叩かず既存 null が残るため、その一回限りの行き渡らせをここで担う。重く・任意なので env gated。
+  if (process.env.NICO_FORCE_SEED === '1') {
+    logger.info('fetch', '[JS] NICO_FORCE_SEED=1: episodeNo backfill pass start', {})
+    const stats = await backfillNullEpisodeNos(store)
+    logger.info('fetch', '[JS] NICO_FORCE_SEED=1: episodeNo backfill done', stats)
+  }
+
   logger.info('fetch', '[JS] phase F+G: project all')
   await writeBackStore(store, DATA_DIR, { now })
   await projectAll(store, DATA_DIR, now)
@@ -896,6 +905,90 @@ async function runHourlyJS() {
   logger.info('fetch', '[JS] hourly done', { now, insertedEpisodes })
 }
 
+/**
+ * episodeNo=null の各話を持つ available 正シリーズを nvapi seed で後埋めする共通処理。
+ * 既存話の episodeNo は upsertEpisodes の COALESCE で nvapi の meta.order により後埋めされる
+ * （話順が取れない＝meta.order 欠落のシリーズは null のまま＝chronoSort のタイトル話数に委ねる）。
+ *
+ * 制御 env: NICO_SEED_ONLY=369135,62799（対象限定）/ NICO_SEED_LIMIT=N（先頭 N 件）。
+ * 永続化はしない（呼び出し側が writeBackStore する）。
+ * @param {object} store
+ * @returns {Promise<{processed:number, skipped:number, targets:number, nullBefore:number, nullAfter:number, totalEp:number}>}
+ */
+async function backfillNullEpisodeNos(store) {
+  const nullBySeries = new Map()
+  let nullBefore = 0
+  let totalEp = 0
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null || ep.seriesId <= 0) continue
+    totalEp++
+    if (ep.episodeNo == null) {
+      nullBefore++
+      const s = store.series.get(ep.seriesId)
+      if (s && s.isAvailable)
+        nullBySeries.set(ep.seriesId, (nullBySeries.get(ep.seriesId) ?? 0) + 1)
+    }
+  }
+
+  let targets = [...nullBySeries.keys()]
+  const only = (process.env.NICO_SEED_ONLY ?? '')
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0)
+  if (only.length > 0) {
+    const onlySet = new Set(only)
+    targets = targets.filter((sid) => onlySet.has(sid))
+  }
+  const limit = Number(process.env.NICO_SEED_LIMIT ?? 0)
+  if (limit > 0) targets = targets.slice(0, limit)
+
+  logger.info('fetch', '[JS] episodeNo backfill: targets selected', {
+    seriesWithNull: nullBySeries.size,
+    targets: targets.length,
+    nullBefore,
+    totalEp,
+    only: only.length || null,
+    limit: limit || null,
+  })
+
+  // seedAllSeries が ToS 遅延・支店判定・503 バックオフを担う。
+  // onSeries: nvapi の各話を upsert → COALESCE が既存 null の episodeNo を後埋め。
+  const onSeries = async (seriesId, data) => {
+    const eps = mapNvapiEpisodes(seriesId, data?.items ?? [])
+    storeUpsertEps(store, eps)
+  }
+  const { processed, skipped } = await seedAllSeries(targets, onSeries)
+
+  let nullAfter = 0
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId != null && ep.seriesId > 0 && ep.episodeNo == null) nullAfter++
+  }
+  return { processed, skipped, targets: targets.length, nullBefore, nullAfter, totalEp }
+}
+
+/**
+ * 一回限りの episodeNo バックフィル（snapshot を回さず nvapi seed だけ流す standalone 経路）。
+ *
+ * 起動: `node scripts/fetch.mjs --mode=seed`。
+ * 通常の日次(runFullJS)は新規シリーズしか nvapi を叩かないため、既存シリーズの既存 null は
+ * 日次では埋まらない。本経路（と runFullJS の NICO_FORCE_SEED 分岐）がその行き渡らせを担う。
+ */
+async function runSeedBackfillJS() {
+  mkdirSync(DATA_DIR, { recursive: true })
+  const now = new Date().toISOString()
+
+  logger.info('fetch', '[JS] seed-backfill: loadStore start')
+  const store = await loadStore(DATA_DIR)
+
+  const stats = await backfillNullEpisodeNos(store)
+  const dirtyCount = store._dirtySeries.size
+  if (dirtyCount > 0) {
+    await writeBackStore(store, DATA_DIR, { now })
+  }
+
+  logger.info('fetch', '[JS] seed-backfill: done', { ...stats, dirtySeries: dirtyCount })
+}
+
 async function runCheckVersionJS() {
   const version = await fetchSnapshotVersion()
   logger.info('fetch', '[JS] check-version: snapshot version', { version })
@@ -903,9 +996,11 @@ async function runCheckVersionJS() {
 
 const runner = CLI_ARGS.includes('--check-version')
   ? runCheckVersionJS()
-  : CLI_MODE === 'hourly'
-    ? runHourlyJS()
-    : runFullJS()
+  : CLI_MODE === 'seed'
+    ? runSeedBackfillJS()
+    : CLI_MODE === 'hourly'
+      ? runHourlyJS()
+      : runFullJS()
 runner.catch((err) => {
   logger.error('fetch', err.message, err.assertFields ?? {})
   process.exit(1)

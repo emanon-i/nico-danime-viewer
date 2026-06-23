@@ -153,6 +153,39 @@ describe('upsertEpisodes', () => {
     upsertEpisodes(store, [{ contentId: 'so10000001', description: 'new description' }])
     expect(store.episodes.get('so10000001')?.description).toBe('new description')
   })
+
+  it('episodeNo COALESCE: 既存 null を nvapi 由来の話順で後埋めする', () => {
+    const store = createStore()
+    // snapshot 相当: episodeNo 無しで作成（null）
+    upsertEpisodes(store, [makeEp({ seriesId: 99001, episodeNo: null })])
+    expect(store.episodes.get('so10000001')?.episodeNo).toBeNull()
+    // nvapi seed 相当: 話順を後埋め
+    upsertEpisodes(store, [{ contentId: 'so10000001', seriesId: 99001, episodeNo: 3 }])
+    expect(store.episodes.get('so10000001')?.episodeNo).toBe(3)
+  })
+
+  it('episodeNo COALESCE: 確定済み（non-null）は raw で上書きしない', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ seriesId: 99001, episodeNo: 5 })])
+    // 後続が別値を渡しても確定値を守る（snapshot null 逆流防止と同方針）
+    upsertEpisodes(store, [{ contentId: 'so10000001', seriesId: 99001, episodeNo: 99 }])
+    expect(store.episodes.get('so10000001')?.episodeNo).toBe(5)
+  })
+
+  it('episodeNo COALESCE: 既存 null・raw も null なら null のまま', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ seriesId: 99001, episodeNo: null })])
+    upsertEpisodes(store, [{ contentId: 'so10000001', seriesId: 99001, viewCounter: 200 }])
+    expect(store.episodes.get('so10000001')?.episodeNo).toBeNull()
+  })
+
+  it('episodeNo COALESCE: 後埋めでシリーズが dirty になる', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ seriesId: 99001, episodeNo: null })])
+    store._dirtySeries.clear()
+    upsertEpisodes(store, [{ contentId: 'so10000001', seriesId: 99001, episodeNo: 2 }])
+    expect(store._dirtySeries.has(99001)).toBe(true)
+  })
 })
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -387,9 +420,24 @@ describe('chronoSort', () => {
   it('startTime 同時刻・episodeNo 欠落ならタイトルの話数で並べる（contentId 逆転を是正）', () => {
     // 一括配信で so番号が話数と逆転している実データ相当のケース。
     const eps = [
-      makeEp({ contentId: 'so100', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第7話 g' }),
-      makeEp({ contentId: 'so106', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第1話 a' }),
-      makeEp({ contentId: 'so103', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第4話 d' }),
+      makeEp({
+        contentId: 'so100',
+        startTime: '2026-06-10T06:00:00+09:00',
+        episodeNo: null,
+        title: 'X 第7話 g',
+      }),
+      makeEp({
+        contentId: 'so106',
+        startTime: '2026-06-10T06:00:00+09:00',
+        episodeNo: null,
+        title: 'X 第1話 a',
+      }),
+      makeEp({
+        contentId: 'so103',
+        startTime: '2026-06-10T06:00:00+09:00',
+        episodeNo: null,
+        title: 'X 第4話 d',
+      }),
     ]
     eps.sort(chronoSort)
     expect(eps.map((e) => episodeOrdinalFromTitle(e.title))).toEqual([1, 4, 7])
@@ -397,8 +445,18 @@ describe('chronoSort', () => {
 
   it('startTime はタイトル話数より優先（後日投稿の話は後ろ）', () => {
     const eps = [
-      makeEp({ contentId: 'so200', startTime: '2026-06-11T06:00:00+09:00', episodeNo: null, title: 'X 第1話' }),
-      makeEp({ contentId: 'so201', startTime: '2026-06-10T06:00:00+09:00', episodeNo: null, title: 'X 第8話' }),
+      makeEp({
+        contentId: 'so200',
+        startTime: '2026-06-11T06:00:00+09:00',
+        episodeNo: null,
+        title: 'X 第1話',
+      }),
+      makeEp({
+        contentId: 'so201',
+        startTime: '2026-06-10T06:00:00+09:00',
+        episodeNo: null,
+        title: 'X 第8話',
+      }),
     ]
     eps.sort(chronoSort)
     // 6/10 投稿の第8話が 6/11 投稿の第1話より前（startTime 昇順が主キー）
@@ -418,6 +476,19 @@ describe('episodeOrdinalFromTitle', () => {
     expect(episodeOrdinalFromTitle('海のトリトン　Chapter.2')).toBe(2)
     expect(episodeOrdinalFromTitle('けいおん #4')).toBe(4)
     expect(episodeOrdinalFromTitle('俺の友達　1st game')).toBe(1)
+  })
+
+  it('「第」なしの素の「N話」も拾う（ニコニコ支店の表記ゆれ）', () => {
+    // 例: ニコニコ支店の「Fate/stay night [全角空白] 16話」表記（「第」が付かない）
+    expect(episodeOrdinalFromTitle('Fate/stay night　16話　約束された勝利の剣')).toBe(16)
+    expect(episodeOrdinalFromTitle('Fate/stay night　1話　始まりの日')).toBe(1)
+    expect(episodeOrdinalFromTitle('24話')).toBe(24)
+  })
+
+  it('総数・残数表現は誤検出しない（全N話・残りN話）', () => {
+    expect(episodeOrdinalFromTitle('全12話　一挙放送')).toBeNull()
+    expect(episodeOrdinalFromTitle('全12話')).toBeNull()
+    expect(episodeOrdinalFromTitle('最終話')).toBeNull()
   })
 
   it('話数表記が無ければ null', () => {
