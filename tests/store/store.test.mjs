@@ -17,6 +17,7 @@ import {
   replaceSeriesTags,
   countOrphanEpisodes,
   selectSeedTargets,
+  seriesWithNullEpisodes,
   getEpisodesForSeries,
   chronoSort,
   episodeOrdinalFromTitle,
@@ -390,6 +391,53 @@ describe('orphan / seed targets', () => {
     const targets = selectSeedTargets(store, { insufficientThreshold: 3, allIfOrphans: true })
     expect(targets).not.toContain(99001)
     expect(targets).toContain(99002)
+  })
+})
+
+// ────────────────────────────────────────────────────────────────────────────
+// seriesWithNullEpisodes（backfill 対象・リトライ対象の選定核）
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('seriesWithNullEpisodes', () => {
+  it('episodeNo=null を持つ available 正シリーズを件数つきで返す', () => {
+    const store = createStore()
+    upsertSeries(store, [makeSeries({ seriesId: 99001 }), makeSeries({ seriesId: 99002 })])
+    upsertEpisodes(store, [
+      makeEp({ contentId: 'so1', seriesId: 99001, episodeNo: null }),
+      makeEp({ contentId: 'so2', seriesId: 99001, episodeNo: null }),
+      makeEp({ contentId: 'so3', seriesId: 99001, episodeNo: 3 }), // 充当済
+      makeEp({ contentId: 'so4', seriesId: 99002, episodeNo: 1 }), // 全充当=対象外
+    ])
+    const { nullBySeries, nullTotal, epTotal } = seriesWithNullEpisodes(store)
+    expect(nullBySeries.get(99001)).toBe(2)
+    expect(nullBySeries.has(99002)).toBe(false)
+    expect(nullTotal).toBe(2)
+    expect(epTotal).toBe(4)
+  })
+
+  it('全話充当済シリーズはリトライ対象から外れる（pass1→pass2 の収束）', () => {
+    const store = createStore()
+    upsertSeries(store, [makeSeries({ seriesId: 99001 })])
+    upsertEpisodes(store, [makeEp({ contentId: 'so1', seriesId: 99001, episodeNo: null })])
+    expect(seriesWithNullEpisodes(store).nullBySeries.has(99001)).toBe(true)
+    // nvapi seed 相当の後埋め後は対象から消える
+    upsertEpisodes(store, [{ contentId: 'so1', seriesId: 99001, episodeNo: 1 }])
+    expect(seriesWithNullEpisodes(store).nullBySeries.has(99001)).toBe(false)
+  })
+
+  it('非 available・仮(負)シリーズは nullBySeries から除外（nullTotal には正シリーズ分のみ）', () => {
+    const store = createStore()
+    upsertSeries(store, [
+      makeSeries({ seriesId: 99001, isAvailable: false }),
+      makeSeries({ seriesId: -42, isAvailable: true }),
+    ])
+    upsertEpisodes(store, [
+      makeEp({ contentId: 'so1', seriesId: 99001, episodeNo: null }), // 非available
+      makeEp({ contentId: 'so2', seriesId: -42, episodeNo: null }), // 仮(負)
+    ])
+    const { nullBySeries, nullTotal } = seriesWithNullEpisodes(store)
+    expect(nullBySeries.size).toBe(0) // どちらも seed 対象外
+    expect(nullTotal).toBe(1) // 正シリーズ(99001)の null話のみ計上・負は除外
   })
 })
 

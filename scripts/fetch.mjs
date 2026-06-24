@@ -56,6 +56,7 @@ import {
   updateRssResolution as storeUpdateRssResolution,
   replaceSeriesTags as storeReplaceSeriesTags,
   countSeriesWithEpisodes,
+  seriesWithNullEpisodes,
   chronoSort,
 } from './store/store.mjs'
 
@@ -907,28 +908,22 @@ async function runHourlyJS() {
 
 /**
  * episodeNo=null の各話を持つ available 正シリーズを nvapi seed で後埋めする共通処理。
- * 既存話の episodeNo は upsertEpisodes の COALESCE で nvapi の meta.order により後埋めされる
- * （話順が取れない＝meta.order 欠落のシリーズは null のまま＝chronoSort のタイトル話数に委ねる）。
+ * 既存話の episodeNo は upsertEpisodes の COALESCE で nvapi の話順により後埋めされる
+ * （nvapi v2/series は items を話順 == 配列位置+1 でソート済み返却 → mapNvapiEpisodes が
+ * meta.order 欠落時も i+1 で復元）。
+ *
+ * リトライ: pass1 後も null話が残る系列（＝高負荷下の間欠欠落で 0/部分充当だった系列）を
+ * 一度だけ再 seed する。低負荷の再取得で nvapi が話順を返し直すため間欠分を実行内で吸収。
+ * 構造的に取得不能なもの（500件上限超・特番で nvapi 一覧に非収載・仮系列）は残るが、
+ * 再 fetch は1回限りで対象も縮むため過剰アクセスにならない。
  *
  * 制御 env: NICO_SEED_ONLY=369135,62799（対象限定）/ NICO_SEED_LIMIT=N（先頭 N 件）。
  * 永続化はしない（呼び出し側が writeBackStore する）。
  * @param {object} store
- * @returns {Promise<{processed:number, skipped:number, targets:number, nullBefore:number, nullAfter:number, totalEp:number}>}
+ * @returns {Promise<{processed:number, skipped:number, targets:number, retried:number, nullBefore:number, nullAfter:number, totalEp:number}>}
  */
 async function backfillNullEpisodeNos(store) {
-  const nullBySeries = new Map()
-  let nullBefore = 0
-  let totalEp = 0
-  for (const ep of store.episodes.values()) {
-    if (ep.seriesId == null || ep.seriesId <= 0) continue
-    totalEp++
-    if (ep.episodeNo == null) {
-      nullBefore++
-      const s = store.series.get(ep.seriesId)
-      if (s && s.isAvailable)
-        nullBySeries.set(ep.seriesId, (nullBySeries.get(ep.seriesId) ?? 0) + 1)
-    }
-  }
+  const { nullBySeries, nullTotal: nullBefore, epTotal: totalEp } = seriesWithNullEpisodes(store)
 
   let targets = [...nullBySeries.keys()]
   const only = (process.env.NICO_SEED_ONLY ?? '')
@@ -941,6 +936,7 @@ async function backfillNullEpisodeNos(store) {
   }
   const limit = Number(process.env.NICO_SEED_LIMIT ?? 0)
   if (limit > 0) targets = targets.slice(0, limit)
+  const targetSet = new Set(targets)
 
   logger.info('fetch', '[JS] episodeNo backfill: targets selected', {
     seriesWithNull: nullBySeries.size,
@@ -959,11 +955,24 @@ async function backfillNullEpisodeNos(store) {
   }
   const { processed, skipped } = await seedAllSeries(targets, onSeries)
 
+  // pass2（リトライ・1回）: 元の対象のうち、まだ null話が残る系列のみ再 seed。
+  const residual = [...seriesWithNullEpisodes(store).nullBySeries.keys()].filter((sid) =>
+    targetSet.has(sid)
+  )
+  let retried = 0
+  if (residual.length > 0) {
+    logger.info('fetch', '[JS] episodeNo backfill: retry pass for residual null series', {
+      residual: residual.length,
+    })
+    const r = await seedAllSeries(residual, onSeries)
+    retried = r.processed
+  }
+
   let nullAfter = 0
   for (const ep of store.episodes.values()) {
     if (ep.seriesId != null && ep.seriesId > 0 && ep.episodeNo == null) nullAfter++
   }
-  return { processed, skipped, targets: targets.length, nullBefore, nullAfter, totalEp }
+  return { processed, skipped, targets: targets.length, retried, nullBefore, nullAfter, totalEp }
 }
 
 /**

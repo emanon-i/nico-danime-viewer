@@ -58,7 +58,7 @@ export function mapNvapiItems(seriesId, items) {
  */
 export function mapNvapiEpisodes(seriesId, items) {
   return items
-    .map((item) => {
+    .map((item, i) => {
       const v = item.video ?? {}
       const contentId = String(v.id ?? item.meta?.id ?? '')
       if (!contentId) return null
@@ -66,10 +66,12 @@ export function mapNvapiEpisodes(seriesId, items) {
       return {
         contentId,
         seriesId,
-        // 話順は nvapi の meta.order のみ信頼する。order 欠落時に配列位置(i+1)を採ると
-        // アップロード順が話順として恒久固定され得る（COALESCE で誤値を焼き付ける）ため null。
-        // null の場合の並びは chronoSort のタイトル話数 → contentId フォールバックに委ねる。
-        episodeNo: item.meta?.order ?? null,
+        // 話順: nvapi v2/series は items を meta.order 昇順（== 配列位置+1・隙間なし）に
+        // ソート済みで返す（実測 10/10 系列で order===i+1、投稿順/不定の例ゼロ）。よって
+        // meta.order 欠落時（高負荷下の間欠欠落）は配列位置 i+1 を採る。`?? null` だと
+        // 間欠欠落を恒久 null 化して取りこぼす（実測 935→274 のうち ~637 がこれだった）。
+        // 注: 呼び出し元は全て fetchSeriesData（ソート済みシリーズ endpoint）。
+        episodeNo: item.meta?.order ?? i + 1,
         title: v.title ?? null,
         viewCounter: c.view ?? 0,
         commentCounter: c.comment ?? 0,

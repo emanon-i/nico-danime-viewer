@@ -94,9 +94,11 @@ describe('mapNvapiEpisodes (§85 backfill)', () => {
     expect(e.tags).toBeNull() // nvapi は各話タグを持たない
   })
 
-  it('meta.order が無ければ episodeNo は null（i+1 のアップロード順を採らない）', () => {
-    const [e] = mapNvapiEpisodes(1, [{ video: { id: 'so1' } }])
-    expect(e.episodeNo).toBeNull()
+  it('meta.order が無ければ配列位置 i+1 を採る（series endpoint はソート済みで返る）', () => {
+    // nvapi v2/series は items を話順(meta.order昇順==i+1)で返すため、
+    // 高負荷下の meta.order 間欠欠落時は配列位置で話順を復元する。
+    const eps = mapNvapiEpisodes(1, [{ video: { id: 'so1' } }, { video: { id: 'so2' } }])
+    expect(eps.map((e) => e.episodeNo)).toEqual([1, 2])
   })
 
   it('meta.order があればそれを採用する', () => {

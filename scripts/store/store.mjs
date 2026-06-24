@@ -836,6 +836,31 @@ export function countOrphanEpisodes(store) {
 }
 
 /**
+ * episodeNo=null の各話を持つ「available な正シリーズ」を集計する。
+ * episodeNo backfill の対象選定・リトライ対象（pass1 後の残 null 系列）に使う。
+ * 仮(負)シリーズ・非 available・null話を持たない系列は除外。
+ * @param {Store} store
+ * @returns {{nullBySeries: Map<number,number>, nullTotal: number, epTotal: number}}
+ *   nullBySeries: seriesId → そのシリーズの null話数 / nullTotal: 正シリーズ全体の null話数 / epTotal: 正シリーズ全話数
+ */
+export function seriesWithNullEpisodes(store) {
+  const nullBySeries = new Map()
+  let nullTotal = 0
+  let epTotal = 0
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null || ep.seriesId <= 0) continue
+    epTotal++
+    if (ep.episodeNo == null) {
+      nullTotal++
+      const s = store.series.get(ep.seriesId)
+      if (s && s.isAvailable)
+        nullBySeries.set(ep.seriesId, (nullBySeries.get(ep.seriesId) ?? 0) + 1)
+    }
+  }
+  return { nullBySeries, nullTotal, epTotal }
+}
+
+/**
  * nvapi seed 対象シリーズを選定する（§0-5）。
  *
  * 優先度:
