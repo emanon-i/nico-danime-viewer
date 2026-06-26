@@ -43,6 +43,10 @@ const FLOORS = {
   newItems: 1, // 実測 100（新着は0でも事故ではないが、空配列は異常）
 }
 
+// ── 構造健全性ブロックで再利用するライブデータ（checkLive が一度だけ取得して共有）──
+let liveWorks = null // works.json の data（{ works: [...] }）
+let liveRanking = null // ranking.json の data（{ hot, popular, ... }）
+
 // ── 出力ユーティリティ ────────────────────────────────────────────
 const args = new Set(process.argv.slice(2))
 const asJson = args.has('--json')
@@ -206,6 +210,7 @@ async function checkLive() {
       fail(G, s.f, `配信不可（http=${r.status}${r.error ? ' ' + r.error : ''}）`)
       continue
     }
+    if (s.f === 'works.json') liveWorks = r.data // 構造健全性ブロックで再利用
     const n = s.count(r.data) ?? 0
     const lu = r.data.lastUpdated
     const age = minutesSince(lu)
@@ -223,6 +228,7 @@ async function checkLive() {
     fail(G, 'ranking.json', `配信不可（http=${rr.status}${rr.error ? ' ' + rr.error : ''}）`)
   } else {
     const d = rr.data
+    liveRanking = d // 構造健全性ブロックで再利用
     const hot = d.hot?.length ?? 0
     const pop = d.popular?.length ?? 0
     if (hot < FLOORS.rankingHot) fail(G, 'ranking hot 件数', `hot=${hot} < ${FLOORS.rankingHot}`)
@@ -251,16 +257,111 @@ async function checkLive() {
   else pass(G, '配信鮮度', detail)
 }
 
+// ── 4) 構造健全性（live データの中身の整合性。回帰検出器）─────────
+// checkLive が取得済みの works / ranking を再利用（追加 fetch なし）。
+// 床は「実測で全項目グリーン」。違反が1件でも出たら退行とみなす。
+function checkStructure() {
+  const G = 'structure (整合性)'
+  if (!liveWorks || !Array.isArray(liveWorks.works)) {
+    warn(G, 'スキップ', 'works.json 未取得のため構造検査を実行できず')
+    return
+  }
+  const works = liveWorks.works
+  const n = works.length
+
+  // (a) seriesId 重複（一意であるべき主キー）
+  const seen = new Set()
+  const dups = new Set()
+  for (const w of works) {
+    if (seen.has(w.seriesId)) dups.add(w.seriesId)
+    seen.add(w.seriesId)
+  }
+  if (dups.size > 0)
+    fail(G, 'seriesId 重複', `${dups.size} 件の重複キー（例: ${[...dups].slice(0, 3).join(', ')}）`)
+  else pass(G, 'seriesId 重複', `重複なし（${n} 件すべて一意）`)
+
+  // (b) ranking → works 参照整合（孤児＝works に存在しない seriesId）
+  if (liveRanking) {
+    const orphanHot = (liveRanking.hot || []).filter((x) => !seen.has(x.seriesId))
+    const orphanPop = (liveRanking.popular || []).filter((x) => !seen.has(x.seriesId))
+    const total = orphanHot.length + orphanPop.length
+    if (total > 0)
+      fail(
+        G,
+        'ranking 参照整合',
+        `孤児 ${total} 件（hot ${orphanHot.length} / popular ${orphanPop.length}）`
+      )
+    else pass(G, 'ranking 参照整合', '孤児なし（hot/popular の全 seriesId が works に存在）')
+
+    // (c) 順位の単調性（popular=totalViews 降順 / hot=hotScore 降順）
+    const viol = (arr, key) => {
+      let bad = 0
+      for (let i = 1; i < arr.length; i++) if (arr[i][key] > arr[i - 1][key]) bad++
+      return bad
+    }
+    const vPop = viol(liveRanking.popular || [], 'totalViews')
+    const vHot = viol(liveRanking.hot || [], 'hotScore')
+    if (vPop + vHot > 0) fail(G, '順位の単調性', `降順違反 popular ${vPop} / hot ${vHot}`)
+    else pass(G, '順位の単調性', 'popular=totalViews 降順・hot=hotScore 降順とも違反なし')
+  } else {
+    warn(G, 'ranking 参照整合/単調性', 'ranking.json 未取得のためスキップ')
+  }
+
+  // (d) 値域チェック
+  //   - totalViews: 全作品で数値かつ ≥0（負・非数は破損）
+  const tvBad = works.filter((w) => !(typeof w.totalViews === 'number' && w.totalViews >= 0))
+  if (tvBad.length > 0)
+    fail(G, '値域 totalViews', `${tvBad.length} 件が負/非数（例: ${tvBad[0].seriesId}）`)
+  else pass(G, '値域 totalViews', `全 ${n} 件が数値かつ ≥0`)
+
+  //   - episodeCount / thumbnail: 配信中作品(isAvailable!==false)のみ対象。
+  //     空シェル(isAvailable:false・各話/サムネ無し)は仕様上の正常状態なので除外。
+  const avail = works.filter((w) => w.isAvailable !== false)
+  const epBad = avail.filter((w) => !(typeof w.episodeCount === 'number' && w.episodeCount >= 1))
+  if (epBad.length > 0)
+    fail(
+      G,
+      '値域 episodeCount',
+      `配信中で episodeCount<1 が ${epBad.length} 件（例: ${epBad[0].seriesId} ${epBad[0].title}）`
+    )
+  else pass(G, '値域 episodeCount', `配信中 ${avail.length} 件すべて episodeCount≥1`)
+
+  const thBad = avail.filter(
+    (w) => !(typeof w.thumbnailUrl === 'string' && /^https?:\/\//.test(w.thumbnailUrl))
+  )
+  if (thBad.length > 0)
+    fail(
+      G,
+      '値域 サムネ URL',
+      `配信中でサムネ非http(s)/欠落が ${thBad.length} 件（例: ${thBad[0].seriesId} ${thBad[0].title}）`
+    )
+  else pass(G, '値域 サムネ URL', `配信中 ${avail.length} 件すべて http(s) サムネ`)
+
+  // (e) タイトル衛生（空・制御文字・前後空白＝いずれも破損シグナル。全作品対象）
+  const tEmpty = works.filter(
+    (w) => !(typeof w.title === 'string' && w.title.trim().length > 0)
+  ).length
+  // eslint-disable-next-line no-control-regex
+  const tCtrl = works.filter(
+    (w) => typeof w.title === 'string' && /[\u0000-\u001f\u007f]/.test(w.title)
+  ).length
+  const tWs = works.filter((w) => typeof w.title === 'string' && w.title !== w.title.trim()).length
+  if (tEmpty + tCtrl + tWs > 0)
+    fail(G, 'タイトル衛生', `空 ${tEmpty} / 制御文字 ${tCtrl} / 前後空白 ${tWs}`)
+  else pass(G, 'タイトル衛生', '空・制御文字・前後空白なし')
+}
+
 // ── 実行 ──────────────────────────────────────────────────────────
 async function main() {
   await Promise.all([checkActions(), checkStateBranch(), checkLive()])
+  checkStructure() // live データ取得後に同期実行（追加 fetch なし）
 
   const counts = { PASS: 0, WARN: 0, FAIL: 0 }
   for (const r of results) counts[r.level]++
   const overall = counts.FAIL ? 'FAIL' : counts.WARN ? 'WARN' : 'PASS'
 
   // 並列実行で完了順に積まれるため、表示はグループ順に整える。
-  const GROUP_ORDER = ['Actions', 'state branch', 'live (Pages)']
+  const GROUP_ORDER = ['Actions', 'state branch', 'live (Pages)', 'structure (整合性)']
   results.sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
 
   if (asJson) {
