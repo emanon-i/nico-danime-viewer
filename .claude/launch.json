@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev", "--port", "4318", "--strictPort"],
+      "port": 4318
+    },
+    {
       "name": "preview",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["preview", "--port", "4317", "--strictPort"],

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "fetch": "node scripts/fetch.mjs",
+    "ops:health": "node scripts/ops-health.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
