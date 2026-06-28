@@ -217,15 +217,20 @@ function cleanDisplay(name) {
 const PUBLISHER_ANNOTATION_RE =
   /(連載|掲載|所載|刊|文庫|コミック|新聞|放送|より|月刊|週刊|集英社|講談社|小学館|角川|KADOKAWA|新潮社|白泉社|秋田書店|双葉社|一迅社|スクウェア|ジャンプ|マガジン|サンデー|チャンピオン|電撃|ガンガン|\d{4})/i
 
+// 原作系 role（括弧内は所属会社でなく出版社/掲載誌の注記なので捨てる）。role ベースで判定する
+// ことで、出版社の固有名リスト（PUBLISHER_ANNOTATION_RE の社名部）に依存せず構造的に注記を落とす。
+const ORIGINAL_WORK_ROLE_RE = /(原作|原案|原著|^著$|漫画|キャラクター原案|企画原案|脚色|連載)/
+
 // value 末尾の括弧を分離: 「米山和仁（劇団ホチキス）」→ {name:'米山和仁', org:'劇団ホチキス'}。
-// 出版社注記（「集英社…連載」等）は所属会社でないので括弧ごと捨てて名前だけ残す（岸本斉史）。
-function splitAffiliation(value) {
+// dropParen=true（原作系 role）なら括弧内は出版社注記とみなし常に捨てる（岸本斉史（集英社…連載）→岸本斉史）。
+// それ以外は所属会社として org に出すが、PUBLISHER_ANNOTATION_RE に当たる注記だけはフォールバックで捨てる。
+function splitAffiliation(value, dropParen = false) {
   const m = value.match(/^(.+?)[（(]([^（）()]{1,40})[）)]\s*$/)
   if (!m) return { name: value, org: null }
   const name = m[1].trim()
   const inner = m[2].trim()
   if (!name) return { name: value, org: null }
-  if (PUBLISHER_ANNOTATION_RE.test(inner)) return { name, org: null } // 注記は捨ててクリーン名
+  if (dropParen || PUBLISHER_ANNOTATION_RE.test(inner)) return { name, org: null } // 注記は捨ててクリーン名
   return { name, org: inner } // 所属会社
 }
 
@@ -373,6 +378,7 @@ function entryToTags(role, value, blockSource) {
   }
 
   const source = isStudio ? 'studio' : isStaff ? 'staffLike' : blockSource
+  const dropParen = ORIGINAL_WORK_ROLE_RE.test(role) // 原作系 role の括弧は出版社注記＝捨てる（構造的）
 
   // 値を全角スペース(U+3000)/読点でエントリ分割（舞台・ライブの「A[全]B[全]C」名前リスト）。
   // 全角スペース＝名前区切り、半角スペース＝姓名内（木村[半]了）＝データ規約で確認済み（ENTRY_SEP_RE）。
@@ -399,7 +405,7 @@ function entryToTags(role, value, blockSource) {
     for (const sub of subs) {
       // 先に所属括弧を分離（中黒分割より前）。これで「真島ヒロ・上田敦夫（講談社連載）」は注記を
       // 落としてから中黒分割でき（→真島ヒロ/上田敦夫）、「今野康之（スワラ・プロ）」は括弧内を割らない。
-      const { name, org } = splitAffiliation(sub)
+      const { name, org } = splitAffiliation(sub, dropParen)
       for (const part of splitConnected(name)) push(part, source)
       if (org) for (const o of splitConnected(org)) push(o, 'studio') // 所属/括弧内メンバーも分割
     }
