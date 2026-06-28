@@ -16,6 +16,8 @@ const BASE_STATE: ListState = {
   dur: '',
   year: '',
   fav: false,
+  cast: '',
+  staff: '',
 }
 
 describe('F-0038: レスポンシブ構造', () => {

@@ -82,8 +82,14 @@ describe('renderDetail (F-0025)', () => {
     // 制作行は人名＋制作会社（ufotable 重複は1つ）
     const staffChips = [...rows[1].querySelectorAll('.credit-chip')].map((c) => c.textContent)
     expect(staffChips).toEqual(['奈須きのこ', 'TYPE-MOON', 'ufotable'])
-    // 共通 (i) が1つ
-    expect(container.querySelectorAll('.detail-credits .info-btn').length).toBe(1)
+    // (i) は演者・制作それぞれに（計2）
+    expect(container.querySelectorAll('.detail-credits .info-btn').length).toBe(2)
+    // チップはクリックで人物フィルタ一覧へ（演者=?cast= / 制作=?staff=）
+    const castLink = rows[0].querySelector('a.credit-chip') as HTMLAnchorElement
+    expect(castLink.getAttribute('href')).toContain('cast=')
+    expect(decodeURIComponent(castLink.getAttribute('href') || '')).toContain('杉山紀彰')
+    const staffLink = rows[1].querySelector('a.credit-chip') as HTMLAnchorElement
+    expect(staffLink.getAttribute('href')).toContain('staff=')
   })
 
   it('PH-0014: cast 0（舞台/海外作）なら 演者 を出さず 制作 のみ', () => {

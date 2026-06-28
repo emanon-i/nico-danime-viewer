@@ -2561,8 +2561,9 @@
     scrollbar-color: var(--border) transparent;
   }
 
-  /* 人名/会社名チップ（クリック不可・表示のみ）。ピル方針 §9.12（min(20ch,100%)）。
-     padding/角丸/サイズは .tag-chip と同一トークン（名前は主役なので色だけ --text）。 */
+  /* 人名/会社名チップ（クリックで人物フィルタ一覧へ＝§B）。ピル方針 §9.12（min(20ch,100%)）。
+     padding/角丸/サイズは .tag-chip と同一トークン（名前は主役なので色だけ --text）。
+     hover も .tag-chip と同じ accent 枠（クリック可の手掛かり）。 */
   .credit-chip {
     display: inline-block;
     max-width: min(20ch, 100%);
@@ -2576,6 +2577,14 @@
     font-size: var(--text-l4);
     color: var(--text);
     background: var(--surface);
+    transition:
+      color 0.15s,
+      border-color 0.15s;
+
+    &:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
   }
 
   .detail-desc {

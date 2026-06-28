@@ -16,6 +16,8 @@ const BASE_STATE: ListState = {
   dur: '',
   year: '',
   fav: false,
+  cast: '',
+  staff: '',
 }
 
 describe('initHeaderSearch (F-0027)', () => {

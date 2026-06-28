@@ -19,6 +19,8 @@ const BASE_STATE: ListState = {
   dur: '',
   year: '',
   fav: false,
+  cast: '',
+  staff: '',
 }
 
 const SERIES: SeriesDetail = {

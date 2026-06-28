@@ -14,12 +14,49 @@ import { readFileSync } from 'node:fs'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { recalcSeriesMetricsJS } from '../etl/metrics.mjs'
+import { parseDescription } from '../etl/description.mjs'
+import { chronoSort } from './store.mjs'
 
 // ── ヘルパ ───────────────────────────────────────────────────────────────────
 
 async function writeJson(outDir, filename, data) {
   await mkdir(outDir, { recursive: true })
   await writeFile(join(outDir, filename), JSON.stringify(data), 'utf-8')
+}
+
+// 空白除去＋重複除去（順序保持）。
+function dedupNames(names) {
+  const seen = new Set()
+  const out = []
+  for (const n of names) {
+    const v = (n ?? '').trim()
+    if (v && !seen.has(v)) {
+      seen.add(v)
+      out.push(v)
+    }
+  }
+  return out
+}
+
+// PH-0014: works.json 人物フィルタ用に seriesId → {cast:[声優名], staff:[人名+制作会社]} を作る。
+// 抽出元は **1話目（最古話＝chronoSort 先頭＝descriptionFirst と同一ソース）** のみ（series JSON と一致）。
+// グローバルな巨大 facet は作らず、works.json の各エントリに名前配列を持たせて一覧側で走査する。
+function buildCreditsMap(store) {
+  const firstBySeries = new Map() // seriesId → 最古話 ep
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null) continue
+    const cur = firstBySeries.get(ep.seriesId)
+    if (!cur || chronoSort(ep, cur) < 0) firstBySeries.set(ep.seriesId, ep)
+  }
+  const map = new Map()
+  for (const [sid, ep] of firstBySeries) {
+    const p = parseDescription(ep.description)
+    map.set(sid, {
+      cast: dedupNames(p.cast.flatMap((c) => c.actors ?? [])),
+      staff: dedupNames([...p.staff.flatMap((s) => s.names ?? []), ...p.studios]),
+    })
+  }
+  return map
 }
 
 // ── episode count / metrics の事前計算 ─────────────────────────────────────
@@ -96,13 +133,14 @@ function buildEpAggMap(store) {
 export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
   const epCountMap = buildEpCountMap(store)
   const epAggMap = buildEpAggMap(store)
+  const creditsMap = buildCreditsMap(store) // PH-0014: 人物フィルタ用 cast/staff 名前
 
   const works = []
   for (const s of store.series.values()) {
     const epCount = epCountMap.get(s.seriesId) ?? 0
     const agg = epAggMap.get(s.seriesId) ?? {}
     const m = metricsMap.get(s.seriesId)
-    works.push({
+    const work = {
       seriesId: s.seriesId,
       title: s.title,
       thumbnailUrl: s.thumbnailUrl,
@@ -124,7 +162,12 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       totalViews: m?.totalViews ?? agg.totalViews ?? 0,
       hotScore: m?.hotScore ?? 0,
       relatedSeries: s.relatedSeries ?? [],
-    })
+    }
+    // 人物フィルタ用 cast/staff（空なら付けない＝肥大最小化）。
+    const cr = creditsMap.get(s.seriesId)
+    if (cr?.cast.length) work.cast = cr.cast
+    if (cr?.staff.length) work.staff = cr.staff
+    works.push(work)
   }
 
   // series_id 昇順（SQLと同一の決定的順序）

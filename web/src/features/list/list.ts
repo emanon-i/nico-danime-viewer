@@ -682,6 +682,9 @@ export function renderList(
     addLinkChip(coursLabel, { ...state, cours: toggleCours(state.cours, c) })
   }
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
+  // 人物フィルタ（PH-0014）: 演者/制作チップは URL-backed。[×] は cast/staff を外す（タグと同作法）。
+  if (state.cast) addLinkChip(`演者「${state.cast}」`, { ...state, cast: '' })
+  if (state.staff) addLinkChip(`制作「${state.staff}」`, { ...state, staff: '' })
   if (favFilter) addBtnChip(MARK_META.fav.text, onClearFav, MARK_META.fav)
   if (wantFilter) addBtnChip(MARK_META.want.text, onClearWant, MARK_META.want)
   if (watchedFilter) addBtnChip(MARK_META.watched.text, onClearWatched, MARK_META.watched)

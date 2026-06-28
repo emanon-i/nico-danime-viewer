@@ -17,6 +17,10 @@ export interface Work {
   cours: string | null
   franchiseKey: string | null
   colKey: string | null
+  /** 演者（声優名・1話目由来・重複除去）。人物フィルタ ?cast= の照合用（PH-0014・旧 JSON では欠落） */
+  cast?: string[]
+  /** 制作（スタッフ/制作会社名・1話目由来・重複除去）。人物フィルタ ?staff= の照合用（PH-0014） */
+  staff?: string[]
   /** シリーズの各話数（episodes テーブルの件数）。「全N話」表示に使う */
   episodeCount: number
   /** 最新話の投稿時刻（episodes.start_time の最大・ISO8601）。新着順・投稿時間メタに使う（旧 JSON では欠落） */

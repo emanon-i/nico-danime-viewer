@@ -29,6 +29,10 @@ export interface ListState {
   year: string
   /** お気に入りのみ表示（§50）。URL-backed＝通常フィルタと同じくピル × で解除・reload 保持。 */
   fav: boolean
+  /** 演者（声優名）で絞り込み（PH-0014）。詳細の演者チップ → `?cast=<name>`。''=絞り込みなし。 */
+  cast: string
+  /** 制作（スタッフ/制作会社名）で絞り込み（PH-0014）。詳細の制作チップ → `?staff=<name>`。''=なし。 */
+  staff: string
 }
 
 /** 表示件数の選択肢（§42・切りのいい丸い数字）。既定＝先頭=50。 */
@@ -62,6 +66,8 @@ const LIST_PARAMS = [
   'dur',
   'year',
   'fav',
+  'cast',
+  'staff',
 ]
 
 export function parseScreen(params: URLSearchParams): Screen {
@@ -93,6 +99,8 @@ export function parseScreen(params: URLSearchParams): Screen {
         dur: params.get('dur') ?? '',
         year: params.get('year') ?? '',
         fav: params.get('fav') === '1',
+        cast: params.get('cast') ?? '',
+        staff: params.get('staff') ?? '',
       },
     }
   }
@@ -119,6 +127,8 @@ export function buildListUrl(state: Partial<ListState>): string {
   if (state.dur) p.set('dur', state.dur)
   if (state.year) p.set('year', state.year)
   if (state.fav) p.set('fav', '1')
+  if (state.cast) p.set('cast', state.cast)
+  if (state.staff) p.set('staff', state.staff)
   const s = p.toString()
   return '?' + (s || 'screen=list')
 }

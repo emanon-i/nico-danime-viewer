@@ -38,6 +38,8 @@ const BASE_STATE: ListState = {
   dur: '',
   year: '',
   fav: false,
+  cast: '',
+  staff: '',
 }
 
 const BASE_RANKING: RankingJson = {
@@ -109,6 +111,27 @@ describe('filterWorks (F-0028/0029/0030)', () => {
     const result = filterWorks(WORKS, { ...BASE_STATE, tags: ['日常'] })
     expect(result).toHaveLength(2)
     expect(result.map((w) => w.seriesId).sort()).toEqual([1, 3])
+  })
+
+  it('PH-0014: cast（演者）フィルタ＝work.cast に該当声優を含む作品だけ残す', () => {
+    const works: Work[] = [
+      { ...BASE_WORK, seriesId: 1, title: 'A', cast: ['杉山紀彰', '川澄綾子'] },
+      { ...BASE_WORK, seriesId: 2, title: 'B', cast: ['別の声優'] },
+      { ...BASE_WORK, seriesId: 3, title: 'C' }, // cast 無し
+    ]
+    expect(filterWorks(works, { ...BASE_STATE, cast: '杉山紀彰' }).map((w) => w.seriesId)).toEqual([
+      1,
+    ])
+  })
+
+  it('PH-0014: staff（制作）フィルタ＝work.staff に該当人名/制作会社を含む作品だけ残す', () => {
+    const works: Work[] = [
+      { ...BASE_WORK, seriesId: 1, title: 'A', staff: ['奈須きのこ', 'ufotable'] },
+      { ...BASE_WORK, seriesId: 2, title: 'B', staff: ['別スタジオ'] },
+    ]
+    expect(filterWorks(works, { ...BASE_STATE, staff: 'ufotable' }).map((w) => w.seriesId)).toEqual(
+      [1]
+    )
   })
 
   it('タグ照合は NFKC で半角/全角カナのズレを吸収する（§82）', () => {
