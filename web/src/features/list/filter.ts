@@ -121,13 +121,10 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
     if (wanted.size > 0) result = result.filter((w) => w.cours != null && wanted.has(w.cours))
   }
 
-  // 人物フィルタ（PH-0014）: 演者/制作の名前で絞り込み。各 work の cast/staff（1話目由来・
-  // works.json に格納）を走査するだけ＝グローバルな巨大 facet を作らず肥大を避ける。
-  if (state.cast) {
-    result = result.filter((w) => (w.cast ?? []).includes(state.cast))
-  }
-  if (state.staff) {
-    result = result.filter((w) => (w.staff ?? []).includes(state.staff))
+  // 人物フィルタ: 演者/制作の名前で絞り込み。各 work の credits（演者/制作の統合名前タグ・
+  // 1話目由来・works.json に格納）を走査するだけ＝グローバルな巨大 facet を作らず肥大を避ける。
+  if (state.credit) {
+    result = result.filter((w) => (w.credits ?? []).includes(state.credit))
   }
 
   if (opts?.favIds) {

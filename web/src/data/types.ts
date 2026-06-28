@@ -17,10 +17,11 @@ export interface Work {
   cours: string | null
   franchiseKey: string | null
   colKey: string | null
-  /** 演者（声優名・1話目由来・重複除去）。人物フィルタ ?cast= の照合用（PH-0014・旧 JSON では欠落） */
-  cast?: string[]
-  /** 制作（スタッフ/制作会社名・1話目由来・重複除去）。人物フィルタ ?staff= の照合用（PH-0014） */
-  staff?: string[]
+  /**
+   * 演者/制作（声優・スタッフ人名・制作会社・原作者等を 1 列に統合した名前タグ・1話目由来・
+   * 重複除去）。人物フィルタ `?credit=<名前>` の照合用。旧 JSON（cast/staff 時代）では欠落。
+   */
+  credits?: string[]
   /** シリーズの各話数（episodes テーブルの件数）。「全N話」表示に使う */
   episodeCount: number
   /** 最新話の投稿時刻（episodes.start_time の最大・ISO8601）。新着順・投稿時間メタに使う（旧 JSON では欠落） */
@@ -150,17 +151,6 @@ export interface SeriesEpisode {
   tags?: string[]
 }
 
-/** 構造化キャスト（役名→声優）。PH-0014 F-0057。series 単位に集約済み。 */
-export interface CastEntry {
-  role: string
-  actors: string[]
-}
-/** 構造化スタッフ（役割→人名/社名）。PH-0014 F-0057。series 単位に集約済み。 */
-export interface StaffEntry {
-  role: string
-  names: string[]
-}
-
 export interface SeriesDetail {
   seriesId: number
   title: string
@@ -171,12 +161,11 @@ export interface SeriesDetail {
   colKey: string | null
   relatedSeries: RelatedSeries[]
   episodes: SeriesEpisode[]
-  /** 抽出キャスト（演者）。旧 JSON では欠落＝optional。PH-0014 */
-  cast?: CastEntry[]
-  /** 抽出スタッフ（制作）。旧 JSON では欠落＝optional。PH-0014 */
-  staff?: StaffEntry[]
-  /** 制作会社（staff の制作系 role から投影）。PH-0014 */
-  studios?: string[]
+  /**
+   * 演者/制作（声優・スタッフ人名・制作会社・原作者等を 1 列に統合した名前タグ・1話目由来・
+   * 重複除去）。詳細画面のチップ表示＋ `?credit=` フィルタ用。旧 JSON では欠落＝optional。
+   */
+  credits?: string[]
 }
 
 export interface SeriesDetailJson {
@@ -191,7 +180,5 @@ export interface SeriesDetailJson {
   colKey: string | null
   relatedSeries: RelatedSeries[]
   episodes: SeriesEpisode[]
-  cast?: CastEntry[]
-  staff?: StaffEntry[]
-  studios?: string[]
+  credits?: string[]
 }

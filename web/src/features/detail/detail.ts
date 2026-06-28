@@ -1,4 +1,4 @@
-import type { SeriesDetail, SeriesEpisode, CastEntry, StaffEntry } from '../../data/types'
+import type { SeriesDetail, SeriesEpisode } from '../../data/types'
 import { watchLink, seriesLink } from '../../shared/deeplink'
 import { buildDetailUrl, buildListUrl } from '../router'
 import { icon } from '../../components/icon'
@@ -40,60 +40,47 @@ const CREDIT_NOTE =
   'これらは説明文からの自動抽出のため、誤り・抜け・不正確が含まれる場合があります。'
 
 /**
- * 抽出クレジットを「タグ列」で描画（PH-0014 表示）。
- * 演者＝cast の声優名のみ、制作＝staff の人名＋studios の制作会社名のみ（役名/役割ラベルは捨てる）。
- * 各チップは**クリックでその人物の一覧へ遷移**（演者→`?cast=`／制作→`?staff=`）＝既存タグ chip と同作法。
- * 重複除去。データ無しの行は出さない・両空なら null。**演者・制作それぞれに (i)**（自動抽出の注意）。
+ * 抽出クレジットを「演者/制作」1 行のタグ列で描画。
+ * 声優・スタッフ人名・制作会社・原作者等を**1 カテゴリに統合**し、名前のみをチップ化する
+ * （役名・役割ラベルは持たない）。各チップは**クリックでその人物/会社の一覧へ遷移**（`?credit=`）
+ * ＝既存タグ chip と同作法。重複除去。データ無しなら null（行ごと非表示）。見出しに (i)（自動抽出の注意）。
  */
-function buildCredits(
-  cast: CastEntry[],
-  staff: StaffEntry[],
-  studios: string[]
-): HTMLElement | null {
-  const actors = dedupNames(cast.flatMap((c) => c.actors ?? []))
-  const makers = dedupNames([...staff.flatMap((s) => s.names ?? []), ...(studios ?? [])])
-  if (actors.length === 0 && makers.length === 0) return null
+function buildCredits(credits: string[]): HTMLElement | null {
+  const names = dedupNames(credits ?? [])
+  if (names.length === 0) return null
 
   const wrap = document.createElement('div')
   wrap.className = 'detail-credits'
 
-  // param: 'cast'（演者）/ 'staff'（制作）— クリック時の URL フィルタ種別。
-  const row = (label: string, names: string[], param: 'cast' | 'staff'): HTMLElement | null => {
-    if (names.length === 0) return null
-    const r = document.createElement('div')
-    r.className = 'detail-credit-row'
-    const lab = document.createElement('span')
-    lab.className = 'detail-credit-label'
-    lab.textContent = label
-    // 各セクション（演者・制作）に (i)（自動抽出の注意）。
-    const info = document.createElement('button')
-    info.type = 'button'
-    info.className = 'info-btn'
-    info.setAttribute('aria-label', '抽出情報について')
-    info.dataset.tooltip = CREDIT_NOTE
-    info.appendChild(icon('info', 13))
-    lab.appendChild(info)
-    r.appendChild(lab)
-    const chips = document.createElement('span')
-    chips.className = 'detail-credit-chips'
-    for (const n of names) {
-      // クリックでその人物の一覧へ（演者=?cast= / 制作=?staff=）。既存タグ chip と同作法。
-      const chip = document.createElement('a')
-      chip.className = 'credit-chip'
-      chip.href = buildListUrl(param === 'cast' ? { cast: n } : { staff: n })
-      chip.textContent = n
-      // ピル方針 §9.12: min(20ch) 超過は … 省略＋全文ツールチップ。
-      if ([...n].length > 20) chip.dataset.tooltip = n
-      chips.appendChild(chip)
-    }
-    r.appendChild(chips)
-    return r
-  }
+  const r = document.createElement('div')
+  r.className = 'detail-credit-row'
+  const lab = document.createElement('span')
+  lab.className = 'detail-credit-label'
+  lab.textContent = '演者/制作'
+  // 見出しに (i)（自動抽出の注意）。
+  const info = document.createElement('button')
+  info.type = 'button'
+  info.className = 'info-btn'
+  info.setAttribute('aria-label', '抽出情報について')
+  info.dataset.tooltip = CREDIT_NOTE
+  info.appendChild(icon('info', 13))
+  lab.appendChild(info)
+  r.appendChild(lab)
 
-  const castRow = row('演者', actors, 'cast')
-  const staffRow = row('制作', makers, 'staff')
-  if (castRow) wrap.appendChild(castRow)
-  if (staffRow) wrap.appendChild(staffRow)
+  const chips = document.createElement('span')
+  chips.className = 'detail-credit-chips'
+  for (const n of names) {
+    // クリックでその人物/会社の一覧へ（?credit=）。既存タグ chip と同作法。
+    const chip = document.createElement('a')
+    chip.className = 'credit-chip'
+    chip.href = buildListUrl({ credit: n })
+    chip.textContent = n
+    // ピル方針 §9.12: min(20ch) 超過は … 省略＋全文ツールチップ。
+    if ([...n].length > 20) chip.dataset.tooltip = n
+    chips.appendChild(chip)
+  }
+  r.appendChild(chips)
+  wrap.appendChild(r)
   return wrap
 }
 
@@ -291,9 +278,9 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   detailTags.forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
   // ※ infoDiv への append は IA 順（タイトル→メタ→演者/制作→タグ）でまとめて後述。
 
-  // ── 抽出クレジット（演者 / 制作）＝PH-0014。series JSON の cast/staff/studios を読んで表示。
-  // データが無いセクションは出さない（声優0の舞台/海外作は「演者」を非表示・「制作」だけ等）。
-  const credits = buildCredits(series.cast ?? [], series.staff ?? [], series.studios ?? [])
+  // ── 抽出クレジット（演者/制作）。series JSON の credits（統合名前タグ）を読んで 1 行で表示。
+  // データが無ければ行ごと非表示。
+  const credits = buildCredits(series.credits ?? [])
 
   // シリーズメタ（§F）：詳細は圧縮しない＝文字ラベル＋実値（カンマ区切り）。
   // 話数／総再生数／総コメント数／総マイリス数＋1話あたり平均（再生・コメント）。
