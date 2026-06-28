@@ -11,7 +11,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { stripHtml, chooseDescription } from '../etl/series.mjs'
-import { parseDescription } from '../etl/description.mjs'
+import { extractCredits } from '../etl/description.mjs'
 import { trimSeriesTitle } from '../nico/list.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -412,11 +412,11 @@ function _buildSeriesJson(store, seriesId) {
   if (!s) return null
   const episodes = _getEpisodesForSeriesSorted(store, seriesId)
 
-  // PH-0014: cast/staff/studios/copyright は **1話目（最古話）だけ** をパースして抽出する。
+  // credits（演者/制作の統合名前タグ）は **1話目（最古話）だけ** をパースして抽出する。
   // episodes は chronoSort 昇順 → episodes[0] が最古話＝descriptionFirst（あらすじ）と同一ソース。
-  // これにより「あらすじ＝最古話／cast＝別の代表話」のソース不整合が解消し、全話パースの
-  // コストも避ける（cast はシリーズ内でほぼ一定なので1話目で十分）。
-  const firstParsed = episodes.length > 0 ? parseDescription(episodes[0].description) : null
+  // これにより「あらすじ＝最古話／credits＝別の代表話」のソース不整合が解消し、全話パースの
+  // コストも避ける（出演/制作はシリーズ内でほぼ一定なので1話目で十分）。
+  const credits = episodes.length > 0 ? extractCredits(episodes[0].description) : []
 
   return {
     seriesId: s.seriesId,
@@ -432,11 +432,8 @@ function _buildSeriesJson(store, seriesId) {
     firstSeen: s.firstSeen,
     lastSeen: s.lastSeen,
     lastSeenAt: s.lastSeenAt ?? null,
-    // シリーズ単位の構造化クレジット（1話目＝最古話＝あらすじと同一ソース由来）
-    cast: firstParsed ? firstParsed.cast : [],
-    staff: firstParsed ? firstParsed.staff : [],
-    studios: firstParsed ? firstParsed.studios : [],
-    copyright: firstParsed ? firstParsed.copyright : null,
+    // シリーズ単位の統合クレジット（声優・スタッフ人名・制作会社・原作者等を1列・1話目由来）
+    credits,
     episodes: episodes.map((ep) => {
       // 各話は description（後方互換）と源のみ保持。per-episode の構造分解は廃止（1話目スコープ）。
       return {
