@@ -180,6 +180,8 @@ format は両者同一。
 > 1話目で十分。詳細画面は**声優名/人名/制作会社名だけをタグ表示**（役名/役割ラベルは捨てる）。各話単位の構造化フィールド
 > （synopsis/episodeLinks/descriptionStructured）は**廃止**（per-episode パースをやめた）。タグへの facet 化（声優/制作の
 > グローバル index）は tags.json/ranking 肥大のため**未実装（要判断）**。
+> **どう分析し・どう抽出し・どう誤検知を防ぐか**（precision ガード・カバレッジ実測・検証）の正本は
+> [`description-extraction.md`](description-extraction.md)。
 
 **メモリのみ（ファイル非永続）**:
 
