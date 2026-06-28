@@ -23,15 +23,14 @@ function tagChip(tag: string): HTMLAnchorElement {
 }
 
 const CREDIT_NOTE =
-  'これらは説明文からの自動抽出のため、誤り・抜け・不正確が含まれる場合があります。' +
-  '濃いタグは他の作品にも登場する人物/会社（クリックで横断）、淡いタグはこの作品のみで確認できたものです。'
+  'これらは説明文からの自動抽出のため、誤り・抜け・不正確が含まれる場合があります。'
 
-/** 旧 JSON（credits が string[]）との後方互換: 文字列なら recurrent 扱いの CreditTag に正規化。 */
+/** credits を CreditTag[] へ正規化。旧 JSON（string[]）も許容。key で重複除去。 */
 function normalizeCreditTags(credits: SeriesDetail['credits']): CreditTag[] {
   const out: CreditTag[] = []
   const seen = new Set<string>()
   for (const c of credits ?? []) {
-    const tag: CreditTag = typeof c === 'string' ? { name: c, key: c, recurrent: true } : c
+    const tag: CreditTag = typeof c === 'string' ? { name: c, key: c } : c
     const k = tag.key || tag.name
     if (!tag.name || seen.has(k)) continue
     seen.add(k)
@@ -43,8 +42,8 @@ function normalizeCreditTags(credits: SeriesDetail['credits']): CreditTag[] {
 /**
  * 抽出クレジットを「演者/制作」1 行のタグ列で描画。
  * 声優・スタッフ人名・制作会社・原作者等を**1 カテゴリに統合**し、名前のみをチップ化する
- * （役名・役割ラベルは持たない）。**recurrent（他作品に繋がる）タグはクリックで `?credit=<key>`**、
- * singleton は非クリック（淡色）で表示するだけ。見出しに (i)（自動抽出の注意）。空なら null。
+ * （役名・役割ラベルは持たない）。**全タグ均一にクリック可能**でその人物/会社の一覧へ遷移
+ * （`?credit=<key>`・既存タグ chip と同作法）。見出しに (i)（自動抽出の注意）。空なら null。
  */
 function buildCredits(credits: SeriesDetail['credits']): HTMLElement | null {
   const tags = normalizeCreditTags(credits)
@@ -71,22 +70,13 @@ function buildCredits(credits: SeriesDetail['credits']): HTMLElement | null {
   const chips = document.createElement('span')
   chips.className = 'detail-credit-chips'
   for (const t of tags) {
-    if (t.recurrent) {
-      // クリックでその人物/会社の一覧へ（?credit=<key>・canonical key で照合）。
-      const chip = document.createElement('a')
-      chip.className = 'credit-chip'
-      chip.href = buildListUrl({ credit: t.key })
-      chip.textContent = t.name
-      if ([...t.name].length > 20) chip.dataset.tooltip = t.name
-      chips.appendChild(chip)
-    } else {
-      // singleton（他作品に繋がらない）＝非クリックの淡色チップ（削除せず提示）。
-      const chip = document.createElement('span')
-      chip.className = 'credit-chip credit-chip--singleton'
-      chip.textContent = t.name
-      if ([...t.name].length > 20) chip.dataset.tooltip = t.name
-      chips.appendChild(chip)
-    }
+    // クリックでその人物/会社の一覧へ（?credit=<key>・canonical key で照合）。既存タグ chip と同作法。
+    const chip = document.createElement('a')
+    chip.className = 'credit-chip'
+    chip.href = buildListUrl({ credit: t.key })
+    chip.textContent = t.name
+    if ([...t.name].length > 20) chip.dataset.tooltip = t.name
+    chips.appendChild(chip)
   }
   r.appendChild(chips)
   wrap.appendChild(r)

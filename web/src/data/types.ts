@@ -154,15 +154,13 @@ export interface SeriesEpisode {
 
 /**
  * 統合クレジットタグ（演者/制作を 1 カテゴリに統合した発見タグ・1話目由来）。
- * name=表示名 / key=正規化キー（`?credit=` 値・照合用）/ recurrent=他作品に繋がる
- * （recurrence≥閾値）＝クリック可能か（false=singleton・非クリック/淡色）。
- * count/source/role は soft metadata（序列・将来の facet 用・UI 非必須）。
+ * name=表示名 / key=正規化キー（`?credit=` 値・照合用）。**全タグ均一にクリック可能**で、
+ * recurrence の多寡で表示/クリック可否を変えない（既存タグ `#…` と同じ作法）。
+ * source/role は soft metadata（将来の facet 用・UI 非必須）。
  */
 export interface CreditTag {
   name: string
   key: string
-  recurrent: boolean
-  count?: number
   source?: string
   role?: string
 }
