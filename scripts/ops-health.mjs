@@ -5,15 +5,19 @@
 //   実行: pnpm ops:health            （人間向けサマリ）
 //         pnpm ops:health -- --json   （機械可読 JSON）
 //         pnpm ops:health -- --quiet  （FAIL/WARN のみ表示）
+//         pnpm ops:health -- --ci     （データ正しさ FAIL のみ exit1＝通知用）
 //
-// 監視対象は「ライブ（ユーザーが見る Pages）」「state ブランチ（データ正本・毎時更新）」
-// 「GitHub Actions（daily full / hourly RSS）」の3系統。
+// 監視対象は「ライブ（Pages）」「state ブランチ（毎時更新）」「GitHub Actions」に加え、
+// 「structure（構造健全性）」「user-visible（U1〜U4 ＝ユーザー可視整合性）」の各ティア。
 //
 //   ・ローカル data/*.json は seed フォールバックであり古くて正常 → ここでは見ない。
-//   ・真の鮮度は state ブランチ（毎時）と Pages 配信 JSON（daily 反映）にある。
+//   ・各 record は ci フラグを持つ: ci=true＝データの正しさ（--ci で通知対象）、
+//     ci=false＝鮮度/cron 稼働シグナル（やや遅い程度では通知しない）。
 //
-// 終了コード: FAIL が1つでもあれば 1、それ以外（PASS/WARN のみ）は 0。
-//   → cron / CI から `node scripts/ops-health.mjs || notify` で使える。
+// 終了コード:
+//   通常 → FAIL が1つでもあれば 1。
+//   --ci → データ正しさ(ci=true)の FAIL のみ 1（鮮度 WARN/FAIL では落とさない）。
+//   → scheduled workflow から `pnpm ops:health --ci` で失敗時のみ GitHub 標準通知が飛ぶ。
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -25,11 +29,19 @@ const REPO = 'nico-danime-viewer'
 const PAGES_BASE = `https://${OWNER}.github.io/${REPO}`
 
 // 鮮度しきい値（分）。WARN を超えたら注意、FAIL を超えたら異常。
+// hourly は GitHub の schedule イベントが低負荷リポジトリで間引かれ、実態は数時間おき。
+// 90分/180分では平常運転でも誤検知するため warn 3h / fail 8h に緩和（実態整合・通知過多回避）。
 const FRESH = {
-  hourlyState: { warn: 90, fail: 180 }, // state は毎時更新（60分 + ジッタ余裕）
-  hourlyRun: { warn: 90, fail: 180 }, // 直近 hourly run の経過時間
+  hourlyState: { warn: 3 * 60, fail: 8 * 60 }, // state 毎時更新（schedule 間引き考慮）
+  hourlyRun: { warn: 3 * 60, fail: 8 * 60 }, // 直近 hourly run の経過時間
   dailyRun: { warn: 26 * 60, fail: 50 * 60 }, // daily は1日1回（26h で注意 / 50h で異常）
   liveData: { warn: 30 * 60, fail: 50 * 60 }, // Pages 配信 JSON の lastUpdated（daily 反映）
+}
+
+// ユーザー可視整合性ティアのしきい値（分）。これらは FAIL=データ実害 → --ci で通知対象。
+const UV = {
+  newLag: 24 * 60, // 新着反映ラグ: works.latestAt 最大 − new.json pubDate 最大
+  ingestStall: 36 * 60, // 取り込みストール: now − works.latestAt 最大
 }
 
 // 件数の下限（空 seed 事故・取得崩壊の検出。現状比でかなり余裕を持たせた床）。
@@ -43,21 +55,29 @@ const FLOORS = {
   newItems: 1, // 実測 100（新着は0でも事故ではないが、空配列は異常）
 }
 
-// ── 構造健全性ブロックで再利用するライブデータ（checkLive が一度だけ取得して共有）──
+// タイトル衛生: 制御文字（C0 制御文字と DEL）を検出。生バイトを避け明示エスケープで定義。
+// eslint-disable-next-line no-control-regex
+const CTRL_CHAR_RE = /[\u0000-\u001f\u007f]/
+
+// ── 構造健全性 / ユーザー可視ティアで再利用するライブデータ（checkLive が一度だけ取得して共有）──
 let liveWorks = null // works.json の data（{ works: [...] }）
 let liveRanking = null // ranking.json の data（{ hot, popular, ... }）
+let liveNew = null // new.json の data（{ items: [...] }）
 
 // ── 出力ユーティリティ ────────────────────────────────────────────
+// 各 record は ci フラグを持つ。ci=true ＝「データの正しさ」＝ --ci で exit1（通知）対象。
+// ci=false ＝ 鮮度/cron 稼働など運用シグナル（やや遅い程度では通知しない）。
 const args = new Set(process.argv.slice(2))
 const asJson = args.has('--json')
 const quiet = args.has('--quiet')
+const ciMode = args.has('--ci')
 const results = []
-function record(group, level, label, detail) {
-  results.push({ group, level, label, detail })
+function record(group, level, label, detail, ci = true) {
+  results.push({ group, level, label, detail, ci })
 }
-const pass = (g, l, d) => record(g, 'PASS', l, d)
-const warn = (g, l, d) => record(g, 'WARN', l, d)
-const fail = (g, l, d) => record(g, 'FAIL', l, d)
+const pass = (g, l, d, ci = true) => record(g, 'PASS', l, d, ci)
+const warn = (g, l, d, ci = true) => record(g, 'WARN', l, d, ci)
+const fail = (g, l, d, ci = true) => record(g, 'FAIL', l, d, ci)
 
 function minutesSince(iso) {
   const t = Date.parse(iso)
@@ -97,7 +117,7 @@ async function ensureGh() {
 async function checkActions() {
   const G = 'Actions'
   if (!(await ensureGh())) {
-    warn(G, 'gh 利用不可', 'gh CLI 未認証 → Actions チェックをスキップ')
+    warn(G, 'gh 利用不可', 'gh CLI 未認証 → Actions チェックをスキップ', false)
     return
   }
   const jobs = [
@@ -117,26 +137,27 @@ async function checkActions() {
         'conclusion,status,createdAt,url,displayTitle',
       ])
       const [run] = JSON.parse(out)
+      // Actions は「cron が回っているか」の運用シグナル（ci=false: 鮮度で通知はしない）。
       if (!run) {
-        fail(G, `${j.name} run`, '実行履歴が無い')
+        fail(G, `${j.name} run`, '実行履歴が無い', false)
         continue
       }
       const age = minutesSince(run.createdAt)
       const ageGrade = gradeAge(age, j.thr)
       const detail = `直近 ${fmtAge(age)} / conclusion=${run.conclusion} / ${run.url}`
       if (run.status !== 'completed') {
-        warn(G, `${j.name} run`, `実行中(status=${run.status}) ${detail}`)
+        warn(G, `${j.name} run`, `実行中(status=${run.status}) ${detail}`, false)
       } else if (run.conclusion !== 'success') {
-        fail(G, `${j.name} run`, `直近が失敗 ${detail}`)
+        fail(G, `${j.name} run`, `直近が失敗 ${detail}`, false)
       } else if (ageGrade === 'fail') {
-        fail(G, `${j.name} run`, `成功だが古すぎる（cron 停止疑い） ${detail}`)
+        fail(G, `${j.name} run`, `成功だが古すぎる（cron 停止疑い） ${detail}`, false)
       } else if (ageGrade === 'warn') {
-        warn(G, `${j.name} run`, `成功だがやや古い ${detail}`)
+        warn(G, `${j.name} run`, `成功だがやや古い ${detail}`, false)
       } else {
-        pass(G, `${j.name} run`, detail)
+        pass(G, `${j.name} run`, detail, false)
       }
     } catch (e) {
-      warn(G, `${j.name} run`, `取得失敗: ${e.message}`)
+      warn(G, `${j.name} run`, `取得失敗: ${e.message}`, false)
     }
   }
 }
@@ -145,7 +166,7 @@ async function checkActions() {
 async function checkStateBranch() {
   const G = 'state branch'
   if (!(await ensureGh())) {
-    warn(G, 'gh 利用不可', 'gh CLI 未認証 → state 鮮度チェックをスキップ')
+    warn(G, 'gh 利用不可', 'gh CLI 未認証 → state 鮮度チェックをスキップ', false)
     return
   }
   try {
@@ -159,11 +180,12 @@ async function checkStateBranch() {
     const age = minutesSince(date)
     const grade = gradeAge(age, FRESH.hourlyState)
     const detail = `最新コミット ${fmtAge(age)}（${(msg.join('\t') || '').split('\n')[0]}）`
-    if (grade === 'fail') fail(G, '更新鮮度', `毎時更新が止まっている疑い ${detail}`)
-    else if (grade === 'warn') warn(G, '更新鮮度', `やや遅延 ${detail}`)
-    else pass(G, '更新鮮度', detail)
+    // 鮮度シグナル（ci=false）。
+    if (grade === 'fail') fail(G, '更新鮮度', `毎時更新が止まっている疑い ${detail}`, false)
+    else if (grade === 'warn') warn(G, '更新鮮度', `やや遅延 ${detail}`, false)
+    else pass(G, '更新鮮度', detail, false)
   } catch (e) {
-    warn(G, '更新鮮度', `取得失敗: ${e.message}`)
+    warn(G, '更新鮮度', `取得失敗: ${e.message}`, false)
   }
 }
 
@@ -210,7 +232,8 @@ async function checkLive() {
       fail(G, s.f, `配信不可（http=${r.status}${r.error ? ' ' + r.error : ''}）`)
       continue
     }
-    if (s.f === 'works.json') liveWorks = r.data // 構造健全性ブロックで再利用
+    if (s.f === 'works.json') liveWorks = r.data // 構造/ユーザー可視ティアで再利用
+    if (s.f === 'new.json') liveNew = r.data // U1 新着反映ラグで再利用
     const n = s.count(r.data) ?? 0
     const lu = r.data.lastUpdated
     const age = minutesSince(lu)
@@ -249,12 +272,12 @@ async function checkLive() {
     if (age != null && (freshestDaily == null || age < freshestDaily)) freshestDaily = age
   }
 
-  // ライブ鮮度: 最も新しい lastUpdated で判定（daily フル or 新着 hourly デプロイの反映）
+  // ライブ鮮度: 最も新しい lastUpdated で判定（鮮度シグナル ci=false）。
   const grade = gradeAge(freshestDaily, FRESH.liveData)
   const detail = `最新 lastUpdated ${fmtAge(freshestDaily)}`
-  if (grade === 'fail') fail(G, '配信鮮度', `daily 反映が古すぎる ${detail}`)
-  else if (grade === 'warn') warn(G, '配信鮮度', `やや古い ${detail}`)
-  else pass(G, '配信鮮度', detail)
+  if (grade === 'fail') fail(G, '配信鮮度', `daily 反映が古すぎる ${detail}`, false)
+  else if (grade === 'warn') warn(G, '配信鮮度', `やや古い ${detail}`, false)
+  else pass(G, '配信鮮度', detail, false)
 }
 
 // ── 4) 構造健全性（live データの中身の整合性。回帰検出器）─────────
@@ -341,9 +364,8 @@ function checkStructure() {
   const tEmpty = works.filter(
     (w) => !(typeof w.title === 'string' && w.title.trim().length > 0)
   ).length
-  // eslint-disable-next-line no-control-regex
   const tCtrl = works.filter(
-    (w) => typeof w.title === 'string' && /[\u0000-\u001f\u007f]/.test(w.title)
+    (w) => typeof w.title === 'string' && CTRL_CHAR_RE.test(w.title)
   ).length
   const tWs = works.filter((w) => typeof w.title === 'string' && w.title !== w.title.trim()).length
   if (tEmpty + tCtrl + tWs > 0)
@@ -351,17 +373,124 @@ function checkStructure() {
   else pass(G, 'タイトル衛生', '空・制御文字・前後空白なし')
 }
 
+// ── state ブランチの生ファイル取得（gh 非依存・公開 raw HTTP）──────
+async function fetchState(statePath) {
+  const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/state/${statePath}`
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 25000)
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'user-agent': `${REPO}-ops-health/1.0` },
+    })
+    if (!res.ok) return { ok: false, status: res.status }
+    return { ok: true, data: await res.json() }
+  } catch (e) {
+    return { ok: false, status: 0, error: e.message }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// ── 5) ユーザー可視整合性ティア（実害 = --ci で通知対象）─────────────
+// U1 新着反映ラグ / U2 取り込みストール / U3 取りこぼし / U4 dangling。
+async function checkUserVisible() {
+  const G = 'user-visible (整合性)'
+  if (!liveWorks || !Array.isArray(liveWorks.works)) {
+    warn(G, 'スキップ', 'works.json 未取得のため検査不可', false)
+    return
+  }
+  const works = liveWorks.works
+  const maxIso = (arr, f) => {
+    let mx = null
+    for (const x of arr) {
+      const t = Date.parse(f(x))
+      if (!Number.isNaN(t) && (mx == null || t > mx)) mx = t
+    }
+    return mx
+  }
+  const worksLatest = maxIso(works, (w) => w.latestAt) // 本体データの最新エピソード時刻
+
+  // U1: 新着反映ラグ（works.latestAt 最大 − new.json pubDate 最大）。
+  if (liveNew && Array.isArray(liveNew.items) && worksLatest != null) {
+    const newMax = maxIso(liveNew.items, (x) => x.pubDate)
+    if (newMax == null) {
+      warn(G, 'U1 新着反映ラグ', 'new.json に有効な pubDate なし')
+    } else {
+      const lagMin = (worksLatest - newMax) / 60000
+      const detail = `works最新 − new最新 = ${(lagMin / 60).toFixed(1)}h`
+      if (lagMin > UV.newLag)
+        fail(G, 'U1 新着反映ラグ', `新着リストが本体に追随せず ${detail}（>${UV.newLag / 60}h）`)
+      else pass(G, 'U1 新着反映ラグ', detail)
+    }
+  } else {
+    warn(G, 'U1 新着反映ラグ', 'new.json/works 不足で判定不可')
+  }
+
+  // U2: 取り込みストール（now − works.latestAt 最大）。新規エピソードが長時間落ちてこない。
+  if (worksLatest != null) {
+    const ageMin = (Date.now() - worksLatest) / 60000
+    const detail = `works.latestAt 最大 ${fmtAge(ageMin)}`
+    if (ageMin > UV.ingestStall)
+      fail(G, 'U2 取り込みストール', `新規エピソードが ${detail}（>${UV.ingestStall / 60}h）`)
+    else pass(G, 'U2 取り込みストール', detail)
+  }
+
+  // U3/U4: state の series-index（contentId→seriesId）を実体集合プロキシに使う。
+  const idx = await fetchState('state/series-index.json')
+  if (!idx.ok || !idx.data || typeof idx.data !== 'object') {
+    warn(G, 'U3/U4 参照整合', `series-index 取得不可（http=${idx.status ?? '?'}）→ スキップ`, false)
+  } else {
+    const idxVals = new Set(Object.values(idx.data).map((v) => String(v))) // ep を持つ seriesId 集合
+    const worksIds = new Set(works.map((w) => String(w.seriesId)))
+
+    // U3 取りこぼし（mode2）: series-index にあるのに works に無い series。
+    const leaked = [...idxVals].filter((id) => !worksIds.has(id))
+    if (leaked.length > 0)
+      fail(
+        G,
+        'U3 取りこぼし',
+        `series-index にあるが works に無い: ${leaked.length} 件（例 ${leaked.slice(0, 5).join(', ')}）`
+      )
+    else pass(G, 'U3 取りこぼし', `source(series-index) ⊆ works（取りこぼしなし）`)
+
+    // U4 dangling（mode3）: 参照 seriesId が series 実体に無い。空シェル(配信中でない/0話)は除外。
+    const refs = new Set()
+    for (const w of works)
+      if (w.isAvailable !== false && (w.episodeCount ?? 0) >= 1) refs.add(String(w.seriesId))
+    for (const x of liveRanking?.hot ?? []) refs.add(String(x.seriesId))
+    for (const x of liveRanking?.popular ?? []) refs.add(String(x.seriesId))
+    const dangling = [...refs].filter((id) => !idxVals.has(id))
+    if (dangling.length > 0)
+      fail(
+        G,
+        'U4 dangling',
+        `参照 seriesId が series 実体に無い: ${dangling.length} 件（例 ${dangling.slice(0, 5).join(', ')}）`
+      )
+    else pass(G, 'U4 dangling', `works/ranking の全 seriesId が series 実体に存在`)
+  }
+}
+
 // ── 実行 ──────────────────────────────────────────────────────────
 async function main() {
   await Promise.all([checkActions(), checkStateBranch(), checkLive()])
   checkStructure() // live データ取得後に同期実行（追加 fetch なし）
+  await checkUserVisible() // liveWorks/liveRanking/liveNew + state series-index
 
   const counts = { PASS: 0, WARN: 0, FAIL: 0 }
   for (const r of results) counts[r.level]++
   const overall = counts.FAIL ? 'FAIL' : counts.WARN ? 'WARN' : 'PASS'
+  // --ci: 「データ正しさ（ci=true）」の FAIL のみを exit1 対象にする（鮮度 WARN/FAIL では通知しない）。
+  const ciFail = results.some((r) => r.level === 'FAIL' && r.ci)
 
   // 並列実行で完了順に積まれるため、表示はグループ順に整える。
-  const GROUP_ORDER = ['Actions', 'state branch', 'live (Pages)', 'structure (整合性)']
+  const GROUP_ORDER = [
+    'Actions',
+    'state branch',
+    'live (Pages)',
+    'structure (整合性)',
+    'user-visible (整合性)',
+  ]
   results.sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
 
   if (asJson) {
@@ -380,10 +509,12 @@ async function main() {
       console.log(`  ${icon[r.level]} [${r.level}] ${r.label} — ${r.detail}`)
     }
     console.log(
-      `\n総合: ${overall}  (PASS ${counts.PASS} / WARN ${counts.WARN} / FAIL ${counts.FAIL})`
+      `\n総合: ${overall}  (PASS ${counts.PASS} / WARN ${counts.WARN} / FAIL ${counts.FAIL})` +
+        (ciMode ? `  [--ci: データ正しさ FAIL=${ciFail ? 'あり→exit1' : 'なし→exit0'}]` : '')
     )
   }
-  process.exit(counts.FAIL ? 1 : 0)
+  // 通常: FAIL が1つでも exit1。--ci: データ正しさ(ci=true)の FAIL のみ exit1（鮮度では通知しない）。
+  process.exit((ciMode ? ciFail : counts.FAIL > 0) ? 1 : 0)
 }
 
 main().catch((e) => {
