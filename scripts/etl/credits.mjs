@@ -66,8 +66,10 @@ const STUDIO_ROLE_RE = /(アニメーション制作|制作|製作|制作会社|
 // 主題歌系 role（value から曲名を捨て、作詞/作曲/編曲/歌 の人名だけ救出する）。
 const SONG_ROLE_RE =
   /(主題歌|オープニングテーマ|エンディングテーマ|テーマ曲|テーマソング|挿入歌|劇中歌|ＯＰ|ED|OP|ＥＤ|エンディング|オープニング|主題曲|エンディング曲|オープニング曲)/
+// 出演（声優/俳優）系 role。これで始まる「出演:A／B／C」は役名なしでも俳優名が並ぶ（舞台）。
+const PERFORM_ROLE_RE = /(出演|声の出演|キャスト|cast|声優)/i
 const COPYRIGHT_MARK_RE = /[©Ⓒ]|\(C\)|\(c\)|ⓒ/
-const COMMITTEE_RE = /(製作委員会|制作委員会|パートナーズ|partners)/i
+const COMMITTEE_RE = /(委員会|パートナーズ|partners)/i // 製作/制作/選考/実行委員会 等を一括
 const LINKS_RE = /(←\s*前話|次話\s*→|第一?話\s*→|第1話\s*→|前話\s*→|→\s*so\d)/
 const INFO_RE =
   /(動画投稿|コミュ投稿|公式(?:サイト|HP|ツイ)|ご視聴|配信(?:期間|開始|スケジュール)|本編(?:は|を)|チャンネル(?:登録|会員))/
@@ -93,6 +95,18 @@ const VALUE_STOPWORDS = new Set([
   'more',
   'その他大勢',
   '名',
+  '代表作',
+  '原作担当',
+  '作画担当',
+  'プロジェクト',
+  '番組スタッフ',
+  '制作スタッフ',
+  'スタッフ一同',
+  '出演者',
+  'ゲスト',
+  'ゲスト出演',
+  '特別出演',
+  '友情出演',
   // 役割語が value 側に漏れたもの（劇中歌「曲」作曲：… の取りこぼし対策）
   '作詞',
   '作曲',
@@ -139,9 +153,13 @@ export function isStructuredCredits(rawHtml) {
   return /\n\s*\n/.test(stripHtml(rawHtml))
 }
 
-// プロ―ズの文末（。が閉じ括弧以外の前）。『バクマン。』等は閉じ括弧が続くので除外。
+// プロ―ズ（文章）か。判定は **「。の直後が日本語文字＝文の継続」** のときだけ。
+//   - 多文あらすじ（文1。文2…）＝`。`＋かな/漢字 → プロ―ズ。
+//   - 語尾が 。 の芸名/作品名（『バクマン。』『ななもり。』）＝`。`の後が 』 )／ など非日本語 → プロ―ズ扱いしない。
+//   - `！`/`?` はタイトル・グループ名（Happy Around! / MyGO!!!!! / アイカツ！/ 響け！）に多用される
+//     ためプロ―ズ信号に使わない＝クレジット段落を誤って丸ごと捨てない。
 function hasProsePeriod(s) {
-  return /。(?![）」』）\s]|$)/.test(s) || /[。！!？?]{1}.{12,}/.test(s)
+  return /。[一-龯々〆ぁ-んァ-ヶー]/.test(s)
 }
 
 // role が数値/記号のみ（setlist 番号「01」「M1」「Track2」やタイムテーブル）= クレジットでない。
@@ -181,6 +199,7 @@ export function normalizePersonKey(name) {
 function cleanDisplay(name) {
   let s = (name ?? '').trim()
   s = s.replace(/^[©Ⓒⓒ®™\s]+/u, '') // 行頭の ©/®（©Frontwing → Frontwing）
+  s = s.replace(/^[（(](?:CV|Cv|cv|ＣＶ)[）)]\s*/u, '') // 声優マーカー (CV) 接頭（(CV)宮野 真守 → 宮野 真守）
   // 最初の括弧/引用符以降（作品名・掲載誌・注記）を落とす。所属会社は splitAffiliation で分離済み。
   s = s.replace(/[「『（(【＜<｢《].*$/u, '')
   // 対応開きが別片に行った閉じ括弧以降（「作品名」より / ｣連載 の断片）も落とす。
@@ -229,12 +248,24 @@ function splitOutsideParens(value, sepRe) {
   return out.map((s) => s.trim()).filter(Boolean)
 }
 
+// 日本語人名どうしの間の半角スペースだけで分割する（舞台 出演:関根優那 高橋りな 寒竹優衣…）。
+// 「日本語文字＋半角スペース＋日本語文字」の境界のみ分割＝ラテン社名の内部スペース
+//（Planet Kids Entertainment）は割らない。姓名内の「木村 了」も呼び出し側の ≥3 ゲートで保護。
+const JP_CHAR = '一-龯々〆ヵヶぁ-んァ-ヶーゝゞ'
+const JP_NAME_SPACE_RE = new RegExp(`(?<=[${JP_CHAR}]) +(?=[${JP_CHAR}])`)
+function splitJapaneseNameList(s) {
+  return s
+    .split(JP_NAME_SPACE_RE)
+    .map((x) => x.trim())
+    .filter(Boolean)
+}
+
 // 中黒/読点/カンマで連結された複数名を分割する（発見用途）。Western 単一名・括弧内は割らない。
 function splitConnected(value) {
   const denyKey = value.normalize('NFKC').toLowerCase()
   if (JOINED_NAME_DENYLIST.has(denyKey)) return [value]
-  // まず読点/カンマ/スラッシュ（括弧外のみ・ほぼ確実に複数人/社区切り）。
-  const parts = splitOutsideParens(value, /[、，,/／]/)
+  // まず読点/カンマ/スラッシュ/×（括弧外のみ・ほぼ確実に複数人/社区切り。WIT STUDIO×CloverWorks）。
+  const parts = splitOutsideParens(value, /[、，,/／×✕]/)
   // 各 part を中黒で分割（括弧外のみ・全 part が純カタカナ = Western 1 名なら割らない）。
   const out = []
   for (const p of parts) {
@@ -255,8 +286,11 @@ function splitConnected(value) {
   return out.length ? out : [value]
 }
 
+// 製作委員会系のみを committee として落とす。「JAM Project」「project No.9」「プロジェクトラブライブ！」
+// のような実在のグループ/スタジオ/フランチャイズ名は **落とさない**（generic な project/プロジェクト
+// 接尾では弾かない＝実名の取りこぼし回避）。
 function isCommittee(value) {
-  return COMMITTEE_RE.test(value) || /(プロジェクト|project)$/i.test(value.normalize('NFKC'))
+  return COMMITTEE_RE.test(value)
 }
 
 // value がタグ化に値する人物/会社名か（緩め。noise の最終防波堤。全タグ表示なので名前以外は弾く）。
@@ -267,6 +301,8 @@ function isPlausibleName(value) {
   if (VALUE_STOPWORDS.has(v.normalize('NFKC'))) return false
   if (hasProsePeriod(v)) return false
   if (/(です|ます|なります|表記|について)/.test(v)) return false // 注記文（※…が正式表記です 等）＝名前でない
+  if (/(CC-BY|contributors|改変|ライセンス|all rights|reserved)/i.test(v)) return false // ライセンス/権利表記片
+  if (/[:：;；]/.test(v)) return false // コロン/セミコロン残り＝役割ラベル/区切りの取り残し（名前でない）
   if (/^[\d\s.,，、:：#＃[\]()（）・/／'"?？!！~～ー-]+$/.test(v)) return false // 数値/記号のみ
   if (isCommittee(v)) return false
   if (BROADCASTER_RE.test(v.normalize('NFKC'))) return false
@@ -324,8 +360,14 @@ function entryToTags(role, value, blockSource) {
 
   if (isSong) {
     for (const n of extractSongNames(value)) {
-      const { name } = splitAffiliation(n)
-      for (const part of splitConnected(name)) push(part, 'themeSong')
+      // `；`/`／`/読点で区切り、各片は「役割：名前」なら最後のコロン以降＝名前を採る
+      //（アーティスト：佐咲紗花→佐咲紗花、編曲：YANAGIMAN；→YANAGIMAN）。
+      for (let seg of n.split(/[；;／/、,]/)) {
+        const cm = seg.match(/[:：]([^:：]*)$/)
+        if (cm) seg = cm[1]
+        const { name } = splitAffiliation(seg.trim())
+        for (const part of splitConnected(name)) push(part, 'themeSong')
+      }
     }
     return tags
   }
@@ -348,18 +390,18 @@ function entryToTags(role, value, blockSource) {
       .replace(/[「『＜《｢"].*$/u, ' ')
       .trim()
     if (!p) continue
-    // 日本語の半角スペース区切り名前リスト（関根優那 高橋りな 寒竹優衣…）も分割。ラテン社名
-    //（Planet Kids Entertainment）と括弧内（所属・連載注記）は対象外。括弧外スペースで 3 名以上の
-    // ときだけ分割（「木村 了」は割らない・「上田敦夫 （講談社 連載）」も括弧内空白で誤発火しない）。
-    const spaceSegs = splitOutsideParens(p, / /)
-    const subs = /[一-龯ぁ-んァ-ヶ]/.test(p) && spaceSegs.length >= 3 ? spaceSegs : [p]
+    // 日本語の半角スペース区切り名前リスト（関根優那 高橋りな 寒竹優衣…）を分割。
+    // **日本語の文字どうしの間の半角スペースだけ**で割る＝ラテン社名の内部スペース
+    //（Planet Kids Entertainment / VACAR ENTERTAINMENT）は絶対に割らない。括弧があるもの
+    //（所属・連載注記）と 2 名以下（「木村 了」＝姓名）は割らない＝3 名以上のリストのみ。
+    const cand = /[（(]/.test(p) ? [p] : splitJapaneseNameList(p)
+    const subs = cand.length >= 3 ? cand : [p]
     for (const sub of subs) {
-      // 残りを中黒/スラッシュで分割（須藤・田畑・碇谷 / ムービック/サンライズ）→ 各名で所属分離。
-      for (const part of splitConnected(sub)) {
-        const { name, org } = splitAffiliation(part)
-        push(name, source)
-        if (org) for (const o of splitConnected(org)) push(o, 'studio') // 所属/括弧内メンバーも分割
-      }
+      // 先に所属括弧を分離（中黒分割より前）。これで「真島ヒロ・上田敦夫（講談社連載）」は注記を
+      // 落としてから中黒分割でき（→真島ヒロ/上田敦夫）、「今野康之（スワラ・プロ）」は括弧内を割らない。
+      const { name, org } = splitAffiliation(sub)
+      for (const part of splitConnected(name)) push(part, source)
+      if (org) for (const o of splitConnected(org)) push(o, 'studio') // 所属/括弧内メンバーも分割
     }
   }
   return tags
@@ -373,14 +415,23 @@ function parseBlock(block, blockSource) {
     .split('／')
     .map((s) => s.trim())
     .filter(Boolean)
+  // 役名なし出演リスト「出演:俳優A／俳優B／俳優C」対応: 出演/声の出演/キャスト で始まったら、
+  // 以降のコロン無しセグメント（俳優名が直接並ぶ）も俳優名として採る。別の役割（コロン付き）が
+  // 来たら解除。アニメの「役名:声優／役名:声優」は各セグに役名(コロン)があるので誤発火しない。
+  let performMode = false
   for (const seg of segs) {
     const m = seg.match(/^([^：:]{1,40})[：:]\s*(.+)$/)
-    if (!m) continue // role:value に割れないセグメントはスキップ（per-segment 寛容）
+    if (!m) {
+      // コロン無し＝出演リストの続き（役名なしパターン）なら俳優名として採用
+      if (performMode) tags.push(...entryToTags('出演', seg, blockSource))
+      continue
+    }
     const role = m[1].trim()
     const value = m[2].trim()
     if (NUMERIC_ROLE_RE.test(role)) continue // setlist 番号
     if (EPISODE_MARKER_RE.test(role)) continue // 各話概要「第1話：…」「#3：…」
     if (value.length === 0) continue
+    performMode = PERFORM_ROLE_RE.test(role) // 出演系で開始・他役割で解除
     tags.push(...entryToTags(role, value, blockSource))
   }
   return tags
