@@ -53,29 +53,44 @@ export function isStructuredDescription(desc) {
   return typeof desc === 'string' && /<br\s*\/?>|&lt;\s*br/i.test(desc)
 }
 
+// description 源の優先ランク（PH-0014 / F-0058 ＝ snapshot > nvapi > RSS）。
+// snapshot/nvapi はともに <br> 構造版・高品質、RSS のみフラット（実測）。
+export const DESCRIPTION_SOURCE_RANK = { snapshot: 3, nvapi: 2, rss: 1 }
+function sourceRank(src) {
+  return DESCRIPTION_SOURCE_RANK[src] ?? 0
+}
+
 /**
- * 各話 description のマージ勝者を選ぶ（PH-0014 / F-0058 ＝源優先マージ）。
+ * 各話 description のマージ勝者を選ぶ（PH-0014 / F-0058 ＝ 3 段源優先マージ・案X）。
  *
- * 構造版（nvapi）はフラット版（RSS）より**長さに関わらず**優先する。
- * 同一構造クラス内（両構造・両フラット・両 null）でのみ従来の long-wins を維持する。
- * これにより、全クレジット連結で長くなりがちなフラット RSS が構造化 nvapi を潰す
- * （新着各話の本文 1 行詰まり）現象を解消する。
+ * 判定キー順（案X）:
+ *   ① 構造を持つか（<br>）＝安全弁。万一 snapshot がフラット/空でも構造化 nvapi を潰さない。
+ *   ② 源ランク snapshot(3) > nvapi(2) > rss(1) > 不明(0)。
+ *   ③ 長さ（同源・同構造の tie-break）。
+ * snapshot は実測で常に構造化＝通常は最優先で勝つ。フラット RSS が構造版を潰す事故も防ぐ。
  *
- * @param {string|null|undefined} existing - 既存（store 保持）の生 description
- * @param {string|null|undefined} incoming - 新規（今回 upsert）の生 description
- * @returns {string|null}
+ * @param {string|null|undefined} existing - 既存 description（生）
+ * @param {string|null|undefined} existingSrc - 既存 description の源（'snapshot'|'nvapi'|'rss'|null）
+ * @param {string|null|undefined} incoming - 新規 description（生）
+ * @param {string|null|undefined} incomingSrc - 新規 description の源
+ * @returns {{description: string|null, source: string|null}}
  */
-export function chooseDescription(existing, incoming) {
-  const e = existing ?? null
-  const i = incoming ?? null
-  const eStructured = isStructuredDescription(e)
-  const iStructured = isStructuredDescription(i)
-  // 構造版が来た → 採用（長さ無視）。既存が構造版 → フラットで潰さない。
-  if (iStructured && !eStructured) return i
-  if (eStructured && !iStructured) return e
-  // 同一構造クラス（両構造／両フラット／両 null）→ 従来 long-wins
-  if (i && i.length > (e?.length ?? 0)) return i
-  return e ?? i ?? null
+export function chooseDescription(existing, existingSrc, incoming, incomingSrc) {
+  const cands = []
+  if (existing != null) cands.push({ d: existing, s: existingSrc ?? null })
+  if (incoming != null) cands.push({ d: incoming, s: incomingSrc ?? null })
+  if (cands.length === 0) return { description: null, source: null }
+  // 安定ソート: 同点は先頭（= existing を先に push）を維持して無駄な churn を避ける。
+  cands.sort((a, b) => {
+    const sa = isStructuredDescription(a.d) ? 1 : 0
+    const sb = isStructuredDescription(b.d) ? 1 : 0
+    if (sa !== sb) return sb - sa // ① 構造優先
+    const ra = sourceRank(a.s)
+    const rb = sourceRank(b.s)
+    if (ra !== rb) return rb - ra // ② 源ランク
+    return b.d.length - a.d.length // ③ 長さ
+  })
+  return { description: cands[0].d, source: cands[0].s }
 }
 
 /**

@@ -59,27 +59,44 @@ describe('isStructuredDescription / chooseDescription (PH-0014 F-0058)', () => {
     expect(isStructuredDescription('')).toBe(false)
   })
 
-  it('chooseDescription: 構造版(<br>)は、より長いフラットに勝つ（長さ無視）', () => {
+  // 3段マージ（案X: 構造 → 源ランク snapshot>nvapi>rss → 長さ）。返り値 {description, source}。
+  it('chooseDescription: 構造版は、より長いフラットに勝つ（長さ無視・安全弁）', () => {
     const flatLong = 'a'.repeat(300)
     const structured = '本文<br><br>原作:作者'
-    expect(chooseDescription(flatLong, structured)).toBe(structured)
-    expect(chooseDescription(structured, flatLong)).toBe(structured)
+    expect(chooseDescription(flatLong, 'rss', structured, 'nvapi').description).toBe(structured)
+    expect(chooseDescription(structured, 'nvapi', flatLong, 'rss').description).toBe(structured)
   })
 
-  it('chooseDescription: 同一構造クラスは long-wins', () => {
-    expect(chooseDescription('short', 'a'.repeat(50))).toBe('a'.repeat(50)) // 両フラット
-    expect(chooseDescription('長い既存'.repeat(20), 'short')).toBe('長い既存'.repeat(20))
-    const s1 = '本文<br>x',
-      s2 = '本文<br>' + 'y'.repeat(50)
-    expect(chooseDescription(s1, s2)).toBe(s2) // 両構造 → 長い方
+  it('chooseDescription: 源ランク snapshot > nvapi（同構造）', () => {
+    const snap = '本文<br><br>snap版'
+    const nva = '本文<br><br>nvapi版もっと長い' + 'x'.repeat(50)
+    // 長さでは nvapi が勝つが、源ランクで snapshot 採用
+    const r = chooseDescription(nva, 'nvapi', snap, 'snapshot')
+    expect(r.description).toBe(snap)
+    expect(r.source).toBe('snapshot')
+    // 既存 snapshot を nvapi で上書きしない
+    expect(chooseDescription(snap, 'snapshot', nva, 'nvapi').description).toBe(snap)
+  })
+
+  it('chooseDescription: 安全弁＝フラット snapshot は構造化 nvapi を潰さない', () => {
+    const flatSnap = 'フラットな塊' + 'x'.repeat(200)
+    const structNvapi = '本文<br><br>原作:作者'
+    const r = chooseDescription(structNvapi, 'nvapi', flatSnap, 'snapshot')
+    expect(r.description).toBe(structNvapi) // 構造優先（①）で nvapi を守る
+    expect(r.source).toBe('nvapi')
+  })
+
+  it('chooseDescription: 同源・同構造は long-wins', () => {
+    const s1 = '本文<br>x'
+    const s2 = '本文<br>' + 'y'.repeat(50)
+    expect(chooseDescription(s1, 'snapshot', s2, 'snapshot').description).toBe(s2)
   })
 
   it('chooseDescription: null の扱い（既存保護・新値受け入れ）', () => {
-    expect(chooseDescription('existing', null)).toBe('existing')
-    expect(chooseDescription(null, 'new')).toBe('new')
-    expect(chooseDescription(null, null)).toBeNull()
-    // 構造版既存を null で潰さない
-    expect(chooseDescription('本文<br>x', null)).toBe('本文<br>x')
+    expect(chooseDescription('existing', 'rss', null, null).description).toBe('existing')
+    expect(chooseDescription(null, null, 'new', 'rss').description).toBe('new')
+    expect(chooseDescription(null, null, null, null).description).toBeNull()
+    expect(chooseDescription('本文<br>x', 'snapshot', null, null).description).toBe('本文<br>x')
   })
 })
 

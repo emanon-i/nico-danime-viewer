@@ -81,6 +81,7 @@ export function mapNvapiEpisodes(seriesId, items) {
         startTime: v.registeredAt ?? null,
         thumbnailUrl: v.thumbnail?.url ?? null,
         description: v.shortDescription ?? null,
+        descriptionSource: 'nvapi', // PH-0014 源優先: snapshot > nvapi > rss
         tags: null, // nvapi は各話タグを提供しない（§85 既知の制約）
       }
     })

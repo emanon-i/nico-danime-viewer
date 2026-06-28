@@ -182,6 +182,33 @@ describe('upsertEpisodes', () => {
     expect(store.episodes.get('so10000001')?.description).toBe(flatLong)
   })
 
+  // PH-0014 源優先3段（snapshot > nvapi > rss）＋ descriptionSource 追従
+  it('description 3段源優先: snapshot は nvapi を上書き、rss は snapshot を潰さない', () => {
+    const store = createStore()
+    const snap = '本文<br><br>snap版:声優'
+    const nva = '本文<br><br>nvapi版:声優' + 'x'.repeat(80) // より長いが下位源
+    const rss = 'フラット長文'.repeat(40)
+    // nvapi → snapshot（長さで負けるが snapshot 採用）
+    upsertEpisodes(store, [makeEp({ description: nva, descriptionSource: 'nvapi' })])
+    upsertEpisodes(store, [
+      { contentId: 'so10000001', description: snap, descriptionSource: 'snapshot' },
+    ])
+    expect(store.episodes.get('so10000001')?.description).toBe(snap)
+    expect(store.episodes.get('so10000001')?.descriptionSource).toBe('snapshot')
+    // その後 rss が来ても snapshot を保持
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: rss, descriptionSource: 'rss' }])
+    expect(store.episodes.get('so10000001')?.description).toBe(snap)
+    expect(store.episodes.get('so10000001')?.descriptionSource).toBe('snapshot')
+  })
+
+  it('description 3段源優先: 新着 rss 単独は採用（snapshot 未取得の暫定）', () => {
+    const store = createStore()
+    const rss = '新着のフラット説明'
+    upsertEpisodes(store, [makeEp({ description: rss, descriptionSource: 'rss' })])
+    expect(store.episodes.get('so10000001')?.description).toBe(rss)
+    expect(store.episodes.get('so10000001')?.descriptionSource).toBe('rss')
+  })
+
   it('episodeNo COALESCE: 既存 null を nvapi 由来の話順で後埋めする', () => {
     const store = createStore()
     // snapshot 相当: episodeNo 無しで作成（null）

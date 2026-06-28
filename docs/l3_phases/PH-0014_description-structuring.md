@@ -73,12 +73,25 @@ works.json（WorkEntry）は現状維持（`descriptionFirst` 継続）。シリ
 | `名:名／名:名…` を2件以上持つ段落＝cast             | `,`/`、` での value 内強制分割（`演出:林祐一郎、朴性厚`/`Wake Up,Girls！` を割る誤り）                                                    |
 | © マーカー段落                                      | role 側に `:` を含む稀例（`収録曲:「…」作詞・作曲：…`）→ first-colon 規則で role を取り違える可能性 → **confidence 低として cast 不採用** |
 
-## 源優先規則
+## 源優先規則（snapshot > nvapi > RSS ＝ 3 段・案X）
 
-1. **構造部（cast/staff/studios/copyright/synopsis）= nvapi 構造版を authoritative** とする。
-2. **RSS フラットは synopsis フォールバックのみ**（nvapi 不在時）。RSS を cast/staff に分解しない。
-3. 既存 description マージ（`data-inventory.md` L200 の long-wins）を**源優先に変更**: nvapi 構造版（`\n` 持ち）が存在すれば、RSS フラットがより長くても**構造版を採用**。同一構造クラス内でのみ long-wins を維持。
-   - これが「新着各話の本文1行詰まり」の核心修正（塊 RSS が構造 nvapi に勝つ現象を解消）。
+実測: **snapshot description は各話単位で 100% `<br>` 構造化**（平均561字・あらすじ+cast+staff+©+links 完備）、
+nvapi も同一の `<br>` 構造、**RSS のみ `<p>` ラッパでフラット**。snapshot と nvapi は内容では区別不能なので、
+源の出自（`descriptionSource`）を各 upsert に付与して順位付けする。
+
+`chooseDescription(existing, existingSrc, incoming, incomingSrc)` の判定キー（案X）:
+
+1. **構造を持つか（`<br>`）＝安全弁**。万一 snapshot がフラット/空でも構造化 nvapi を潰さない。
+2. **源ランク**: `snapshot(3) > nvapi(2) > rss(1) > 不明(0)`。
+3. **長さ**（同源・同構造の tie-break）。
+
+帰結:
+
+- snapshot は実測で常に構造化＝**通常は最優先で採用**。
+- 新着各話（snapshot 未取得）は RSS が暫定採用 → 次 daily で snapshot 構造版に置換。
+- フラット RSS が構造版を潰す事故（旧 long-wins の「新着 1 行詰まり」）を解消。
+- `descriptionSource` は series JSON に永続化し再ロードで復元（hourly で snapshot 由来を下位源が上書きしない）。
+- パーサ（F-0057）は**この優先で選ばれた 1 本の description** を入力に分解する（源非依存）。
 
 ## 未分類の扱い（捨てない・誤検知に気づける）
 

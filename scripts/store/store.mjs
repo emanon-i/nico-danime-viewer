@@ -250,6 +250,7 @@ function _ingestSeriesJson(store, json) {
       startTime: ep.startTime ?? existing?.startTime ?? null,
       thumbnailUrl: ep.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
       description: ep.description ?? existing?.description ?? null,
+      descriptionSource: ep.descriptionSource ?? existing?.descriptionSource ?? null,
       tags: Array.isArray(ep.tags)
         ? ep.tags.filter((t) => typeof t === 'string')
         : (existing?.tags ?? []),
@@ -460,6 +461,7 @@ function _buildSeriesJson(store, seriesId) {
         startTime: ep.startTime,
         thumbnailUrl: ep.thumbnailUrl,
         description: stripHtml(ep.description) || null,
+        descriptionSource: ep.descriptionSource ?? null, // 源優先マージの追従用（snapshot/nvapi/rss）
         synopsis: parsed.synopsis,
         episodeLinks: parsed.episodeLinks,
         descriptionStructured: parsed.structured,
@@ -572,9 +574,15 @@ export function upsertEpisodes(store, rawEps) {
       // 源優先マージ（PH-0014 / F-0058）: 構造版(nvapi の <br> 区切り)をフラット(RSS)より
       // 長さに関わらず優先。同一構造クラス内のみ従来 long-wins。フラット RSS が構造化 nvapi を
       // 潰す（新着各話の本文 1 行詰まり）現象を解消する。
-      const newDesc = chooseDescription(existing.description, raw.description)
-      if (existing.description !== newDesc) {
-        existing.description = newDesc
+      const chosen = chooseDescription(
+        existing.description,
+        existing.descriptionSource,
+        raw.description,
+        raw.descriptionSource
+      )
+      existing.descriptionSource = chosen.source // 採用した description の源を追従
+      if (existing.description !== chosen.description) {
+        existing.description = chosen.description
         changed = true
       }
 
@@ -612,6 +620,7 @@ export function upsertEpisodes(store, rawEps) {
         startTime: raw.startTime ?? null,
         thumbnailUrl: raw.thumbnailUrl ?? null,
         description: raw.description ?? null,
+        descriptionSource: raw.description != null ? (raw.descriptionSource ?? null) : null,
         tags: raw.tags ?? [],
         tagsCurated: raw.tagsCurated ?? [],
         lastUpdated: now,

@@ -158,6 +158,7 @@ function registerProvisionalSeries(store, watchId, rssEntry) {
       // 揃える（snapshot/nvapi 由来の実話と同形式＝firstAt の文字列比較・並びを健全に保つ）。
       startTime: toIso(rssEntry.pubDate),
       description: rssEntry.description ?? null,
+      descriptionSource: 'rss', // PH-0014 源優先: rss は最下位（フラット）
     },
   ])
 
@@ -371,6 +372,7 @@ async function runFullJS() {
       ...ep,
       tags: processedTags.map((t) => t.name),
       tagsCurated: processedTags.filter((t) => t.isCurated).map((t) => t.name),
+      descriptionSource: 'snapshot', // PH-0014 源優先: snapshot 最優先
     }
   })
   storeUpsertEps(store, mappedEps)
@@ -861,11 +863,14 @@ async function runHourlyJS() {
     })
   }
 
-  // D3 完了後: RSS description（HTML 700+字）を long-wins で適用（snapshot/nvapi の 50字に勝つ）
+  // D3 完了後: RSS description を適用。PH-0014 源優先（snapshot>nvapi>rss）により、
+  // snapshot/nvapi の構造版が既にあればそれが勝ち、未取得の新着話では RSS が暫定採用される
+  // （次の daily full で snapshot 構造版に置き換わる）。フラット RSS が構造版を潰さない。
   if (rssDescriptions.size > 0) {
     const descUpdates = [...rssDescriptions.entries()].map(([contentId, description]) => ({
       contentId,
       description,
+      descriptionSource: 'rss',
     }))
     storeUpsertEps(store, descUpdates)
     logger.info('fetch', '[JS] hourly D4: RSS description applied', { count: descUpdates.length })
