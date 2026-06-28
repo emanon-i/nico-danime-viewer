@@ -76,6 +76,37 @@ describe('parseDescription (PH-0014 F-0057)', () => {
     expect(r.cast).toEqual([])
   })
 
+  // precision 100%・種別網羅（アニメ以外で誤抽出しない）
+  it('precision: setlist「01:曲名／02:曲名」（数値 role）を cast にしない', () => {
+    const r = parseDescription('導入。<br><br>01:オープニング曲／02:エンディング曲')
+    expect(r.cast).toEqual([])
+    expect(r.synopsis).toContain('01:オープニング曲')
+  })
+
+  it('precision: 実写舞台/ライブの synopsis のみ description は何も抽出しない', () => {
+    // 役名:声優 構造を持たない（クレジット表記なし）あらすじ単独
+    const r = parseDescription(
+      '神社で死体が発見された。捜査を開始する石井。容疑者はすぐ判明するが証言は食い違う。<br><br>2024年公演の舞台版。'
+    )
+    expect(r.cast).toEqual([])
+    expect(r.staff).toEqual([])
+    expect(r.synopsis).toContain('神社で死体が発見された')
+  })
+
+  it('precision: 数値風アーティスト名（原作:029 / 音楽:1869）は value として正しく抽出', () => {
+    const r = parseDescription('s。<br><br>原作イラスト:029／音楽:1869')
+    expect(r.staff).toEqual([
+      { role: '原作イラスト', names: ['029'] }, // 数値 value は正規名なので許容
+      { role: '音楽', names: ['1869'] },
+    ])
+  })
+
+  it('precision: 単独「出演:俳優A、俳優B」（1 セグメント）は cast にしない（曖昧は落とす）', () => {
+    const r = parseDescription('舞台のあらすじ。<br><br>出演:俳優A、俳優B、俳優C')
+    expect(r.cast).toEqual([])
+    expect(r.synopsis).toContain('出演:俳優A')
+  })
+
   it('summarizeDescriptionParse: 集計メトリクスを返す', () => {
     const m = summarizeDescriptionParse([STRUCTURED, '<p>flat 原作:x</p>', null])
     expect(m.total).toBe(3)

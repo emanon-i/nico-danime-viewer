@@ -96,6 +96,10 @@ function hasProsePeriod(s) {
 // 各話要約「#3：突如…メフィスト。…」や台詞コロンを含む文を cast/staff と誤認しないための砦。
 //   - role/value に「文の句点 。」を含む → プロ―ズ → ブロックごと不採用（synopsis へ温存）
 //   - value が極端に長い／role が長すぎる → 同上
+// role が数値/記号のみ（setlist 番号「01」「Track2」やタイムテーブル）= クレジットでない。
+// 正規の役名/役割は数値のみにならないため、弾いても正規データの損失はゼロ（precision 防御）。
+// 注: value 側の数値名（イラストレーター「029」/作曲「1869」等）は正規なので弾かない。
+const NUMERIC_ROLE_RE = /^[\d\s.:#＃[\]()（）-]+$/
 function isPlausibleCreditBlock(entries, maxAvg, maxVal) {
   if (!entries || entries.length === 0) return false
   let sum = 0
@@ -104,6 +108,7 @@ function isPlausibleCreditBlock(entries, maxAvg, maxVal) {
     const role = e.role ?? ''
     if (hasProsePeriod(v) || hasProsePeriod(role)) return false // 文＝プロ―ズ
     if (v.length > maxVal || role.length > 50) return false // 極端に長い＝プロ―ズ
+    if (NUMERIC_ROLE_RE.test(role)) return false // setlist/番号/時刻 = クレジットでない
     sum += v.length
   }
   return sum / entries.length <= maxAvg
