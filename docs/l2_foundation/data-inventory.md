@@ -154,34 +154,30 @@ format は両者同一。
 
 **ファイル永続化フィールド**（`_buildSeriesJson` が書き出す）:
 
-| フィールド         | 型                                      | 内容                                                                                                                                   | 更新元                       |
-| ------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| `seriesId`         | `number`                                | 正数 = nvapi 実 ID、負数 = djb2 ハッシュ仮 ID（不変）                                                                                  | 初期化時のみ                 |
-| `title`            | `string`                                | シリーズ名                                                                                                                             | nvapi / list.json / RSS 抽出 |
-| `colKey`           | `string\|null`                          | 五十音分類キー（`list.json` 固有）                                                                                                     | Phase B4                     |
-| `thumbnailUrl`     | `string\|null`                          | サムネ URL（COALESCE: 既存があれば保護、なければ最古 ep から補完）                                                                     | Phase E6 syncThumbs          |
-| `descriptionFirst` | `string\|null`                          | 最古話の HTML 剥ぎ description                                                                                                         | Phase E1                     |
-| `firstAt`          | `string\|null`                          | 最古話 startTime ISO8601                                                                                                               | Phase E5 syncTimestamps      |
-| `latestAt`         | `string\|null`                          | 最新話 startTime ISO8601                                                                                                               | Phase E5 syncTimestamps      |
-| `lastSeenAt`       | `string\|null`                          | snapshot に最後に登場した日時（E7 isAvailable 評価に使う）                                                                             | Phase A 日次                 |
-| `cours`            | `string\|null`                          | 放送季 `'YYYY-季'` 形式（タグ主源）                                                                                                    | Phase E3                     |
-| `franchiseKey`     | `string\|null`                          | シリーズタグ union-find キー（関連シリーズ束ね）                                                                                       | Phase E4                     |
-| `isAvailable`      | `boolean`                               | 配信中フラグ（E7 grace で自動 on/off）                                                                                                 | Phase E7                     |
-| `tags`             | `{name:string, isCurated:boolean}[]`    | 正規化済みシリーズタグ                                                                                                                 | Phase E2                     |
-| `relatedSeries`    | `{seriesId,title,thumbnailUrl\|null}[]` | 同フランチャイズ内の他シリーズ                                                                                                         | Phase E4                     |
-| `cast`             | `{role:string, actors:string[]}[]`      | 構造化キャスト（役名→声優）。**1話目（最古話＝descriptionFirst と同一ソース）のみ**から抽出（PH-0014）。詳細画面は声優名だけをタグ表示 | PH-0014                      |
-| `staff`            | `{role:string, names:string[]}[]`       | 構造化スタッフ（役割→人名/社名）。同上シリーズ単位                                                                                     | PH-0014                      |
-| `studios`          | `string[]`                              | 制作会社（staff の制作系 role から投影・重複排除）                                                                                     | PH-0014                      |
-| `copyright`        | `string\|null`                          | © 行（代表各話由来・原文保持）                                                                                                         | PH-0014                      |
-| `episodes`         | `EpisodeEntry[]`                        | 話一覧（chronoSort 順）                                                                                                                | 各フェーズ                   |
+| フィールド         | 型                                      | 内容                                                                                                                                                                | 更新元                       |
+| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `seriesId`         | `number`                                | 正数 = nvapi 実 ID、負数 = djb2 ハッシュ仮 ID（不変）                                                                                                               | 初期化時のみ                 |
+| `title`            | `string`                                | シリーズ名                                                                                                                                                          | nvapi / list.json / RSS 抽出 |
+| `colKey`           | `string\|null`                          | 五十音分類キー（`list.json` 固有）                                                                                                                                  | Phase B4                     |
+| `thumbnailUrl`     | `string\|null`                          | サムネ URL（COALESCE: 既存があれば保護、なければ最古 ep から補完）                                                                                                  | Phase E6 syncThumbs          |
+| `descriptionFirst` | `string\|null`                          | 最古話の HTML 剥ぎ description                                                                                                                                      | Phase E1                     |
+| `firstAt`          | `string\|null`                          | 最古話 startTime ISO8601                                                                                                                                            | Phase E5 syncTimestamps      |
+| `latestAt`         | `string\|null`                          | 最新話 startTime ISO8601                                                                                                                                            | Phase E5 syncTimestamps      |
+| `lastSeenAt`       | `string\|null`                          | snapshot に最後に登場した日時（E7 isAvailable 評価に使う）                                                                                                          | Phase A 日次                 |
+| `cours`            | `string\|null`                          | 放送季 `'YYYY-季'` 形式（タグ主源）                                                                                                                                 | Phase E3                     |
+| `franchiseKey`     | `string\|null`                          | シリーズタグ union-find キー（関連シリーズ束ね）                                                                                                                    | Phase E4                     |
+| `isAvailable`      | `boolean`                               | 配信中フラグ（E7 grace で自動 on/off）                                                                                                                              | Phase E7                     |
+| `tags`             | `{name:string, isCurated:boolean}[]`    | 正規化済みシリーズタグ                                                                                                                                              | Phase E2                     |
+| `relatedSeries`    | `{seriesId,title,thumbnailUrl\|null}[]` | 同フランチャイズ内の他シリーズ                                                                                                                                      | Phase E4                     |
+| `credits`          | `string[]`                              | 演者/制作の統合名前タグ（声優・スタッフ人名・制作会社・原作者等を1列・重複除去）。**1話目（最古話＝descriptionFirst と同一ソース）のみ**から抽出。`?credit=` 照合用 | description-extraction       |
+| `episodes`         | `EpisodeEntry[]`                        | 話一覧（chronoSort 順）                                                                                                                                             | 各フェーズ                   |
 
-> **PH-0014 補足**: cast/staff/studios/copyright は **SeriesEntry**（series 単位）に置く。抽出は **1話目（最古話）1件のみ**を
-> パースする（あらすじ＝descriptionFirst と同一ソースに揃え、全話パースのコストも回避）。cast はシリーズ内でほぼ一定なので
-> 1話目で十分。詳細画面は**声優名/人名/制作会社名だけをタグ表示**（役名/役割ラベルは捨てる）。各話単位の構造化フィールド
-> （synopsis/episodeLinks/descriptionStructured）は**廃止**（per-episode パースをやめた）。タグへの facet 化（声優/制作の
-> グローバル index）は tags.json/ranking 肥大のため**未実装（要判断）**。
-> **どう分析し・どう抽出し・どう誤検知を防ぐか**（precision ガード・カバレッジ実測・検証）の正本は
-> [`description-extraction.md`](description-extraction.md)。
+> **credits 補足**: `credits` は **SeriesEntry / WorkEntry**（series 単位）に置く 1 列の名前配列。抽出は **1話目（最古話）1件のみ**を
+> パースする（あらすじ＝descriptionFirst と同一ソースに揃え、全話パースのコストも回避）。出演/制作はシリーズ内でほぼ一定なので
+> 1話目で十分。**声優/監督/会社/原作者の区別は持たず名前のみ**（役名・役割ラベルは捨てる）＝発見用途で区別不要のため 1 カテゴリに統合。
+> 旧 `cast`/`staff`/`studios`/`copyright`（役名/役割付き 2 カテゴリ）は廃止し `credits` に統合した。各話単位の構造化フィールド
+> （synopsis/episodeLinks/descriptionStructured）は per-episode パースをやめたため非永続。credits のグローバル facet 化（声優別/制作別 index）は未実装。
+> **どう分析し・どう抽出し・どう誤検知を防ぐか・カバレッジ実測**の正本は [`description-extraction.md`](description-extraction.md)。
 
 **メモリのみ（ファイル非永続）**:
 

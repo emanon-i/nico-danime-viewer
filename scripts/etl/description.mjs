@@ -253,26 +253,35 @@ export function parseDescription(rawHtml) {
 // `ジョージ・R・R・マーティン` のような外国人名の中黒を壊さない（測定で precision 最良）。
 export const CREDIT_SPLIT_MODE = 'safe'
 
-// 主題歌系 role: value は「曲タイトル」か「アーティスト名」のどちらか。
-// 曲タイトル（『…』「…」）は単作品＝発見に繋がらないので捨て、アーティスト名（他作品でも
-// 再登場）は残す。作詞/作曲/編曲 は人名なので別扱い不要（そのまま名前として取る）。
-const THEME_ROLE_RE = /主題歌|テーマ|挿入歌|ＯＰ|ＥＤ/
-
-// 末尾の所属括弧を除去: `米山和仁（劇団ホチキス）`→`米山和仁`、`Aimer(DefSTAR RECORDS)`→`Aimer`。
-// 全角/半角の対応括弧が末尾にあるときだけ落とす（名前途中の括弧 `(株)` 等は触らない）。
+// 末尾の所属括弧を除去: `米山和仁（劇団ホチキス）`→`米山和仁`、`Aimer(DefSTAR RECORDS)`→`Aimer`、
+// 入れ子も対応 `宮島礼吏（『週刊少年マガジン』（講談社））`→`宮島礼吏`。
+// 末尾が閉じ括弧のときだけ対応する開き括弧まで（深さを数えて）落とす。開き括弧が先頭にある
+// （`(株)カラー` のような前置括弧）場合は名前の一部なので触らない。
 function stripAffiliation(s) {
-  let prev
   let out = s.trim()
-  // 末尾括弧が入れ子・連続することがあるので無くなるまで剥がす。
-  do {
-    prev = out
-    out = out.replace(/[（(][^（）()]*[）)]\s*$/, '').trim()
-  } while (out !== prev)
+  while (out.length) {
+    const last = out[out.length - 1]
+    if (last !== '）' && last !== ')') break
+    let depth = 0
+    let i = out.length - 1
+    for (; i >= 0; i--) {
+      const c = out[i]
+      if (c === '）' || c === ')') depth++
+      else if (c === '（' || c === '(') {
+        depth--
+        if (depth === 0) break
+      }
+    }
+    if (i <= 0) break // 対応開き括弧が先頭/見つからない＝名前の一部なので残す
+    out = out.slice(0, i).trim()
+  }
   return out
 }
 
-// 主題歌 value から曲タイトル（引用符内）を除去し、残った文字列（アーティスト）を返す。
-function stripSongTitles(v) {
+// value から作品/曲タイトル（引用符 「」『』""内）を除去する。クレジット value 内の引用符は
+// 常に作品名・曲名であって人物/社名ではないため、どの role でも落としてよい
+// （`トロル「おしりたんてい」ポプラ社`→`トロル ポプラ社`、主題歌 `Aimer「曲名」`→`Aimer`）。
+function stripTitles(v) {
   return v
     .replace(/[「『“"][^」』”"]*[」』”"]/g, ' ')
     .replace(/\s{2,}/g, ' ')
@@ -298,6 +307,7 @@ function isNoiseName(s) {
   const t = (s ?? '').trim()
   if (!t) return true
   if (/製作委員会|制作委員会|パートナーズ|partners/i.test(t)) return true
+  if (/[「」『』]/.test(t)) return true // 引用符の残骸＝作品/曲名の断片（`「彼女`）＝人物/社名でない
   if (YEAR_ONLY_RE.test(t)) return true
   if (SYMBOL_ONLY_RE.test(t)) return true
   if (hasProsePeriod(t)) return true
@@ -309,13 +319,11 @@ function isNoiseName(s) {
 // **所属除去を分割より先に**行うのが要点: `水無月すう(…連載、角川コミックス・エース刊)` のように
 // 括弧内に区切り（、・）を含む所属注記があるとき、先に分割すると括弧が壊れて garbage になる。
 // 末尾括弧を丸ごと落としてから分割すれば内部の区切りに触れず安全（測定で precision 改善を確認）。
-function cleanValueToNames(value, { theme = false, mode = CREDIT_SPLIT_MODE } = {}) {
+function cleanValueToNames(value, { mode = CREDIT_SPLIT_MODE } = {}) {
   let v = (value ?? '').trim()
   if (!v) return []
-  if (theme) {
-    v = stripSongTitles(v)
-    if (!v) return [] // 曲タイトルだけだった＝発見に無価値
-  }
+  v = stripTitles(v) // 作品/曲名（引用符内）を除去。主題歌の曲名だけなら空＝発見に無価値で落ちる
+  if (!v) return []
   v = stripAffiliation(v)
   const out = []
   for (const piece of splitNames(v, mode)) {
@@ -342,6 +350,7 @@ function mineCopyright(copyright) {
         .replace(/^\s*\d{4}(?:[-–~〜]\d{2,4})?\s*/, '') // 先頭の年（©2016 ...）
         .replace(/^[^：:]{1,14}[：:]\s*/, (m) => (/[A-Za-z]/.test(m) ? m : '')) // 行頭の役ラベル（原作:）を除去（英字 URL 風は残す）
         .trim()
+      tok = stripTitles(tok) // `スタジオA「作品名」`→`スタジオA`
       tok = stripAffiliation(tok)
       if (!isNoiseName(tok)) out.push(tok)
     }
@@ -364,8 +373,9 @@ export function extractCredits(rawHtml, mode = CREDIT_SPLIT_MODE) {
     for (const a of c.actors ?? []) names.push(...cleanValueToNames(a, { mode }))
   }
   for (const s of p.staff) {
-    const theme = THEME_ROLE_RE.test(s.role ?? '')
-    for (const n of s.names ?? []) names.push(...cleanValueToNames(n, { theme, mode }))
+    // 主題歌系 role の value（曲名）は stripTitles で曲タイトルが落ち、アーティスト人名が残る。
+    // 作詞/作曲/編曲 は人名なのでそのまま名前として取れる（他作品でも再登場＝発見に効く）。
+    for (const n of s.names ?? []) names.push(...cleanValueToNames(n, { mode }))
   }
   for (const st of p.studios) names.push(...cleanValueToNames(st, { mode }))
   names.push(...mineCopyright(p.copyright))
