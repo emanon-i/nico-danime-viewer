@@ -5,10 +5,12 @@
 // 発見用途（同じ人物/会社で他作品を探す）に合わせて方針を変える:
 //   - cast/staff のバケツ分けをやめ、**全関係者（声優+スタッフ+制作会社+copyright由来）を 1 本の
 //     名前タグ列**にまとめる（混在段落バグ＝主題歌混入で声優が staff 化、を per-segment 分類で解消）。
-//   - 各タグに canonical key（正規化）を付け、**recurrence（他作品での再登場）で価値判定**する前提。
-//     抽出側は緩めに広く取り、singleton ノイズは集計側（recurrence≥2 ゲート）で落とす。
+//   - 各タグに canonical key（正規化）を付け、表記ゆれ（諏訪部 順一 ↔ 諏訪部順一）を 1 実体に集約。
+//   - **noise（曲名・◯◯製作委員会・©/年号・役名・汎用語）は抽出ルールで落とす**。出すタグは
+//     全て「クリックする価値のある実在の人物/会社名」にする（recurrence でクリック可否を変えない）。
 //   - source（castLike/staffLike/studio/copyright/themeSong）・role は **soft metadata** として
 //     内部保持（抽出可否の gate には使わない・将来の序列/facet 用）。
+//   - countRecurrence は将来の序列/facet 用ユーティリティ（本パイプラインの表示/クリックには不使用）。
 //
 // 入力は「各シリーズ1話目」の説明文 1 本（生 HTML でも stripHtml 済みの \n\n 形でも可）。
 // 構造判定は <br>（生）または \n\n（stripHtml 済み）の有無。フラット（区切り無し）は分解しない。
@@ -87,6 +89,10 @@ const VALUE_STOPWORDS = new Set([
   '不明',
   'ほか多数',
   '他多数',
+  'and more',
+  'more',
+  'その他大勢',
+  '名',
   // 役割語が value 側に漏れたもの（劇中歌「曲」作曲：… の取りこぼし対策）
   '作詞',
   '作曲',
@@ -140,6 +146,9 @@ function hasProsePeriod(s) {
 
 // role が数値/記号のみ（setlist 番号「01」「M1」「Track2」やタイムテーブル）= クレジットでない。
 const NUMERIC_ROLE_RE = /^[\dＭMＴT#＃[\]()（）.\s:：・-]+$/i
+// 値のエントリ区切り（全角スペース U+3000 ＝舞台/ライブの名前区切り・読点・カンマ）。
+// 半角スペースは姓名内（木村 了）なので分割しない。
+const ENTRY_SEP_RE = /[\u3000、，,]/
 // 各話概要マーカー role（「第1話」「#3」「Track5」「ENCORE」等）。クレジットでない。
 const EPISODE_MARKER_RE =
   /^(第?\s*\d+\s*話|#?\d+話?|episode\s*\d+|ep\.?\s*\d+|encore|track\s*\d+|m\d+)$/i
@@ -171,12 +180,17 @@ export function normalizePersonKey(name) {
 // 表示用に value を軽く整える（注記/作品名/末尾「他」除去・前後空白）。canonical はこの結果から導く。
 function cleanDisplay(name) {
   let s = (name ?? '').trim()
+  s = s.replace(/^[©Ⓒⓒ®™\s]+/u, '') // 行頭の ©/®（©Frontwing → Frontwing）
   // 最初の括弧/引用符以降（作品名・掲載誌・注記）を落とす。所属会社は splitAffiliation で分離済み。
   s = s.replace(/[「『（(【＜<｢《].*$/u, '')
+  // 対応開きが別片に行った閉じ括弧以降（「作品名」より / ｣連載 の断片）も落とす。
+  s = s.replace(/[」』｣》＞］].*$/u, '')
   s = s.replace(/\s*※.*$/u, '') // ※注記
   s = s.replace(/\s+著.*$/u, '') // 「○○ 著『…』」
+  s = s.replace(/\s*[…‥]+$/u, '') // 末尾の…（and more… 等）
   s = s.replace(/[\s、,]*(?:他|ほか)(?:多数)?[。\s]*$/u, '') // 末尾「他」「ほか。」
-  s = s.replace(/^[・,，、/／\s]+/, '').replace(/[・,，、/／\s」』）)】＞>｣》]+$/, '')
+  s = s.replace(/(\D)\s*(?:19|20)\d{2}$/u, '$1') // 末尾の年（アンサンブル 2014→アンサンブル・1869 等は非数字前置のみ）
+  s = s.replace(/^[・,，、/／\s]+/, '').replace(/[・,，、/／\s」』）)】＞>｣》\]｝}]+$/, '')
   return s.trim()
 }
 
@@ -245,13 +259,14 @@ function isCommittee(value) {
   return COMMITTEE_RE.test(value) || /(プロジェクト|project)$/i.test(value.normalize('NFKC'))
 }
 
-// value がタグ化に値する人物/会社名か（緩め。最終的な singleton 落としは recurrence に委ねる）。
+// value がタグ化に値する人物/会社名か（緩め。noise の最終防波堤。全タグ表示なので名前以外は弾く）。
 function isPlausibleName(value) {
   const v = value.trim()
   if (v.length === 0 || v.length > 40) return false
   if (VALUE_STOPWORDS.has(v)) return false
   if (VALUE_STOPWORDS.has(v.normalize('NFKC'))) return false
   if (hasProsePeriod(v)) return false
+  if (/(です|ます|なります|表記|について)/.test(v)) return false // 注記文（※…が正式表記です 等）＝名前でない
   if (/^[\d\s.,，、:：#＃[\]()（）・/／'"?？!！~～ー-]+$/.test(v)) return false // 数値/記号のみ
   if (isCommittee(v)) return false
   if (BROADCASTER_RE.test(v.normalize('NFKC'))) return false
@@ -315,23 +330,37 @@ function entryToTags(role, value, blockSource) {
     return tags
   }
 
-  // 2.5次元舞台/ユニット「【ユニット】キャラ 役：俳優、キャラ：俳優」形式 → 俳優名だけ救出。
-  if (/[【】]/.test(value) || /役\s*[:：]/.test(value)) {
-    for (let seg of splitOutsideParens(value, /[、，,]/)) {
-      seg = seg.replace(/【[^】]*】/g, ' ').replace(/^[^【】：:]*】/, ' ') // ユニット名/残【】除去
-      const cm = seg.match(/[:：]([^:：]+)$/) // 「キャラ(役)：俳優」の俳優側
-      let actor = (cm ? cm[1] : seg).replace(/役\s*$/, '').trim()
-      for (const part of splitConnected(actor)) push(part, blockSource)
-    }
-    return tags
-  }
-
   const source = isStudio ? 'studio' : isStaff ? 'staffLike' : blockSource
-  // 連結分割（括弧外のみ・須藤友徳・田畑壽之・碇谷敦→3名 / 小川（A）、上田（A）→2名）→ 各名で所属分離。
-  for (const part of splitConnected(value)) {
-    const { name, org } = splitAffiliation(part)
-    push(name, source)
-    if (org) for (const o of splitConnected(org)) push(o, 'studio') // 所属/括弧内メンバーも分割して拾う
+
+  // 値を全角スペース(U+3000)/読点でエントリ分割（舞台・ライブの「A[全]B[全]C」名前リスト）。
+  // 全角スペース＝名前区切り、半角スペース＝姓名内（木村[半]了）＝データ規約で確認済み（ENTRY_SEP_RE）。
+  for (const entry of splitOutsideParens(value, ENTRY_SEP_RE)) {
+    // 「【ユニット】キャラ（/別名）役：俳優」形式 → 最後のコロン以降＝実在名を採る（役名/ユニット名は捨てる）。
+    let p = entry.replace(/【[^】]*】/g, ' ')
+    const cm = p.match(/[:：]([^:：]*)$/)
+    if (cm) p = cm[1]
+    p = p.replace(/役\s*$/, '').trim()
+    // 引用符タイトル（作品/曲名）はスペース分割の前に除去する。英字タイトル
+    //（『FAIRY TAIL 100 YEARS QUEST』）が半角スペース分割で TAIL/YEARS/QUEST に砕けるのを防ぐ。
+    // 括弧（…）は所属会社なので splitAffiliation に残す（ここでは触らない）。
+    p = p
+      .replace(/[「『＜《｢"][^」』＞》｣"]*[」』＞》｣"]/g, ' ')
+      .replace(/[「『＜《｢"].*$/u, ' ')
+      .trim()
+    if (!p) continue
+    // 日本語の半角スペース区切り名前リスト（関根優那 高橋りな 寒竹優衣…）も分割。ラテン社名
+    //（Planet Kids Entertainment）と括弧内（所属・連載注記）は対象外。括弧外スペースで 3 名以上の
+    // ときだけ分割（「木村 了」は割らない・「上田敦夫 （講談社 連載）」も括弧内空白で誤発火しない）。
+    const spaceSegs = splitOutsideParens(p, / /)
+    const subs = /[一-龯ぁ-んァ-ヶ]/.test(p) && spaceSegs.length >= 3 ? spaceSegs : [p]
+    for (const sub of subs) {
+      // 残りを中黒/スラッシュで分割（須藤・田畑・碇谷 / ムービック/サンライズ）→ 各名で所属分離。
+      for (const part of splitConnected(sub)) {
+        const { name, org } = splitAffiliation(part)
+        push(name, source)
+        if (org) for (const o of splitConnected(org)) push(o, 'studio') // 所属/括弧内メンバーも分割
+      }
+    }
   }
   return tags
 }

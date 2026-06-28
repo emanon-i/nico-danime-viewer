@@ -1,23 +1,20 @@
 // scripts/store/credit-index.mjs
-// 発見タグの「グローバル索引」を組み立てる。各シリーズ1話目から credits.mjs で名前タグを抽出し、
-// canonical key 単位で **recurrence（出現シリーズ数）** を数える。これが発見タグの価値判定の核心:
-//   - クリック可能（発見タグ）= recurrence ≥ THRESHOLD（既定 2）。他作品に繋がるものだけ。
-//   - singleton（=1）= 削除せず series JSON には残すが「非クリック（淡色）」。catalog 成長で昇格。
-// recurrence は必ず **canonical key で・正規化後に** 数える（生文字列だと「諏訪部 順一」と
-// 「諏訪部順一」が別 key で両方 singleton 落ちする）。
+// 発見タグの per-series 索引。各シリーズ1話目から credits.mjs で名前タグを抽出し、
+// series JSON / works.json 用に整形する。
+//
+// 方針（recurrence ゲート撤廃）: タグのクリック可否・表示は recurrence の多寡で一切変えない。
+// **全 credit タグは均一にクリック可能**（他タグ `#…` と同じ作法・1作品しかヒットしなくても
+// 普通にフィルタが効いて1件出るだけ＝一貫・予測可能）。noise は抽出ルール側（credits.mjs）で落とす。
+// recurrence の集計（countRecurrence）は将来の序列/facet 用ユーティリティとして残すが、
+// 本パイプラインの表示/クリック判定には使わない。
 
-import { extractCredits, countRecurrence } from '../etl/credits.mjs'
+import { extractCredits } from '../etl/credits.mjs'
 import { chronoSort } from './store.mjs'
 
-// クリック可能（発見タグ）とみなす最小 recurrence。configurable（env で上書き可）。
-export const RECURRENCE_THRESHOLD = Number(process.env.CREDIT_RECURRENCE_THRESHOLD ?? 2)
-
 /**
- * store 全体から credits のグローバル索引を作る。
+ * store 全体から seriesId → 1話目の抽出タグ配列を作る。
  * @param {import('./store.mjs').Store} store
- * @returns {{ perSeries: Map<number, Array>, recurrence: Map<string, number> }}
- *   perSeries: seriesId → extractCredits().tags（1話目・recurrence 適用前）
- *   recurrence: canonical key → 出現シリーズ数
+ * @returns {{ perSeries: Map<number, Array<{display:string,key:string,source:string,role:string}>> }}
  */
 export function buildCreditIndex(store) {
   // seriesId → 最古話（chronoSort 先頭＝あらすじ／credits と同一ソース）
@@ -31,46 +28,32 @@ export function buildCreditIndex(store) {
   for (const [sid, ep] of firstBySeries) {
     perSeries.set(sid, extractCredits(ep.description).tags)
   }
-  const recurrence = countRecurrence(perSeries.values())
-  return { perSeries, recurrence }
+  return { perSeries }
 }
 
 /**
- * series JSON 用の credits（表示タグ列）。name=表示・key=canonical・recurrent=クリック可否
- * ・count=グローバル出現数・source/role=soft metadata（将来の序列/facet 用）。
- * 並びは recurrent 優先 → count 降順 → 元順。
+ * series JSON 用 credits（表示タグ列）。抽出順のまま {name, key, source, role} に整形・key で dedup。
+ * recurrence で並びや表示を変えない（全タグ均一・クリック可）。source/role は soft metadata。
  */
-export function seriesCredits(tags, recurrence, threshold = RECURRENCE_THRESHOLD) {
-  const list = (tags ?? []).map((t) => {
-    const count = recurrence.get(t.key) ?? 0
-    return {
-      name: t.display,
-      key: t.key,
-      count,
-      recurrent: count >= threshold,
-      source: t.source,
-      role: t.role,
-    }
-  })
-  // recurrent を前に、その中で出現数の多い順（同数は元順保持＝stable sort）。
-  return list
-    .map((c, i) => ({ c, i }))
-    .sort(
-      (a, b) => Number(b.c.recurrent) - Number(a.c.recurrent) || b.c.count - a.c.count || a.i - b.i
-    )
-    .map((x) => x.c)
-}
-
-/**
- * works.json 用の credits（`?credit=` フィルタの照合キー）。クリック可能（recurrent）な
- * canonical key のみ・重複除去・順序保持。singleton はクリック対象でないので持たせない。
- */
-export function worksCreditKeys(tags, recurrence, threshold = RECURRENCE_THRESHOLD) {
+export function seriesCredits(tags) {
   const out = []
   const seen = new Set()
   for (const t of tags ?? []) {
-    const count = recurrence.get(t.key) ?? 0
-    if (count < threshold) continue
+    if (seen.has(t.key)) continue
+    seen.add(t.key)
+    out.push({ name: t.display, key: t.key, source: t.source, role: t.role })
+  }
+  return out
+}
+
+/**
+ * works.json 用 credits（`?credit=` フィルタの照合キー）。全 canonical key・重複除去・順序保持。
+ * recurrence で絞らない（singleton キーでもクリックすれば自作品1件が出る＝一貫）。
+ */
+export function worksCreditKeys(tags) {
+  const out = []
+  const seen = new Set()
+  for (const t of tags ?? []) {
     if (seen.has(t.key)) continue
     seen.add(t.key)
     out.push(t.key)

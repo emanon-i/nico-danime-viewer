@@ -420,11 +420,11 @@ function _buildSeriesJson(store, seriesId, creditIndex = null) {
 
   // credits（演者/制作の統合名前タグ）は **1話目（最古話）だけ** を抽出する。
   // episodes は chronoSort 昇順 → episodes[0] が最古話＝descriptionFirst（あらすじ）と同一ソース。
-  // recurrence は全カタログ横断（creditIndex）で数え、クリック可能(recurrent)/淡色(singleton)を決める。
+  // credits は全タグ均一クリック可（recurrence で表示/クリックを変えない）。noise は抽出側で除去済み。
   const tags =
     creditIndex?.perSeries.get(seriesId) ??
     (episodes.length > 0 ? extractCredits(episodes[0].description).tags : [])
-  const credits = seriesCredits(tags, creditIndex?.recurrence ?? new Map())
+  const credits = seriesCredits(tags)
 
   return {
     seriesId: s.seriesId,

@@ -97,7 +97,7 @@ function buildEpAggMap(store) {
 export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
   const epCountMap = buildEpCountMap(store)
   const epAggMap = buildEpAggMap(store)
-  // 人物フィルタ用 credits = recurrence≥THRESHOLD の canonical key（クリック可能な発見タグのみ）。
+  // 人物フィルタ用 credits = 1話目の全 canonical key（recurrence で絞らない＝全タグ均一クリック可）。
   const creditIndex = buildCreditIndex(store)
 
   const works = []
@@ -128,8 +128,8 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       hotScore: m?.hotScore ?? 0,
       relatedSeries: s.relatedSeries ?? [],
     }
-    // 人物フィルタ用 credits（recurrent key のみ・空なら付けない＝肥大最小化）。
-    const keys = worksCreditKeys(creditIndex.perSeries.get(s.seriesId), creditIndex.recurrence)
+    // 人物フィルタ用 credits（全 canonical key・空なら付けない＝肥大最小化）。
+    const keys = worksCreditKeys(creditIndex.perSeries.get(s.seriesId))
     if (keys.length) work.credits = keys
     works.push(work)
   }
@@ -341,8 +341,8 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
 
   const worksMap = new Map(existing.works.map((w) => [w.seriesId, w]))
 
-  // credits は全カタログ横断の recurrence で再計算（旧設計の <br> 依存と違い、stripHtml 済みの
-  // \n\n 形でも extractCredits が読めるため毎時でも算出可能＝carry-forward 不要）。
+  // credits は1話目から再抽出（旧設計の <br> 依存と違い stripHtml 済みの \n\n 形でも読めるため
+  // 毎時でも算出可能＝carry-forward 不要）。recurrence ゲートは無し＝全 key を持たせる。
   const creditIndex = buildCreditIndex(store)
 
   // 対象シリーズのエピソード集計（partial store なのでこのシリーズ分だけ存在）
@@ -416,8 +416,8 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
       hotScore: prev?.hotScore ?? 0,
       relatedSeries: s.relatedSeries ?? prev?.relatedSeries ?? [],
     }
-    // credits（recurrent な canonical key）はグローバル索引から再計算する（carry-forward 不要）。
-    const keys = worksCreditKeys(creditIndex.perSeries.get(sid), creditIndex.recurrence)
+    // credits（全 canonical key）は1話目から再算出する（carry-forward 不要）。
+    const keys = worksCreditKeys(creditIndex.perSeries.get(sid))
     if (keys.length) w.credits = keys
     worksMap.set(sid, w)
   }
