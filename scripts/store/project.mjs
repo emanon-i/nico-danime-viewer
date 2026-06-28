@@ -425,7 +425,7 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
     if (!s) continue
     const agg = epAgg.get(sid) ?? {}
     const prev = worksMap.get(sid)
-    worksMap.set(sid, {
+    const w = {
       seriesId: s.seriesId,
       title: s.title,
       thumbnailUrl: s.thumbnailUrl,
@@ -447,7 +447,13 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
       totalViews: agg.totalViews ?? 0,
       hotScore: prev?.hotScore ?? 0,
       relatedSeries: s.relatedSeries ?? prev?.relatedSeries ?? [],
-    })
+    }
+    // PH-0014: cast/staff は1話目の生 description（<br>付き）からの導出で、毎時の partial store
+    // には生 description が無い（既存話は JSON 由来＝除去済み）。再計算は不可なので daily full が
+    // 入れた prev 値を carry-forward して落とさない（mylistFirst/hotScore と同じ作法）。
+    if (prev?.cast?.length) w.cast = prev.cast
+    if (prev?.staff?.length) w.staff = prev.staff
+    worksMap.set(sid, w)
   }
 
   const works = [...worksMap.values()].sort((a, b) => a.seriesId - b.seriesId)
