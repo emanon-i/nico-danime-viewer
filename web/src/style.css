@@ -2520,49 +2520,52 @@
     scrollbar-color: var(--border) transparent;
   }
 
-  /* ── 抽出クレジット（演者 / 制作）＝タグ直下・タグ列表示（PH-0014）──────── */
+  /* ── 抽出クレジット（演者 / 制作）＝タグ直下・タグ列表示（PH-0014）────────
+     スペーシングは design-system §3.1 スケールに準拠（恣意的 px 禁止）:
+       塊間（演者⇔制作）= --sp-3 ／ 塊内（ラベル⇔チップ）= --sp-2 ／ チップ間 = --sp-2
+       ラベル⇔(i)アイコン = --sp-1 ／ ブロック下 = --sp-3（.detail-tags と同じ）。 */
   .detail-credits {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-2);
-    margin-bottom: var(--sp-3);
+    gap: var(--sp-3); /* §3.1 塊間 */
+    margin-bottom: var(--sp-3); /* .detail-tags と同じブロック区切り */
   }
 
-  /* 1 行 = ラベル（演者/制作）＋ チップ群。ラベルは控えめ・先頭に揃える。 */
+  /* 1 行 = ラベル（演者/制作）＋ チップ群（塊内 sp-2） */
   .detail-credit-row {
     display: flex;
     align-items: baseline;
     gap: var(--sp-2);
   }
 
+  /* 小見出しラベル: §4.2 L4 ／ §4.3 700（小見出しラベル）／ §5.2 小見出し=--text-muted */
   .detail-credit-label {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: var(--sp-1);
+    gap: var(--sp-1); /* §3.1 アイコン↔テキスト */
     font-size: var(--text-l4);
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-muted);
-    letter-spacing: 0.04em;
-    padding-top: 0.2rem;
   }
 
   .detail-credit-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-2);
+    gap: var(--sp-2); /* §3.1 チップ間 */
     min-width: 0;
-    /* チップが多くても圧迫しない。約4行で縦スクロール。 */
-    max-height: calc(4 * 2rem + 3 * var(--sp-2));
+    /* チップが多くても圧迫しない。.detail-tags と同じ行高定数(1.85rem)で約4行＋行間 sp-2。 */
+    max-height: calc(4 * 1.85rem + 3 * var(--sp-2));
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
 
-  /* 人名/会社名チップ（クリック不可・表示のみ。tag-chip と同系の見た目）。 */
+  /* 人名/会社名チップ（クリック不可・表示のみ）。ピル方針 §9.12（min(20ch,100%)）。
+     padding/角丸/サイズは .tag-chip と同一トークン（名前は主役なので色だけ --text）。 */
   .credit-chip {
     display: inline-block;
-    max-width: min(24ch, 100%);
+    max-width: min(20ch, 100%);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2573,11 +2576,6 @@
     font-size: var(--text-l4);
     color: var(--text);
     background: var(--surface);
-  }
-
-  /* 行内に置く (i)（共通注意）。既存 .info-btn を流用。 */
-  .detail-credit-label .info-btn {
-    margin-left: 0;
   }
 
   .detail-desc {

@@ -68,7 +68,8 @@ function buildCredits(
       const chip = document.createElement('span')
       chip.className = 'credit-chip'
       chip.textContent = n
-      if ([...n].length > 24) chip.dataset.tooltip = n
+      // ピル方針 §9.12: min(20ch) 超過は … 省略＋全文ツールチップ。
+      if ([...n].length > 20) chip.dataset.tooltip = n
       chips.appendChild(chip)
     }
     r.appendChild(chips)
