@@ -55,6 +55,50 @@ describe('renderDetail (F-0025)', () => {
     expect(watchLink?.getAttribute('href')).toBe('https://www.nicovideo.jp/watch/so1001')
   })
 
+  it('PH-0014: cast/staff があれば 演者/制作 セクションを描画する', () => {
+    renderDetail(container, {
+      ...SERIES,
+      cast: [
+        { role: '衛宮士郎', actors: ['杉山紀彰'] },
+        { role: 'セイバー', actors: ['川澄綾子'] },
+      ],
+      staff: [
+        { role: '原作', names: ['奈須きのこ・TYPE-MOON'] },
+        { role: 'アニメーション制作', names: ['ufotable'] },
+      ],
+      studios: ['ufotable'],
+    })
+    const credits = container.querySelector('.detail-credits')
+    expect(credits).not.toBeNull()
+    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) => e.textContent)
+    expect(labels).toEqual(['演者', '制作'])
+    // 役名と声優の両方が出る
+    expect(container.textContent).toContain('衛宮士郎')
+    expect(container.textContent).toContain('杉山紀彰')
+    expect(container.textContent).toContain('ufotable') // 制作会社が制作に出る
+  })
+
+  it('PH-0014: cast 0（舞台/海外作）なら 演者 を出さず 制作 のみ', () => {
+    renderDetail(container, {
+      ...SERIES,
+      cast: [],
+      staff: [{ role: '脚本・演出', names: ['西田大輔'] }],
+      studios: [],
+    })
+    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) => e.textContent)
+    expect(labels).toEqual(['制作']) // 演者は非表示
+  })
+
+  it('PH-0014: cast も staff も無ければ credits セクション自体を出さない', () => {
+    renderDetail(container, { ...SERIES, cast: [], staff: [] })
+    expect(container.querySelector('.detail-credits')).toBeNull()
+  })
+
+  it('PH-0014: 旧 JSON（cast/staff フィールド無し）でも例外を投げない', () => {
+    expect(() => renderDetail(container, SERIES)).not.toThrow()
+    expect(container.querySelector('.detail-credits')).toBeNull()
+  })
+
   it('test_detail_no_genre: genre 欄を表示しない', () => {
     renderDetail(container, SERIES)
     expect(container.querySelector('[data-field="genre"]')).toBeNull()

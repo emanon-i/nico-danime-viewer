@@ -1,4 +1,4 @@
-import type { SeriesDetail, SeriesEpisode } from '../../data/types'
+import type { SeriesDetail, SeriesEpisode, CastEntry, StaffEntry } from '../../data/types'
 import { watchLink, seriesLink } from '../../shared/deeplink'
 import { buildDetailUrl } from '../router'
 import { icon } from '../../components/icon'
@@ -20,6 +20,56 @@ function tagChip(tag: string): HTMLAnchorElement {
   chip.textContent = tag
   if ([...tag].length > 30) chip.dataset.tooltip = tag
   return chip
+}
+
+/**
+ * 抽出クレジット（演者＝cast / 制作＝staff）を描画（PH-0014 F-0057）。
+ * 各項目は「ラベル（役名/役割）/ 値（声優/人名）」の2段組。データが無いグループは出さない。
+ * 両方空なら null（セクション自体を出さない）。表示のみ（クリック機能なし・後続）。
+ */
+function buildCredits(cast: CastEntry[], staff: StaffEntry[]): HTMLElement | null {
+  const group = (label: string, rows: { left: string; right: string }[]): HTMLElement | null => {
+    if (rows.length === 0) return null
+    const sec = document.createElement('section')
+    sec.className = 'detail-credit-group'
+    const h = document.createElement('h3')
+    h.className = 'detail-credit-label'
+    h.textContent = label
+    sec.appendChild(h)
+    const ul = document.createElement('ul')
+    ul.className = 'detail-credit-list'
+    for (const r of rows) {
+      const li = document.createElement('li')
+      li.className = 'detail-credit-item'
+      const role = document.createElement('span')
+      role.className = 'detail-credit-role'
+      role.textContent = r.left
+      const name = document.createElement('span')
+      name.className = 'detail-credit-name'
+      name.textContent = r.right
+      li.append(role, name)
+      ul.appendChild(li)
+    }
+    sec.appendChild(ul)
+    return sec
+  }
+
+  const castSec = group(
+    '演者',
+    cast.map((c) => ({ left: c.role, right: c.actors.join('・') }))
+  )
+  // 制作 = staff（役割：人名）。アニメーション制作（＝制作会社）も役割付きでこの中に出る。
+  const staffSec = group(
+    '制作',
+    staff.map((s) => ({ left: s.role, right: s.names.join('・') }))
+  )
+
+  if (!castSec && !staffSec) return null
+  const wrap = document.createElement('div')
+  wrap.className = 'detail-credits'
+  if (castSec) wrap.appendChild(castSec)
+  if (staffSec) wrap.appendChild(staffSec)
+  return wrap
 }
 
 /**
@@ -215,6 +265,14 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   }
   detailTags.forEach((tag) => tagsDiv.appendChild(tagChip(tag)))
   infoDiv.appendChild(tagsDiv)
+
+  // ── 抽出クレジット（演者 / 制作）＝タグ直下（PH-0014 F-0057）──────────
+  // series JSON の cast/staff/studios を読んで表示するのみ（クリック機能は後続）。
+  // データが無いセクションは出さない（声優0の舞台/海外作は「演者」を非表示・「制作」だけ等）。
+  const cast = series.cast ?? []
+  const staff = series.staff ?? []
+  const credits = buildCredits(cast, staff)
+  if (credits) infoDiv.appendChild(credits)
 
   // シリーズメタ（§F）：詳細は圧縮しない＝文字ラベル＋実値（カンマ区切り）。
   // 話数／総再生数／総コメント数／総マイリス数＋1話あたり平均（再生・コメント）。

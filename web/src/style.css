@@ -2520,6 +2520,68 @@
     scrollbar-color: var(--border) transparent;
   }
 
+  /* ── 抽出クレジット（演者 / 制作）＝タグ直下（PH-0014）──────── */
+  .detail-credits {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+
+  .detail-credit-label {
+    margin: 0 0 var(--sp-1);
+    font-size: var(--text-l4);
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+  }
+
+  .detail-credit-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: var(--sp-1) var(--sp-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    /* 大規模キャストでも詳細を圧迫しない。約8行で縦スクロール。 */
+    max-height: calc(8 * 1.7rem);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .detail-credit-item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    font-size: var(--text-l3);
+    line-height: 1.5;
+    min-width: 0;
+  }
+
+  /* 役名/役割＝控えめ、声優/人名＝主役。役名は折り返さず省略、名前は通常色。 */
+  .detail-credit-role {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+  }
+
+  .detail-credit-role::after {
+    content: '／';
+    margin-left: var(--sp-2);
+    color: color-mix(in oklch, var(--text-muted) 55%, transparent);
+  }
+
+  .detail-credit-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text);
+  }
+
   .detail-desc {
     font-size: var(--text-l3);
     color: var(--text-muted);

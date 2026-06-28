@@ -146,6 +146,17 @@ export interface SeriesEpisode {
   tags?: string[]
 }
 
+/** 構造化キャスト（役名→声優）。PH-0014 F-0057。series 単位に集約済み。 */
+export interface CastEntry {
+  role: string
+  actors: string[]
+}
+/** 構造化スタッフ（役割→人名/社名）。PH-0014 F-0057。series 単位に集約済み。 */
+export interface StaffEntry {
+  role: string
+  names: string[]
+}
+
 export interface SeriesDetail {
   seriesId: number
   title: string
@@ -156,6 +167,12 @@ export interface SeriesDetail {
   colKey: string | null
   relatedSeries: RelatedSeries[]
   episodes: SeriesEpisode[]
+  /** 抽出キャスト（演者）。旧 JSON では欠落＝optional。PH-0014 */
+  cast?: CastEntry[]
+  /** 抽出スタッフ（制作）。旧 JSON では欠落＝optional。PH-0014 */
+  staff?: StaffEntry[]
+  /** 制作会社（staff の制作系 role から投影）。PH-0014 */
+  studios?: string[]
 }
 
 export interface SeriesDetailJson {
@@ -170,4 +187,7 @@ export interface SeriesDetailJson {
   colKey: string | null
   relatedSeries: RelatedSeries[]
   episodes: SeriesEpisode[]
+  cast?: CastEntry[]
+  staff?: StaffEntry[]
+  studios?: string[]
 }
