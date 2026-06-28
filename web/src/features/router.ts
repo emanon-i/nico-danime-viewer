@@ -27,6 +27,8 @@ export interface ListState {
   dur: string
   /** 投稿年レンジ（§78）。停止点 value ベースの "lo-hi"（開放端は省略）。''=絞り込みなし。 */
   year: string
+  /** お気に入りのみ表示（§50）。URL-backed＝通常フィルタと同じくピル × で解除・reload 保持。 */
+  fav: boolean
 }
 
 /** 表示件数の選択肢（§42・切りのいい丸い数字）。既定＝先頭=50。 */
@@ -48,7 +50,19 @@ const VALID_SORTS: SortKey[] = [
   'avgViews',
   'avgComments',
 ]
-const LIST_PARAMS = ['q', 'row', 'tag', 'cours', 'sort', 'dir', 'page', 'size', 'dur', 'year']
+const LIST_PARAMS = [
+  'q',
+  'row',
+  'tag',
+  'cours',
+  'sort',
+  'dir',
+  'page',
+  'size',
+  'dur',
+  'year',
+  'fav',
+]
 
 export function parseScreen(params: URLSearchParams): Screen {
   const seriesParam = params.get('series')
@@ -78,6 +92,7 @@ export function parseScreen(params: URLSearchParams): Screen {
         size: normalizeSize(params.get('size')),
         dur: params.get('dur') ?? '',
         year: params.get('year') ?? '',
+        fav: params.get('fav') === '1',
       },
     }
   }
@@ -103,6 +118,7 @@ export function buildListUrl(state: Partial<ListState>): string {
   if (state.size && state.size !== DEFAULT_PAGE_SIZE) p.set('size', String(state.size))
   if (state.dur) p.set('dur', state.dur)
   if (state.year) p.set('year', state.year)
+  if (state.fav) p.set('fav', '1')
   const s = p.toString()
   return '?' + (s || 'screen=list')
 }

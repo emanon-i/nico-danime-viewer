@@ -16,6 +16,7 @@ const LIST_SCREEN: Screen = {
     page: 1,
     dur: '',
     year: '',
+    fav: false,
   },
 }
 

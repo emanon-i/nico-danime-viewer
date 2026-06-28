@@ -18,6 +18,7 @@ const BASE_STATE: ListState = {
   page: 1,
   dur: '',
   year: '',
+  fav: false,
 }
 
 const SERIES: SeriesDetail = {

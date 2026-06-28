@@ -382,16 +382,10 @@ async function render(): Promise<void> {
     wireHeaderControls()
     wireCards(app)
   } else if (screen.type === 'list') {
-    // クイックアクセス「お気に入り」からの遷移（?fav=1）でお気に入りフィルタを有効化（§50）。
-    // 以後はメモリ状態（チェックボックス/×）が引き継ぐ。?fav=1 は一度だけ消費し、URL から
-    // 除去する（replaceState）。残すと毎 render で再適用され、解除導線（×/チェックOFF）が
-    // 即座に巻き戻る＝お気に入りフィルタが外せなくなるため（§50 解除不能バグ修正）。
-    if (params.get('fav') === '1') {
-      favFilter = true
-      params.delete('fav')
-      const qs = params.toString()
-      history.replaceState(null, '', qs ? `?${qs}` : location.pathname)
-    }
+    // お気に入りフィルタは URL-backed（screen.state.fav）。通常フィルタ（タグ等）と同じく
+    // ピル × / チェックボックスで解除でき、reload でも保持される（§50 ピル化）。
+    // Top の「お気に入り」リンクは ?fav=1 で遷移し、ここで state から取り込む。
+    favFilter = screen.state.fav
 
     // 共通ヘッダ（banner）＋パンくず（nav）＋ main（content）
     app.appendChild(buildHeader({ heroSearchToggle: false }))
@@ -550,9 +544,9 @@ async function render(): Promise<void> {
       watchedFilter,
       showEmptyFilter,
       cardMetric,
+      // お気に入りは URL-backed: ピル × は URL から fav を外して遷移（通常フィルタと同一挙動）。
       onClearFav: () => {
-        favFilter = false
-        void render()
+        navigate(buildListUrl({ ...screen.state, fav: false, page: 1 }))
       },
       onClearWant: () => {
         wantFilter = false
@@ -634,9 +628,9 @@ async function render(): Promise<void> {
     const watchedCb = app.querySelector<HTMLInputElement>('input[name="watched"]')
     if (favCb) {
       favCb.checked = favFilter
+      // URL-backed: チェック切替も URL を更新して遷移（通常フィルタと同一）。
       favCb.addEventListener('change', () => {
-        favFilter = favCb.checked
-        void render()
+        navigate(buildListUrl({ ...screen.state, fav: favCb.checked, page: 1 }))
       })
     }
     if (wantCb) {

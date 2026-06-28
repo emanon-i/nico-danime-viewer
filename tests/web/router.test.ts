@@ -86,6 +86,7 @@ describe('test_history_navigation (F-0022)', () => {
       row: 'さ',
       dur: '',
       year: '',
+      fav: false,
     }
     const url = buildListUrl(state)
     const restored = parseScreen(new URLSearchParams(url.slice(1)))
@@ -111,6 +112,7 @@ describe('test_history_navigation (F-0022)', () => {
       page: 1,
       dur: '5-30',
       year: '2015-',
+      fav: false,
     }
     const url = buildListUrl(state)
     expect(url).toContain('dur=5-30')
