@@ -383,8 +383,15 @@ async function render(): Promise<void> {
     wireCards(app)
   } else if (screen.type === 'list') {
     // クイックアクセス「お気に入り」からの遷移（?fav=1）でお気に入りフィルタを有効化（§50）。
-    // 以後はメモリ状態（チェックボックス/×）が引き継ぐ。
-    if (params.get('fav') === '1') favFilter = true
+    // 以後はメモリ状態（チェックボックス/×）が引き継ぐ。?fav=1 は一度だけ消費し、URL から
+    // 除去する（replaceState）。残すと毎 render で再適用され、解除導線（×/チェックOFF）が
+    // 即座に巻き戻る＝お気に入りフィルタが外せなくなるため（§50 解除不能バグ修正）。
+    if (params.get('fav') === '1') {
+      favFilter = true
+      params.delete('fav')
+      const qs = params.toString()
+      history.replaceState(null, '', qs ? `?${qs}` : location.pathname)
+    }
 
     // 共通ヘッダ（banner）＋パンくず（nav）＋ main（content）
     app.appendChild(buildHeader({ heroSearchToggle: false }))
