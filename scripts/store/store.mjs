@@ -11,7 +11,8 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { stripHtml, chooseDescription } from '../etl/series.mjs'
-import { extractCredits } from '../etl/description.mjs'
+import { extractCredits } from '../etl/credits.mjs'
+import { buildCreditIndex, seriesCredits } from './credit-index.mjs'
 import { trimSeriesTitle } from '../nico/list.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -339,6 +340,9 @@ export async function writeBackStore(store, dataDir, opts = {}) {
   await fs.mkdir(seriesDir, { recursive: true })
   await fs.mkdir(stateDir, { recursive: true })
 
+  // credits の recurrence は全カタログ横断で数える（partial 書き出しでも索引は全件から）。
+  const creditIndex = buildCreditIndex(store)
+
   // 書き出す series の範囲（S4c: dirty 限定、ただし forceAll 時は全件）
   let targets
   if (seriesIds != null) {
@@ -357,7 +361,7 @@ export async function writeBackStore(store, dataDir, opts = {}) {
     const chunk = targetArr.slice(i, i + WRITE_CHUNK)
     await Promise.all(
       chunk.map((seriesId) => {
-        const json = _buildSeriesJson(store, seriesId)
+        const json = _buildSeriesJson(store, seriesId, creditIndex)
         if (!json) return Promise.resolve()
         return _writeJsonCompact(path.join(seriesDir, `${seriesId}.json`), json)
       })
@@ -406,17 +410,21 @@ async function _writeJsonCompact(filePath, data) {
   await fs.rename(tmp, filePath)
 }
 
-// series JSON オブジェクトを組み立てる（writeBackStore / writeSeriesFiles 共通）
-function _buildSeriesJson(store, seriesId) {
+// series JSON オブジェクトを組み立てる（writeBackStore / writeSeriesFiles 共通）。
+// creditIndex（グローバル recurrence 索引）を渡すと credits に recurrent/count を付ける。
+// 省略時（後方互換）は1話目のみ抽出し全タグ非 recurrent 扱い。
+function _buildSeriesJson(store, seriesId, creditIndex = null) {
   const s = store.series.get(seriesId)
   if (!s) return null
   const episodes = _getEpisodesForSeriesSorted(store, seriesId)
 
-  // credits（演者/制作の統合名前タグ）は **1話目（最古話）だけ** をパースして抽出する。
+  // credits（演者/制作の統合名前タグ）は **1話目（最古話）だけ** を抽出する。
   // episodes は chronoSort 昇順 → episodes[0] が最古話＝descriptionFirst（あらすじ）と同一ソース。
-  // これにより「あらすじ＝最古話／credits＝別の代表話」のソース不整合が解消し、全話パースの
-  // コストも避ける（出演/制作はシリーズ内でほぼ一定なので1話目で十分）。
-  const credits = episodes.length > 0 ? extractCredits(episodes[0].description) : []
+  // recurrence は全カタログ横断（creditIndex）で数え、クリック可能(recurrent)/淡色(singleton)を決める。
+  const tags =
+    creditIndex?.perSeries.get(seriesId) ??
+    (episodes.length > 0 ? extractCredits(episodes[0].description).tags : [])
+  const credits = seriesCredits(tags, creditIndex?.recurrence ?? new Map())
 
   return {
     seriesId: s.seriesId,
@@ -467,13 +475,14 @@ function _buildSeriesJson(store, seriesId) {
 export async function writeSeriesFiles(store, dataDir, seriesIds) {
   const seriesDir = path.join(dataDir, 'series')
   await fs.mkdir(seriesDir, { recursive: true })
+  const creditIndex = buildCreditIndex(store)
   const CHUNK = 50
   const ids = [...seriesIds]
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK)
     await Promise.all(
       chunk.map((sid) => {
-        const json = _buildSeriesJson(store, sid)
+        const json = _buildSeriesJson(store, sid, creditIndex)
         if (!json) return Promise.resolve()
         return _writeJsonCompact(path.join(seriesDir, `${sid}.json`), json)
       })

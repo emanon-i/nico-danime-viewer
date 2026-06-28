@@ -14,31 +14,13 @@ import { readFileSync } from 'node:fs'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { recalcSeriesMetricsJS } from '../etl/metrics.mjs'
-import { extractCredits } from '../etl/description.mjs'
-import { chronoSort } from './store.mjs'
+import { buildCreditIndex, worksCreditKeys } from './credit-index.mjs'
 
 // ── ヘルパ ───────────────────────────────────────────────────────────────────
 
 async function writeJson(outDir, filename, data) {
   await mkdir(outDir, { recursive: true })
   await writeFile(join(outDir, filename), JSON.stringify(data), 'utf-8')
-}
-
-// works.json 人物フィルタ用に seriesId → credits（演者/制作の統合名前タグ配列）を作る。
-// 抽出元は **1話目（最古話＝chronoSort 先頭＝descriptionFirst と同一ソース）** のみ（series JSON と一致）。
-// グローバルな巨大 facet は作らず、works.json の各エントリに名前配列を持たせて一覧側で走査する。
-function buildCreditsMap(store) {
-  const firstBySeries = new Map() // seriesId → 最古話 ep
-  for (const ep of store.episodes.values()) {
-    if (ep.seriesId == null) continue
-    const cur = firstBySeries.get(ep.seriesId)
-    if (!cur || chronoSort(ep, cur) < 0) firstBySeries.set(ep.seriesId, ep)
-  }
-  const map = new Map()
-  for (const [sid, ep] of firstBySeries) {
-    map.set(sid, extractCredits(ep.description))
-  }
-  return map
 }
 
 // ── episode count / metrics の事前計算 ─────────────────────────────────────
@@ -115,7 +97,8 @@ function buildEpAggMap(store) {
 export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
   const epCountMap = buildEpCountMap(store)
   const epAggMap = buildEpAggMap(store)
-  const creditsMap = buildCreditsMap(store) // 人物フィルタ用 credits（演者/制作の統合名前タグ）
+  // 人物フィルタ用 credits = recurrence≥THRESHOLD の canonical key（クリック可能な発見タグのみ）。
+  const creditIndex = buildCreditIndex(store)
 
   const works = []
   for (const s of store.series.values()) {
@@ -145,9 +128,9 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       hotScore: m?.hotScore ?? 0,
       relatedSeries: s.relatedSeries ?? [],
     }
-    // 人物フィルタ用 credits（空なら付けない＝肥大最小化）。
-    const cr = creditsMap.get(s.seriesId)
-    if (cr?.length) work.credits = cr
+    // 人物フィルタ用 credits（recurrent key のみ・空なら付けない＝肥大最小化）。
+    const keys = worksCreditKeys(creditIndex.perSeries.get(s.seriesId), creditIndex.recurrence)
+    if (keys.length) work.credits = keys
     works.push(work)
   }
 
@@ -358,6 +341,10 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
 
   const worksMap = new Map(existing.works.map((w) => [w.seriesId, w]))
 
+  // credits は全カタログ横断の recurrence で再計算（旧設計の <br> 依存と違い、stripHtml 済みの
+  // \n\n 形でも extractCredits が読めるため毎時でも算出可能＝carry-forward 不要）。
+  const creditIndex = buildCreditIndex(store)
+
   // 対象シリーズのエピソード集計（partial store なのでこのシリーズ分だけ存在）
   const epAgg = new Map()
   for (const ep of store.episodes.values()) {
@@ -429,10 +416,9 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
       hotScore: prev?.hotScore ?? 0,
       relatedSeries: s.relatedSeries ?? prev?.relatedSeries ?? [],
     }
-    // credits は1話目の生 description（<br>付き）からの導出で、毎時の partial store には生
-    // description が無い（既存話は JSON 由来＝除去済み）。再計算は不可なので daily full が入れた
-    // prev 値を carry-forward して落とさない（mylistFirst/hotScore と同じ作法）。
-    if (prev?.credits?.length) w.credits = prev.credits
+    // credits（recurrent な canonical key）はグローバル索引から再計算する（carry-forward 不要）。
+    const keys = worksCreditKeys(creditIndex.perSeries.get(sid), creditIndex.recurrence)
+    if (keys.length) w.credits = keys
     worksMap.set(sid, w)
   }
 
