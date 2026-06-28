@@ -38,8 +38,7 @@ const BASE_STATE: ListState = {
   dur: '',
   year: '',
   fav: false,
-  cast: '',
-  staff: '',
+  credit: '',
 }
 
 const BASE_RANKING: RankingJson = {
@@ -113,25 +112,29 @@ describe('filterWorks (F-0028/0029/0030)', () => {
     expect(result.map((w) => w.seriesId).sort()).toEqual([1, 3])
   })
 
-  it('PH-0014: cast（演者）フィルタ＝work.cast に該当声優を含む作品だけ残す', () => {
+  it('credit（演者/制作）フィルタ＝work.credits に該当名を含む作品だけ残す（声優）', () => {
     const works: Work[] = [
-      { ...BASE_WORK, seriesId: 1, title: 'A', cast: ['杉山紀彰', '川澄綾子'] },
-      { ...BASE_WORK, seriesId: 2, title: 'B', cast: ['別の声優'] },
-      { ...BASE_WORK, seriesId: 3, title: 'C' }, // cast 無し
+      { ...BASE_WORK, seriesId: 1, title: 'A', credits: ['杉山紀彰', '川澄綾子'] },
+      { ...BASE_WORK, seriesId: 2, title: 'B', credits: ['別の声優'] },
+      { ...BASE_WORK, seriesId: 3, title: 'C' }, // credits 無し
     ]
-    expect(filterWorks(works, { ...BASE_STATE, cast: '杉山紀彰' }).map((w) => w.seriesId)).toEqual([
-      1,
-    ])
+    expect(
+      filterWorks(works, { ...BASE_STATE, credit: '杉山紀彰' }).map((w) => w.seriesId)
+    ).toEqual([1])
   })
 
-  it('PH-0014: staff（制作）フィルタ＝work.staff に該当人名/制作会社を含む作品だけ残す', () => {
+  it('credit フィルタは声優/制作会社/原作者を区別せず1列で照合する（統合）', () => {
     const works: Work[] = [
-      { ...BASE_WORK, seriesId: 1, title: 'A', staff: ['奈須きのこ', 'ufotable'] },
-      { ...BASE_WORK, seriesId: 2, title: 'B', staff: ['別スタジオ'] },
+      { ...BASE_WORK, seriesId: 1, title: 'A', credits: ['奈須きのこ', 'ufotable'] },
+      { ...BASE_WORK, seriesId: 2, title: 'B', credits: ['別スタジオ'] },
     ]
-    expect(filterWorks(works, { ...BASE_STATE, staff: 'ufotable' }).map((w) => w.seriesId)).toEqual(
-      [1]
-    )
+    // 制作会社名でも声優名でも同じ credits を走査
+    expect(
+      filterWorks(works, { ...BASE_STATE, credit: 'ufotable' }).map((w) => w.seriesId)
+    ).toEqual([1])
+    expect(
+      filterWorks(works, { ...BASE_STATE, credit: '奈須きのこ' }).map((w) => w.seriesId)
+    ).toEqual([1])
   })
 
   it('タグ照合は NFKC で半角/全角カナのズレを吸収する（§82）', () => {

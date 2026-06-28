@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { parseDescription, summarizeDescriptionParse } from '../../scripts/etl/description.mjs'
+import {
+  parseDescription,
+  summarizeDescriptionParse,
+  extractCredits,
+} from '../../scripts/etl/description.mjs'
 
 // nvapi 構造版 = <br><br> 区切り。フラット = <p> ラッパのみ（<br> 無し）。
 const STRUCTURED = [
@@ -114,5 +118,93 @@ describe('parseDescription (PH-0014 F-0057)', () => {
     expect(m.flatFallback).toBe(2)
     expect(m.withCast).toBe(1)
     expect(m.withStaff).toBe(1)
+    expect(m.withCredits).toBe(1) // 統合カバレッジ（≥1名）
+  })
+})
+
+const br = '<br><br>'
+
+describe('extractCredits（演者/制作の統合名前タグ・新設計）', () => {
+  it('cast/staff/studios/copyright を 1 列に統合し、名前のみ・役名/役割ラベルは捨てる', () => {
+    const names = extractCredits(STRUCTURED)
+    // cast 声優（役名「蔵馬(南野秀一)」「飛影」は出さない）＋ staff 人名/社名 ＋ copyright マイニング
+    expect(names).toContain('緒方恵美')
+    expect(names).toContain('檜山修之')
+    expect(names).toContain('阿部記之')
+    expect(names).toContain('studioぴえろ')
+    expect(names).toContain('集英社') // copyright「©ぴえろ／集英社」由来
+    // 役名・役割ラベルは含まない
+    expect(names).not.toContain('蔵馬(南野秀一)')
+    expect(names).not.toContain('飛影')
+    expect(names).not.toContain('原作')
+  })
+
+  it('末尾の所属括弧を除去する（全角/半角）', () => {
+    expect(extractCredits('s。' + br + '脚本・演出:米山和仁（劇団ホチキス）')).toEqual(['米山和仁'])
+    expect(extractCredits('s。' + br + 'オープニングテーマ:Aimer(DefSTAR RECORDS)')).toEqual([
+      'Aimer',
+    ])
+  })
+
+  it('連結値は読点 、 と , で分割する（safe モード）', () => {
+    expect(extractCredits('s。' + br + '脚本:高橋ナツコ、成田 順')).toEqual([
+      '高橋ナツコ',
+      '成田 順',
+    ])
+  })
+
+  it('中黒 ・ では分割しない（外国人名 ・ を壊さない＝safe モードの判断）', () => {
+    // 連結は1タグのまま（measure で all モードは外国人名を誤分割すると確認・doc参照）
+    expect(extractCredits('s。' + br + '原作:奈須きのこ・TYPE-MOON')).toEqual([
+      '奈須きのこ・TYPE-MOON',
+    ])
+  })
+
+  it('copyright から制作実体をマイニングし、© 記号・年・製作委員会名は捨てる', () => {
+    expect(extractCredits('s。' + br + '©カラー／EVA製作委員会')).toEqual(['カラー'])
+    expect(extractCredits('s。' + br + '©藤本タツキ／集英社・MAPPA')).toEqual([
+      '藤本タツキ',
+      '集英社',
+      'MAPPA',
+    ])
+    // 年のみ・製作委員会名は落ちる
+    expect(extractCredits('s。' + br + '©2016 とある製作委員会')).toEqual([])
+  })
+
+  it('主題歌は曲タイトル（『…』）を落とし、アーティスト名は残す', () => {
+    // 監督人名＋OPアーティストは残り、主題歌の曲名は落ちる
+    const names = extractCredits(
+      's。' + br + '監督:本田太郎／オープニングテーマ:Kalafina／主題歌:「ププッとフムッと」'
+    )
+    expect(names).toContain('本田太郎')
+    expect(names).toContain('Kalafina')
+    expect(names).not.toContain('ププッとフムッと')
+    expect(names.some((n) => n.includes('ププッ'))).toBe(false)
+  })
+
+  it('作曲・作詞の人名は取る（他作品でも再登場するため）', () => {
+    const names = extractCredits('s。' + br + '作曲:田中秀和／作詞:こだまさおり')
+    expect(names).toEqual(['田中秀和', 'こだまさおり'])
+  })
+
+  it('setlist（数値 role）は名前を生まない', () => {
+    expect(extractCredits('s。' + br + '01:オープニング曲／02:エンディング曲')).toEqual([])
+  })
+
+  it('重複は 1 つに統合する（声優と制作会社が被っても dedup）', () => {
+    const names = extractCredits(
+      's。' + br + '主人公:山田／脇役:山田' + br + '制作:スタジオA／音響:スタジオA'
+    )
+    expect(names.filter((n) => n === '山田').length).toBe(1)
+    expect(names.filter((n) => n === 'スタジオA').length).toBe(1)
+  })
+
+  it('フラット（<br>無し）は何も抽出しない', () => {
+    expect(extractCredits('<p>あらすじとクレジットが連結 原作:作者 ©委員会</p>')).toEqual([])
+  })
+
+  it('null/空は空配列', () => {
+    expect(extractCredits(null)).toEqual([])
+    expect(extractCredits('')).toEqual([])
   })
 })

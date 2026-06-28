@@ -189,8 +189,7 @@ describe('F-0047: 総合/E2E テスト', () => {
         dur: '',
         year: '',
         fav: false,
-        cast: '',
-        staff: '',
+        credit: '',
       }
       renderList(container, {
         state,
@@ -235,8 +234,7 @@ describe('F-0047: 総合/E2E テスト', () => {
         dur: '',
         year: '',
         fav: false,
-        cast: '',
-        staff: '',
+        credit: '',
       }
       const url = buildListUrl(original)
       const params = new URLSearchParams(url.slice(1))
@@ -260,8 +258,7 @@ describe('F-0047: 総合/E2E テスト', () => {
         dur: '',
         year: '',
         fav: false,
-        cast: '',
-        staff: '',
+        credit: '',
       }
       const url = buildListUrl(original)
       const params = new URLSearchParams(url.slice(1))
@@ -351,8 +348,7 @@ describe('F-0047: 総合/E2E テスト', () => {
         dur: '',
         year: '',
         fav: false,
-        cast: '',
-        staff: '',
+        credit: '',
       }
       renderList(container, { state, works: [], totalCount: 0, totalPages: 1 })
       // 件数は適用中バー（§16）の .applied-count に表示される

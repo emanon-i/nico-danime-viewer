@@ -55,63 +55,46 @@ describe('renderDetail (F-0025)', () => {
     expect(watchLink?.getAttribute('href')).toBe('https://www.nicovideo.jp/watch/so1001')
   })
 
-  it('PH-0014: 演者/制作を「人名チップのみ（役名なし）」で描画・制作会社も含む・重複除去', () => {
+  it('credits を「演者/制作」1 行・名前チップのみで描画・重複除去・?credit= リンク', () => {
     renderDetail(container, {
       ...SERIES,
-      cast: [
-        { role: '衛宮士郎', actors: ['杉山紀彰'] },
-        { role: 'セイバー', actors: ['川澄綾子'] },
-        { role: '声＝同じ人の別役', actors: ['杉山紀彰'] }, // 重複声優
+      // 声優・スタッフ人名・制作会社・原作者を統合した1列（重複 杉山紀彰/ufotable は1つに）
+      credits: [
+        '杉山紀彰',
+        '川澄綾子',
+        '杉山紀彰',
+        '奈須きのこ',
+        'TYPE-MOON',
+        'ufotable',
+        'ufotable',
       ],
-      staff: [
-        { role: '原作', names: ['奈須きのこ', 'TYPE-MOON'] },
-        { role: 'アニメーション制作', names: ['ufotable'] },
-      ],
-      studios: ['ufotable'], // staff と重複 → 1つに
     })
-    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) =>
-      (e.textContent || '').trim()
-    )
-    expect(labels[0]).toContain('演者')
-    expect(labels[1]).toContain('制作')
-    // 演者行は声優名チップのみ（役名「衛宮士郎」は出さない・重複「杉山紀彰」は1つ）
+    // 行は1つ（演者/制作の統合）。見出しに「演者/制作」。
     const rows = container.querySelectorAll('.detail-credit-row')
-    const castChips = [...rows[0].querySelectorAll('.credit-chip')].map((c) => c.textContent)
-    expect(castChips).toEqual(['杉山紀彰', '川澄綾子'])
-    expect(container.textContent).not.toContain('衛宮士郎') // 役名は出さない
-    // 制作行は人名＋制作会社（ufotable 重複は1つ）
-    const staffChips = [...rows[1].querySelectorAll('.credit-chip')].map((c) => c.textContent)
-    expect(staffChips).toEqual(['奈須きのこ', 'TYPE-MOON', 'ufotable'])
-    // (i) は演者・制作それぞれに（計2）
-    expect(container.querySelectorAll('.detail-credits .info-btn').length).toBe(2)
-    // チップはクリックで人物フィルタ一覧へ（演者=?cast= / 制作=?staff=）
-    const castLink = rows[0].querySelector('a.credit-chip') as HTMLAnchorElement
-    expect(castLink.getAttribute('href')).toContain('cast=')
-    expect(decodeURIComponent(castLink.getAttribute('href') || '')).toContain('杉山紀彰')
-    const staffLink = rows[1].querySelector('a.credit-chip') as HTMLAnchorElement
-    expect(staffLink.getAttribute('href')).toContain('staff=')
+    expect(rows.length).toBe(1)
+    const label = (rows[0].querySelector('.detail-credit-label')?.textContent || '').trim()
+    expect(label).toContain('演者/制作')
+    // チップは統合・重複除去された名前列
+    const chips = [...rows[0].querySelectorAll('.credit-chip')].map((c) => c.textContent)
+    expect(chips).toEqual(['杉山紀彰', '川澄綾子', '奈須きのこ', 'TYPE-MOON', 'ufotable'])
+    // (i) は1つ（統合した見出しに1つ）
+    expect(container.querySelectorAll('.detail-credits .info-btn').length).toBe(1)
+    // チップはクリックで人物/会社フィルタ一覧へ（?credit=）。声優も制作会社も同じパラメータ。
+    const first = rows[0].querySelector('a.credit-chip') as HTMLAnchorElement
+    expect(first.getAttribute('href')).toContain('credit=')
+    expect(decodeURIComponent(first.getAttribute('href') || '')).toContain('杉山紀彰')
+    const studioChip = [...rows[0].querySelectorAll('a.credit-chip')].find(
+      (c) => c.textContent === 'ufotable'
+    ) as HTMLAnchorElement
+    expect(studioChip.getAttribute('href')).toContain('credit=')
   })
 
-  it('PH-0014: cast 0（舞台/海外作）なら 演者 を出さず 制作 のみ', () => {
-    renderDetail(container, {
-      ...SERIES,
-      cast: [],
-      staff: [{ role: '脚本・演出', names: ['西田大輔'] }],
-      studios: [],
-    })
-    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) =>
-      (e.textContent || '').trim()
-    )
-    expect(labels.length).toBe(1)
-    expect(labels[0]).toContain('制作') // 演者は非表示
-  })
-
-  it('PH-0014: cast も staff も studios も無ければ credits セクション自体を出さない', () => {
-    renderDetail(container, { ...SERIES, cast: [], staff: [], studios: [] })
+  it('credits が空なら credits セクション自体を出さない', () => {
+    renderDetail(container, { ...SERIES, credits: [] })
     expect(container.querySelector('.detail-credits')).toBeNull()
   })
 
-  it('PH-0014: 旧 JSON（cast/staff フィールド無し）でも例外を投げない', () => {
+  it('旧 JSON（credits フィールド無し）でも例外を投げない', () => {
     expect(() => renderDetail(container, SERIES)).not.toThrow()
     expect(container.querySelector('.detail-credits')).toBeNull()
   })

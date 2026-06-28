@@ -17,8 +17,7 @@ const LIST_SCREEN: Screen = {
     dur: '',
     year: '',
     fav: false,
-    cast: '',
-    staff: '',
+    credit: '',
   },
 }
 
