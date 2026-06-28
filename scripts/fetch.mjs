@@ -38,6 +38,7 @@ import {
 } from './etl/series.mjs'
 import { deriveCoursFromTagsFromStore } from './etl/cours.mjs'
 import { projectAll, exportNew as exportNewStore, exportWorksPartial } from './store/project.mjs'
+import { summarizeDescriptionParse } from './etl/description.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -700,6 +701,13 @@ async function runFullJS() {
   logger.info('fetch', '[JS] phase F+G: project all')
   await writeBackStore(store, DATA_DIR, { now })
   await projectAll(store, DATA_DIR, now)
+
+  // PH-0014 / F-0059: description 構造分解メトリクス（成功率・未分類数・fallback 数）。
+  // 分類率の急落＝フォーマットドリフトの兆候として後から気づけるようにログへ出す。
+  const descMetrics = summarizeDescriptionParse(
+    [...store.episodes.values()].map((e) => e.description)
+  )
+  logger.info('fetch', '[JS] description parse metrics (PH-0014)', descMetrics)
 
   writeFileSync(join(DATA_DIR, '.deploy-needed'), 'daily\n')
   logger.info('fetch', '[JS] all done', { now, ep0: guard.ep0 })

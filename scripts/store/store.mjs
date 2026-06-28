@@ -11,6 +11,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { stripHtml, chooseDescription } from '../etl/series.mjs'
+import { parseDescription } from '../etl/description.mjs'
 import { trimSeriesTitle } from '../nico/list.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -409,6 +410,23 @@ function _buildSeriesJson(store, seriesId) {
   const s = store.series.get(seriesId)
   if (!s) return null
   const episodes = _getEpisodesForSeriesSorted(store, seriesId)
+
+  // PH-0014 / F-0059: description を構造分解。各話 description（HTML strip 済み・後方互換）は
+  // 残しつつ、各話に synopsis/episodeLinks/descriptionStructured を付与。
+  // cast/staff/studios/copyright はシリーズ内でほぼ一定なので**シリーズ単位に集約**（per-episode
+  // 重複でデータが約2倍に膨らむのを回避＝+91%→+34%）。代表は「最も完全な各話（cast 最多）」。
+  const parsedByEp = episodes.map((ep) => parseDescription(ep.description))
+  let rep = null
+  for (const p of parsedByEp) {
+    if (
+      !rep ||
+      p.cast.length > rep.cast.length ||
+      (p.cast.length === rep.cast.length && p.staff.length > rep.staff.length)
+    ) {
+      rep = p
+    }
+  }
+
   return {
     seriesId: s.seriesId,
     title: s.title,
@@ -423,22 +441,33 @@ function _buildSeriesJson(store, seriesId) {
     firstSeen: s.firstSeen,
     lastSeen: s.lastSeen,
     lastSeenAt: s.lastSeenAt ?? null,
-    episodes: episodes.map((ep) => ({
-      contentId: ep.contentId,
-      episodeNo: ep.episodeNo,
-      title: ep.title,
-      viewCounter: ep.viewCounter,
-      commentCounter: ep.commentCounter,
-      likeCounter: ep.likeCounter,
-      mylistCounter: ep.mylistCounter,
-      lengthSeconds: ep.lengthSeconds,
-      startTime: ep.startTime,
-      thumbnailUrl: ep.thumbnailUrl,
-      description: stripHtml(ep.description) || null,
-      tags: ep.tags,
-      tagsCurated: ep.tagsCurated,
-      lastUpdated: ep.lastUpdated,
-    })),
+    // シリーズ単位の構造化クレジット（代表各話由来）
+    cast: rep ? rep.cast : [],
+    staff: rep ? rep.staff : [],
+    studios: rep ? rep.studios : [],
+    copyright: rep ? rep.copyright : null,
+    episodes: episodes.map((ep, i) => {
+      const parsed = parsedByEp[i]
+      return {
+        contentId: ep.contentId,
+        episodeNo: ep.episodeNo,
+        title: ep.title,
+        viewCounter: ep.viewCounter,
+        commentCounter: ep.commentCounter,
+        likeCounter: ep.likeCounter,
+        mylistCounter: ep.mylistCounter,
+        lengthSeconds: ep.lengthSeconds,
+        startTime: ep.startTime,
+        thumbnailUrl: ep.thumbnailUrl,
+        description: stripHtml(ep.description) || null,
+        synopsis: parsed.synopsis,
+        episodeLinks: parsed.episodeLinks,
+        descriptionStructured: parsed.structured,
+        tags: ep.tags,
+        tagsCurated: ep.tagsCurated,
+        lastUpdated: ep.lastUpdated,
+      }
+    }),
   }
 }
 
