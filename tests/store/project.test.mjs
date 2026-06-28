@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStore, upsertSeries, upsertEpisodes } from '../../scripts/store/store.mjs'
-import { exportWorks } from '../../scripts/store/project.mjs'
+import { exportWorks, exportNew } from '../../scripts/store/project.mjs'
 
 function ep(o) {
   return {
@@ -50,7 +50,12 @@ describe('exportWorks firstAt/latestAt', () => {
     upsertEpisodes(store, [
       ep({ contentId: 'so100', startTime: '2026-06-10T06:00:00+09:00', title: 'S 第1話' }),
       ep({ contentId: 'so101', startTime: '2026-06-11T06:00:00+09:00', title: 'S 第8話' }),
-      ep({ contentId: 'so199', startTime: '2026-06-21T06:00:00+09:00', episodeNo: 18, title: 'S 第18話' }),
+      ep({
+        contentId: 'so199',
+        startTime: '2026-06-21T06:00:00+09:00',
+        episodeNo: 18,
+        title: 'S 第18話',
+      }),
     ])
     const [w] = await projectWorks(store)
     expect(w.firstAt).toBe('2026-06-10T06:00:00+09:00')
@@ -68,5 +73,56 @@ describe('exportWorks firstAt/latestAt', () => {
     const [w] = await projectWorks(store)
     expect(w.firstAt).toBe('2026-06-10T06:00:00+09:00')
     expect(w.firstContentId).toBe('so498')
+  })
+})
+
+describe('exportNew pubDate 時系列ソート（④-1 RFC822 文字列ソートバグ）', () => {
+  async function projectNew(store) {
+    const dir = await mkdtemp(join(tmpdir(), 'new-'))
+    try {
+      await exportNew(store, dir, '2026-06-26T00:00:00Z')
+      return JSON.parse(await readFile(join(dir, 'new.json'), 'utf-8')).items
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('RFC822 pubDate を時系列 DESC で並べる（曜日名の文字列比較に陥らない）', async () => {
+    const store = createStore()
+    // 曜日名で文字列ソートすると Wed(6/24) が Thu(6/25) より前に来てしまう実バグの再現データ。
+    store.rss.set('w1', {
+      watchId: 'w1',
+      pubDate: 'Wed, 24 Jun 2026 22:30:00 +0900',
+      resolutionStatus: 'resolved',
+      title: '24日',
+    })
+    store.rss.set('w2', {
+      watchId: 'w2',
+      pubDate: 'Thu, 25 Jun 2026 22:30:00 +0900',
+      resolutionStatus: 'resolved',
+      title: '25日(最新)',
+    })
+    store.rss.set('w3', {
+      watchId: 'w3',
+      pubDate: 'Mon, 16 Jun 2026 15:00:00 +0900',
+      resolutionStatus: 'resolved',
+      title: '16日(最古)',
+    })
+    const items = await projectNew(store)
+    expect(items.map((x) => x.watchId)).toEqual(['w2', 'w1', 'w3'])
+    expect(items[0].title).toBe('25日(最新)')
+  })
+
+  it('pubDate 欠落/不正は末尾へ送る', async () => {
+    const store = createStore()
+    store.rss.set('a', {
+      watchId: 'a',
+      pubDate: 'Thu, 25 Jun 2026 22:30:00 +0900',
+      resolutionStatus: 'resolved',
+    })
+    store.rss.set('b', { watchId: 'b', pubDate: null, resolutionStatus: 'pending' })
+    const items = await projectNew(store)
+    expect(items[0].watchId).toBe('a')
+    expect(items[items.length - 1].watchId).toBe('b')
   })
 })

@@ -278,14 +278,16 @@ export async function exportKana(store, outDir, lastUpdated) {
 // ── new.json ─────────────────────────────────────────────────────────────────
 
 export async function exportNew(store, outDir, lastUpdated) {
-  // rss を pubDate DESC で最新 100 件
+  // rss を pubDate DESC（時系列・新しい順）で最新 100 件。
+  // pubDate は RSS 由来の RFC822 文字列（例 "Thu, 25 Jun 2026 22:30:00 +0900"）。
+  // 文字列比較すると曜日名先頭で非時系列になり最新話が 100 位圏外に押し出されるため、
+  // 必ず Date.parse して数値（時刻）で比較する。解釈不能・null は末尾へ送る。
+  const ts = (p) => {
+    const t = p ? Date.parse(p) : NaN
+    return Number.isNaN(t) ? -Infinity : t
+  }
   const rssItems = [...store.rss.values()]
-    .sort((a, b) => {
-      if (!a.pubDate && !b.pubDate) return 0
-      if (!a.pubDate) return 1
-      if (!b.pubDate) return -1
-      return b.pubDate < a.pubDate ? -1 : b.pubDate > a.pubDate ? 1 : 0
-    })
+    .sort((a, b) => ts(b.pubDate) - ts(a.pubDate))
     .slice(0, 100)
 
   const items = rssItems.map((r) => {
