@@ -10,7 +10,7 @@
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { stripHtml } from '../etl/series.mjs'
+import { stripHtml, chooseDescription } from '../etl/series.mjs'
 import { trimSeriesTitle } from '../nico/list.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -540,11 +540,10 @@ export function upsertEpisodes(store, rawEps) {
           changed = true
         }
       }
-      // long-wins: より長い description を保持（nvapi shortDesc が snapshot/RSS の全文を潰さない）
-      const newDesc =
-        raw.description && raw.description.length > (existing.description?.length ?? 0)
-          ? raw.description
-          : (existing.description ?? raw.description ?? null)
+      // 源優先マージ（PH-0014 / F-0058）: 構造版(nvapi の <br> 区切り)をフラット(RSS)より
+      // 長さに関わらず優先。同一構造クラス内のみ従来 long-wins。フラット RSS が構造化 nvapi を
+      // 潰す（新着各話の本文 1 行詰まり）現象を解消する。
+      const newDesc = chooseDescription(existing.description, raw.description)
       if (existing.description !== newDesc) {
         existing.description = newDesc
         changed = true

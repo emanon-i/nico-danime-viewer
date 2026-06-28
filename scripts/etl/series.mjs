@@ -36,6 +36,49 @@ export function stripHtml(html) {
 }
 
 /**
+ * description が「構造化済み」か判定する（PH-0014 / F-0058）。
+ *
+ * ニコニコの各話 description は源で構造が異なる:
+ *   - nvapi v2/series 由来 = あらすじ↔キャスト↔スタッフ↔© を <br>（多くは <br><br>）で区切る＝構造化。
+ *   - チャンネル RSS 由来   = 全クレジットを 1 個の <p class="nico-description"> に区切り無しで連結＝フラット。
+ *     （RSS 生は <p> ラッパ由来の実改行を 2 個持つが <br> は持たない。実測 200 件で <br>=0。）
+ *
+ * よって「構造化されているか」は **<br>（生・実体参照とも）の有無**で確実に判別できる。
+ * 実改行(\n)の有無で判定すると RSS のラッパ改行を誤って構造化扱いするため使わない。
+ *
+ * @param {string|null|undefined} desc - 生（HTML strip 前）の description
+ * @returns {boolean}
+ */
+export function isStructuredDescription(desc) {
+  return typeof desc === 'string' && /<br\s*\/?>|&lt;\s*br/i.test(desc)
+}
+
+/**
+ * 各話 description のマージ勝者を選ぶ（PH-0014 / F-0058 ＝源優先マージ）。
+ *
+ * 構造版（nvapi）はフラット版（RSS）より**長さに関わらず**優先する。
+ * 同一構造クラス内（両構造・両フラット・両 null）でのみ従来の long-wins を維持する。
+ * これにより、全クレジット連結で長くなりがちなフラット RSS が構造化 nvapi を潰す
+ * （新着各話の本文 1 行詰まり）現象を解消する。
+ *
+ * @param {string|null|undefined} existing - 既存（store 保持）の生 description
+ * @param {string|null|undefined} incoming - 新規（今回 upsert）の生 description
+ * @returns {string|null}
+ */
+export function chooseDescription(existing, incoming) {
+  const e = existing ?? null
+  const i = incoming ?? null
+  const eStructured = isStructuredDescription(e)
+  const iStructured = isStructuredDescription(i)
+  // 構造版が来た → 採用（長さ無視）。既存が構造版 → フラットで潰さない。
+  if (iStructured && !eStructured) return i
+  if (eStructured && !iStructured) return e
+  // 同一構造クラス（両構造／両フラット／両 null）→ 従来 long-wins
+  if (i && i.length > (e?.length ?? 0)) return i
+  return e ?? i ?? null
+}
+
+/**
  * list.json の URL からシリーズIDを抽出
  * @param {string} url - "https://www.nicovideo.jp/series/<id>"
  * @returns {number|null}

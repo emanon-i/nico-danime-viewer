@@ -4,6 +4,8 @@ import {
   extractSeriesIdFromUrl,
   computeFranchiseKeys,
   titleStem,
+  isStructuredDescription,
+  chooseDescription,
 } from '../../scripts/etl/series.mjs'
 
 describe('stripHtml (F-0014)', () => {
@@ -39,6 +41,45 @@ describe('stripHtml (F-0014)', () => {
     expect(stripHtml('あらすじ<br><br>キャスト<br><br>スタッフ')).toBe(
       'あらすじ\n\nキャスト\n\nスタッフ'
     )
+  })
+})
+
+describe('isStructuredDescription / chooseDescription (PH-0014 F-0058)', () => {
+  it('isStructuredDescription: <br>（生・実体参照）を構造化とみなす', () => {
+    expect(isStructuredDescription('本文<br><br>キャスト')).toBe(true)
+    expect(isStructuredDescription('本文<br/>次')).toBe(true)
+    expect(isStructuredDescription('本文&lt;br&gt;次')).toBe(true)
+  })
+
+  it('isStructuredDescription: <br> 無しのフラット（RSS <p> ラッパや実改行のみ）は false', () => {
+    expect(isStructuredDescription('全部連結したフラット文')).toBe(false)
+    // RSS のラッパ由来の実改行だけでは構造化扱いしない（誤検知防止）
+    expect(isStructuredDescription('本文\n\n投稿日時')).toBe(false)
+    expect(isStructuredDescription(null)).toBe(false)
+    expect(isStructuredDescription('')).toBe(false)
+  })
+
+  it('chooseDescription: 構造版(<br>)は、より長いフラットに勝つ（長さ無視）', () => {
+    const flatLong = 'a'.repeat(300)
+    const structured = '本文<br><br>原作:作者'
+    expect(chooseDescription(flatLong, structured)).toBe(structured)
+    expect(chooseDescription(structured, flatLong)).toBe(structured)
+  })
+
+  it('chooseDescription: 同一構造クラスは long-wins', () => {
+    expect(chooseDescription('short', 'a'.repeat(50))).toBe('a'.repeat(50)) // 両フラット
+    expect(chooseDescription('長い既存'.repeat(20), 'short')).toBe('長い既存'.repeat(20))
+    const s1 = '本文<br>x',
+      s2 = '本文<br>' + 'y'.repeat(50)
+    expect(chooseDescription(s1, s2)).toBe(s2) // 両構造 → 長い方
+  })
+
+  it('chooseDescription: null の扱い（既存保護・新値受け入れ）', () => {
+    expect(chooseDescription('existing', null)).toBe('existing')
+    expect(chooseDescription(null, 'new')).toBe('new')
+    expect(chooseDescription(null, null)).toBeNull()
+    // 構造版既存を null で潰さない
+    expect(chooseDescription('本文<br>x', null)).toBe('本文<br>x')
   })
 })
 

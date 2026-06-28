@@ -155,6 +155,33 @@ describe('upsertEpisodes', () => {
     expect(store.episodes.get('so10000001')?.description).toBe('new description')
   })
 
+  // F-0058: 源優先マージ（構造版 nvapi > フラット RSS、長さ無視）
+  it('description 源優先: 構造版(<br>)は、より長いフラット既存を上書きする', () => {
+    const store = createStore()
+    const flatLong = 'あらすじ＋キャスト＋スタッフを連結した長いフラット文'.repeat(5)
+    const structuredShort = 'あらすじ<br><br>キャスト:声優'
+    upsertEpisodes(store, [makeEp({ description: flatLong })])
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: structuredShort }])
+    expect(store.episodes.get('so10000001')?.description).toBe(structuredShort)
+  })
+
+  it('description 源優先: 構造版の既存を、より長いフラット新値で潰さない', () => {
+    const store = createStore()
+    const structured = '本文<br><br>原作:作者<br><br>©委員会'
+    const flatLonger = 'X'.repeat(500)
+    upsertEpisodes(store, [makeEp({ description: structured })])
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: flatLonger }])
+    expect(store.episodes.get('so10000001')?.description).toBe(structured)
+  })
+
+  it('description 源優先: 両方フラットなら従来 long-wins を維持', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ description: 'short' })])
+    const flatLong = 'C'.repeat(200)
+    upsertEpisodes(store, [{ contentId: 'so10000001', description: flatLong }])
+    expect(store.episodes.get('so10000001')?.description).toBe(flatLong)
+  })
+
   it('episodeNo COALESCE: 既存 null を nvapi 由来の話順で後埋めする', () => {
     const store = createStore()
     // snapshot 相当: episodeNo 無しで作成（null）
