@@ -412,21 +412,11 @@ function _buildSeriesJson(store, seriesId) {
   if (!s) return null
   const episodes = _getEpisodesForSeriesSorted(store, seriesId)
 
-  // PH-0014 / F-0059: description を構造分解。各話 description（HTML strip 済み・後方互換）は
-  // 残しつつ、各話に synopsis/episodeLinks/descriptionStructured を付与。
-  // cast/staff/studios/copyright はシリーズ内でほぼ一定なので**シリーズ単位に集約**（per-episode
-  // 重複でデータが約2倍に膨らむのを回避＝+91%→+34%）。代表は「最も完全な各話（cast 最多）」。
-  const parsedByEp = episodes.map((ep) => parseDescription(ep.description))
-  let rep = null
-  for (const p of parsedByEp) {
-    if (
-      !rep ||
-      p.cast.length > rep.cast.length ||
-      (p.cast.length === rep.cast.length && p.staff.length > rep.staff.length)
-    ) {
-      rep = p
-    }
-  }
+  // PH-0014: cast/staff/studios/copyright は **1話目（最古話）だけ** をパースして抽出する。
+  // episodes は chronoSort 昇順 → episodes[0] が最古話＝descriptionFirst（あらすじ）と同一ソース。
+  // これにより「あらすじ＝最古話／cast＝別の代表話」のソース不整合が解消し、全話パースの
+  // コストも避ける（cast はシリーズ内でほぼ一定なので1話目で十分）。
+  const firstParsed = episodes.length > 0 ? parseDescription(episodes[0].description) : null
 
   return {
     seriesId: s.seriesId,
@@ -442,13 +432,13 @@ function _buildSeriesJson(store, seriesId) {
     firstSeen: s.firstSeen,
     lastSeen: s.lastSeen,
     lastSeenAt: s.lastSeenAt ?? null,
-    // シリーズ単位の構造化クレジット（代表各話由来）
-    cast: rep ? rep.cast : [],
-    staff: rep ? rep.staff : [],
-    studios: rep ? rep.studios : [],
-    copyright: rep ? rep.copyright : null,
-    episodes: episodes.map((ep, i) => {
-      const parsed = parsedByEp[i]
+    // シリーズ単位の構造化クレジット（1話目＝最古話＝あらすじと同一ソース由来）
+    cast: firstParsed ? firstParsed.cast : [],
+    staff: firstParsed ? firstParsed.staff : [],
+    studios: firstParsed ? firstParsed.studios : [],
+    copyright: firstParsed ? firstParsed.copyright : null,
+    episodes: episodes.map((ep) => {
+      // 各話は description（後方互換）と源のみ保持。per-episode の構造分解は廃止（1話目スコープ）。
       return {
         contentId: ep.contentId,
         episodeNo: ep.episodeNo,
@@ -462,9 +452,6 @@ function _buildSeriesJson(store, seriesId) {
         thumbnailUrl: ep.thumbnailUrl,
         description: stripHtml(ep.description) || null,
         descriptionSource: ep.descriptionSource ?? null, // 源優先マージの追従用（snapshot/nvapi/rss）
-        synopsis: parsed.synopsis,
-        episodeLinks: parsed.episodeLinks,
-        descriptionStructured: parsed.structured,
         tags: ep.tags,
         tagsCurated: ep.tagsCurated,
         lastUpdated: ep.lastUpdated,

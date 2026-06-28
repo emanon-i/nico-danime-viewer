@@ -22,53 +22,76 @@ function tagChip(tag: string): HTMLAnchorElement {
   return chip
 }
 
-/**
- * 抽出クレジット（演者＝cast / 制作＝staff）を描画（PH-0014 F-0057）。
- * 各項目は「ラベル（役名/役割）/ 値（声優/人名）」の2段組。データが無いグループは出さない。
- * 両方空なら null（セクション自体を出さない）。表示のみ（クリック機能なし・後続）。
- */
-function buildCredits(cast: CastEntry[], staff: StaffEntry[]): HTMLElement | null {
-  const group = (label: string, rows: { left: string; right: string }[]): HTMLElement | null => {
-    if (rows.length === 0) return null
-    const sec = document.createElement('section')
-    sec.className = 'detail-credit-group'
-    const h = document.createElement('h3')
-    h.className = 'detail-credit-label'
-    h.textContent = label
-    sec.appendChild(h)
-    const ul = document.createElement('ul')
-    ul.className = 'detail-credit-list'
-    for (const r of rows) {
-      const li = document.createElement('li')
-      li.className = 'detail-credit-item'
-      const role = document.createElement('span')
-      role.className = 'detail-credit-role'
-      role.textContent = r.left
-      const name = document.createElement('span')
-      name.className = 'detail-credit-name'
-      name.textContent = r.right
-      li.append(role, name)
-      ul.appendChild(li)
+/** 空白除去＋重複除去（順序保持）。 */
+function dedupNames(names: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const n of names) {
+    const v = (n ?? '').trim()
+    if (v && !seen.has(v)) {
+      seen.add(v)
+      out.push(v)
     }
-    sec.appendChild(ul)
-    return sec
   }
+  return out
+}
 
-  const castSec = group(
-    '演者',
-    cast.map((c) => ({ left: c.role, right: c.actors.join('・') }))
-  )
-  // 制作 = staff（役割：人名）。アニメーション制作（＝制作会社）も役割付きでこの中に出る。
-  const staffSec = group(
-    '制作',
-    staff.map((s) => ({ left: s.role, right: s.names.join('・') }))
-  )
+/**
+ * 抽出クレジットを「タグ列」で描画（PH-0014 表示）。
+ * 演者＝cast の声優名のみ、制作＝staff の人名＋studios の制作会社名のみ（役名/役割ラベルは捨てる）。
+ * 人名・会社名をチップとして並べる。重複除去。データ無しの行は出さない・両空なら null。
+ * 共通の (i) を1つ置き、自動抽出の注意を tooltip で示す。表示のみ（クリック機能なし）。
+ */
+function buildCredits(
+  cast: CastEntry[],
+  staff: StaffEntry[],
+  studios: string[]
+): HTMLElement | null {
+  const actors = dedupNames(cast.flatMap((c) => c.actors ?? []))
+  const makers = dedupNames([...staff.flatMap((s) => s.names ?? []), ...(studios ?? [])])
+  if (actors.length === 0 && makers.length === 0) return null
 
-  if (!castSec && !staffSec) return null
   const wrap = document.createElement('div')
   wrap.className = 'detail-credits'
-  if (castSec) wrap.appendChild(castSec)
-  if (staffSec) wrap.appendChild(staffSec)
+
+  const row = (label: string, names: string[]): HTMLElement | null => {
+    if (names.length === 0) return null
+    const r = document.createElement('div')
+    r.className = 'detail-credit-row'
+    const lab = document.createElement('span')
+    lab.className = 'detail-credit-label'
+    lab.textContent = label
+    r.appendChild(lab)
+    const chips = document.createElement('span')
+    chips.className = 'detail-credit-chips'
+    for (const n of names) {
+      const chip = document.createElement('span')
+      chip.className = 'credit-chip'
+      chip.textContent = n
+      if ([...n].length > 24) chip.dataset.tooltip = n
+      chips.appendChild(chip)
+    }
+    r.appendChild(chips)
+    return r
+  }
+
+  const castRow = row('演者', actors)
+  const staffRow = row('制作', makers)
+  if (castRow) wrap.appendChild(castRow)
+  if (staffRow) wrap.appendChild(staffRow)
+
+  // 共通の (i)（1つ）: 自動抽出の注意。最初の行ラベルに付与。
+  const firstLabel = wrap.querySelector('.detail-credit-label')
+  if (firstLabel) {
+    const info = document.createElement('button')
+    info.type = 'button'
+    info.className = 'info-btn'
+    info.setAttribute('aria-label', '抽出情報について')
+    info.dataset.tooltip =
+      'これらは説明文からの自動抽出のため、誤り・抜け・不正確が含まれる場合があります。'
+    info.appendChild(icon('info', 13))
+    firstLabel.appendChild(info)
+  }
   return wrap
 }
 
@@ -269,9 +292,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
   // ── 抽出クレジット（演者 / 制作）＝タグ直下（PH-0014 F-0057）──────────
   // series JSON の cast/staff/studios を読んで表示するのみ（クリック機能は後続）。
   // データが無いセクションは出さない（声優0の舞台/海外作は「演者」を非表示・「制作」だけ等）。
-  const cast = series.cast ?? []
-  const staff = series.staff ?? []
-  const credits = buildCredits(cast, staff)
+  const credits = buildCredits(series.cast ?? [], series.staff ?? [], series.studios ?? [])
   if (credits) infoDiv.appendChild(credits)
 
   // シリーズメタ（§F）：詳細は圧縮しない＝文字ラベル＋実値（カンマ区切り）。

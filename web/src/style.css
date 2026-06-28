@@ -2520,66 +2520,64 @@
     scrollbar-color: var(--border) transparent;
   }
 
-  /* ── 抽出クレジット（演者 / 制作）＝タグ直下（PH-0014）──────── */
+  /* ── 抽出クレジット（演者 / 制作）＝タグ直下・タグ列表示（PH-0014）──────── */
   .detail-credits {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-3);
+    gap: var(--sp-2);
     margin-bottom: var(--sp-3);
   }
 
+  /* 1 行 = ラベル（演者/制作）＋ チップ群。ラベルは控えめ・先頭に揃える。 */
+  .detail-credit-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+  }
+
   .detail-credit-label {
-    margin: 0 0 var(--sp-1);
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
     font-size: var(--text-l4);
     font-weight: 600;
     color: var(--text-muted);
     letter-spacing: 0.04em;
+    padding-top: 0.2rem;
   }
 
-  .detail-credit-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-    gap: var(--sp-1) var(--sp-3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    /* 大規模キャストでも詳細を圧迫しない。約8行で縦スクロール。 */
-    max-height: calc(8 * 1.7rem);
+  .detail-credit-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    min-width: 0;
+    /* チップが多くても圧迫しない。約4行で縦スクロール。 */
+    max-height: calc(4 * 2rem + 3 * var(--sp-2));
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
 
-  .detail-credit-item {
-    display: flex;
-    align-items: baseline;
-    gap: var(--sp-2);
-    font-size: var(--text-l3);
-    line-height: 1.5;
-    min-width: 0;
-  }
-
-  /* 役名/役割＝控えめ、声優/人名＝主役。役名は折り返さず省略、名前は通常色。 */
-  .detail-credit-role {
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 9rem;
+  /* 人名/会社名チップ（クリック不可・表示のみ。tag-chip と同系の見た目）。 */
+  .credit-chip {
+    display: inline-block;
+    max-width: min(24ch, 100%);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text-muted);
-  }
-
-  .detail-credit-role::after {
-    content: '／';
-    margin-left: var(--sp-2);
-    color: color-mix(in oklch, var(--text-muted) 55%, transparent);
-  }
-
-  .detail-credit-name {
-    flex: 1 1 auto;
-    min-width: 0;
+    vertical-align: middle;
+    padding: var(--sp-1) var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    font-size: var(--text-l4);
     color: var(--text);
+    background: var(--surface);
+  }
+
+  /* 行内に置く (i)（共通注意）。既存 .info-btn を流用。 */
+  .detail-credit-label .info-btn {
+    margin-left: 0;
   }
 
   .detail-desc {

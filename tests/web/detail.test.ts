@@ -55,27 +55,35 @@ describe('renderDetail (F-0025)', () => {
     expect(watchLink?.getAttribute('href')).toBe('https://www.nicovideo.jp/watch/so1001')
   })
 
-  it('PH-0014: cast/staff があれば 演者/制作 セクションを描画する', () => {
+  it('PH-0014: 演者/制作を「人名チップのみ（役名なし）」で描画・制作会社も含む・重複除去', () => {
     renderDetail(container, {
       ...SERIES,
       cast: [
         { role: '衛宮士郎', actors: ['杉山紀彰'] },
         { role: 'セイバー', actors: ['川澄綾子'] },
+        { role: '声＝同じ人の別役', actors: ['杉山紀彰'] }, // 重複声優
       ],
       staff: [
-        { role: '原作', names: ['奈須きのこ・TYPE-MOON'] },
+        { role: '原作', names: ['奈須きのこ', 'TYPE-MOON'] },
         { role: 'アニメーション制作', names: ['ufotable'] },
       ],
-      studios: ['ufotable'],
+      studios: ['ufotable'], // staff と重複 → 1つに
     })
-    const credits = container.querySelector('.detail-credits')
-    expect(credits).not.toBeNull()
-    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) => e.textContent)
-    expect(labels).toEqual(['演者', '制作'])
-    // 役名と声優の両方が出る
-    expect(container.textContent).toContain('衛宮士郎')
-    expect(container.textContent).toContain('杉山紀彰')
-    expect(container.textContent).toContain('ufotable') // 制作会社が制作に出る
+    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) =>
+      (e.textContent || '').trim()
+    )
+    expect(labels[0]).toContain('演者')
+    expect(labels[1]).toContain('制作')
+    // 演者行は声優名チップのみ（役名「衛宮士郎」は出さない・重複「杉山紀彰」は1つ）
+    const rows = container.querySelectorAll('.detail-credit-row')
+    const castChips = [...rows[0].querySelectorAll('.credit-chip')].map((c) => c.textContent)
+    expect(castChips).toEqual(['杉山紀彰', '川澄綾子'])
+    expect(container.textContent).not.toContain('衛宮士郎') // 役名は出さない
+    // 制作行は人名＋制作会社（ufotable 重複は1つ）
+    const staffChips = [...rows[1].querySelectorAll('.credit-chip')].map((c) => c.textContent)
+    expect(staffChips).toEqual(['奈須きのこ', 'TYPE-MOON', 'ufotable'])
+    // 共通 (i) が1つ
+    expect(container.querySelectorAll('.detail-credits .info-btn').length).toBe(1)
   })
 
   it('PH-0014: cast 0（舞台/海外作）なら 演者 を出さず 制作 のみ', () => {
@@ -85,12 +93,15 @@ describe('renderDetail (F-0025)', () => {
       staff: [{ role: '脚本・演出', names: ['西田大輔'] }],
       studios: [],
     })
-    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) => e.textContent)
-    expect(labels).toEqual(['制作']) // 演者は非表示
+    const labels = [...container.querySelectorAll('.detail-credit-label')].map((e) =>
+      (e.textContent || '').trim()
+    )
+    expect(labels.length).toBe(1)
+    expect(labels[0]).toContain('制作') // 演者は非表示
   })
 
-  it('PH-0014: cast も staff も無ければ credits セクション自体を出さない', () => {
-    renderDetail(container, { ...SERIES, cast: [], staff: [] })
+  it('PH-0014: cast も staff も studios も無ければ credits セクション自体を出さない', () => {
+    renderDetail(container, { ...SERIES, cast: [], staff: [], studios: [] })
     expect(container.querySelector('.detail-credits')).toBeNull()
   })
 
