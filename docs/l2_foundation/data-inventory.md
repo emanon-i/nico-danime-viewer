@@ -154,31 +154,32 @@ format は両者同一。
 
 **ファイル永続化フィールド**（`_buildSeriesJson` が書き出す）:
 
-| フィールド         | 型                                      | 内容                                                                                                                 | 更新元                       |
-| ------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| `seriesId`         | `number`                                | 正数 = nvapi 実 ID、負数 = djb2 ハッシュ仮 ID（不変）                                                                | 初期化時のみ                 |
-| `title`            | `string`                                | シリーズ名                                                                                                           | nvapi / list.json / RSS 抽出 |
-| `colKey`           | `string\|null`                          | 五十音分類キー（`list.json` 固有）                                                                                   | Phase B4                     |
-| `thumbnailUrl`     | `string\|null`                          | サムネ URL（COALESCE: 既存があれば保護、なければ最古 ep から補完）                                                   | Phase E6 syncThumbs          |
-| `descriptionFirst` | `string\|null`                          | 最古話の HTML 剥ぎ description                                                                                       | Phase E1                     |
-| `firstAt`          | `string\|null`                          | 最古話 startTime ISO8601                                                                                             | Phase E5 syncTimestamps      |
-| `latestAt`         | `string\|null`                          | 最新話 startTime ISO8601                                                                                             | Phase E5 syncTimestamps      |
-| `lastSeenAt`       | `string\|null`                          | snapshot に最後に登場した日時（E7 isAvailable 評価に使う）                                                           | Phase A 日次                 |
-| `cours`            | `string\|null`                          | 放送季 `'YYYY-季'` 形式（タグ主源）                                                                                  | Phase E3                     |
-| `franchiseKey`     | `string\|null`                          | シリーズタグ union-find キー（関連シリーズ束ね）                                                                     | Phase E4                     |
-| `isAvailable`      | `boolean`                               | 配信中フラグ（E7 grace で自動 on/off）                                                                               | Phase E7                     |
-| `tags`             | `{name:string, isCurated:boolean}[]`    | 正規化済みシリーズタグ                                                                                               | Phase E2                     |
-| `relatedSeries`    | `{seriesId,title,thumbnailUrl\|null}[]` | 同フランチャイズ内の他シリーズ                                                                                       | Phase E4                     |
-| `cast`             | `{role:string, actors:string[]}[]`      | 構造化キャスト（役名→声優）。シリーズ内ほぼ一定のため**シリーズ単位に集約**（代表＝cast 最多の各話）。PH-0014 F-0059 | PH-0014                      |
-| `staff`            | `{role:string, names:string[]}[]`       | 構造化スタッフ（役割→人名/社名）。同上シリーズ単位                                                                   | PH-0014                      |
-| `studios`          | `string[]`                              | 制作会社（staff の制作系 role から投影・重複排除）                                                                   | PH-0014                      |
-| `copyright`        | `string\|null`                          | © 行（代表各話由来・原文保持）                                                                                       | PH-0014                      |
-| `episodes`         | `EpisodeEntry[]`                        | 話一覧（chronoSort 順）                                                                                              | 各フェーズ                   |
+| フィールド         | 型                                      | 内容                                                                                                                                   | 更新元                       |
+| ------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `seriesId`         | `number`                                | 正数 = nvapi 実 ID、負数 = djb2 ハッシュ仮 ID（不変）                                                                                  | 初期化時のみ                 |
+| `title`            | `string`                                | シリーズ名                                                                                                                             | nvapi / list.json / RSS 抽出 |
+| `colKey`           | `string\|null`                          | 五十音分類キー（`list.json` 固有）                                                                                                     | Phase B4                     |
+| `thumbnailUrl`     | `string\|null`                          | サムネ URL（COALESCE: 既存があれば保護、なければ最古 ep から補完）                                                                     | Phase E6 syncThumbs          |
+| `descriptionFirst` | `string\|null`                          | 最古話の HTML 剥ぎ description                                                                                                         | Phase E1                     |
+| `firstAt`          | `string\|null`                          | 最古話 startTime ISO8601                                                                                                               | Phase E5 syncTimestamps      |
+| `latestAt`         | `string\|null`                          | 最新話 startTime ISO8601                                                                                                               | Phase E5 syncTimestamps      |
+| `lastSeenAt`       | `string\|null`                          | snapshot に最後に登場した日時（E7 isAvailable 評価に使う）                                                                             | Phase A 日次                 |
+| `cours`            | `string\|null`                          | 放送季 `'YYYY-季'` 形式（タグ主源）                                                                                                    | Phase E3                     |
+| `franchiseKey`     | `string\|null`                          | シリーズタグ union-find キー（関連シリーズ束ね）                                                                                       | Phase E4                     |
+| `isAvailable`      | `boolean`                               | 配信中フラグ（E7 grace で自動 on/off）                                                                                                 | Phase E7                     |
+| `tags`             | `{name:string, isCurated:boolean}[]`    | 正規化済みシリーズタグ                                                                                                                 | Phase E2                     |
+| `relatedSeries`    | `{seriesId,title,thumbnailUrl\|null}[]` | 同フランチャイズ内の他シリーズ                                                                                                         | Phase E4                     |
+| `cast`             | `{role:string, actors:string[]}[]`      | 構造化キャスト（役名→声優）。**1話目（最古話＝descriptionFirst と同一ソース）のみ**から抽出（PH-0014）。詳細画面は声優名だけをタグ表示 | PH-0014                      |
+| `staff`            | `{role:string, names:string[]}[]`       | 構造化スタッフ（役割→人名/社名）。同上シリーズ単位                                                                                     | PH-0014                      |
+| `studios`          | `string[]`                              | 制作会社（staff の制作系 role から投影・重複排除）                                                                                     | PH-0014                      |
+| `copyright`        | `string\|null`                          | © 行（代表各話由来・原文保持）                                                                                                         | PH-0014                      |
+| `episodes`         | `EpisodeEntry[]`                        | 話一覧（chronoSort 順）                                                                                                                | 各フェーズ                   |
 
-> **PH-0014 補足**: cast/staff/studios/copyright は spec のデータモデルでは EpisodeEntry だが、実データ上シリーズ内で
-> ほぼ一定のため per-episode 重複（series JSON 約 +91%）を避け **SeriesEntry に集約**した（+34% に抑制）。各話固有の
-> synopsis/episodeLinks は EpisodeEntry 側に残す。タグへの反映（声優/スタッフ/制作の facet 化）は tags.json/ranking
-> への影響が大きく**未実装（要判断）**。
+> **PH-0014 補足**: cast/staff/studios/copyright は **SeriesEntry**（series 単位）に置く。抽出は **1話目（最古話）1件のみ**を
+> パースする（あらすじ＝descriptionFirst と同一ソースに揃え、全話パースのコストも回避）。cast はシリーズ内でほぼ一定なので
+> 1話目で十分。詳細画面は**声優名/人名/制作会社名だけをタグ表示**（役名/役割ラベルは捨てる）。各話単位の構造化フィールド
+> （synopsis/episodeLinks/descriptionStructured）は**廃止**（per-episode パースをやめた）。タグへの facet 化（声優/制作の
+> グローバル index）は tags.json/ranking 肥大のため**未実装（要判断）**。
 
 **メモリのみ（ファイル非永続）**:
 
@@ -194,26 +195,23 @@ format は両者同一。
 
 **ファイル永続化フィールド**（series JSON の `episodes[]` 配列内）:
 
-| フィールド              | 型                                 | 内容                                                                                                                                                                           | 更新元                 |
-| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
-| `contentId`             | `string`                           | `so…` 形式 ID（不変）                                                                                                                                                          | snapshot / RSS         |
-| `episodeNo`             | `number\|null`                     | 話番号（nvapi 由来・一度確定したら保護）                                                                                                                                       | nvapi                  |
-| `title`                 | `string`                           | 話タイトル（nvapi 由来優先・一度確定したら保護）                                                                                                                               | snapshot / nvapi       |
-| `viewCounter`           | `number\|null`                     | 再生数（snapshot 毎回上書き）                                                                                                                                                  | snapshot               |
-| `commentCounter`        | `number\|null`                     | コメント数                                                                                                                                                                     | snapshot               |
-| `likeCounter`           | `number\|null`                     | いいね数                                                                                                                                                                       | snapshot               |
-| `mylistCounter`         | `number\|null`                     | マイリスト数                                                                                                                                                                   | snapshot               |
-| `lengthSeconds`         | `number\|null`                     | 尺（秒）                                                                                                                                                                       | snapshot               |
-| `startTime`             | `string\|null`                     | 公開日時 ISO8601（nvapi 由来優先・保護）                                                                                                                                       | snapshot / nvapi       |
-| `thumbnailUrl`          | `string\|null`                     | サムネ URL                                                                                                                                                                     | snapshot               |
-| `description`           | `string\|null`                     | あらすじ（projection 時に HTML strip。`<br>`/`<p>` を改行化＝PH-0014）。複数源競合は**源優先マージ snapshot>nvapi>RSS**（①構造`<br>`優先の安全弁→②源ランク→③長さ・F-0058 案X） | snapshot / nvapi / RSS |
-| `descriptionSource`     | `'snapshot'\|'nvapi'\|'rss'\|null` | 現 description の採用源（源優先マージの追従用・永続化し再ロードで復元）                                                                                                        | PH-0014 F-0058         |
-| `synopsis`              | `string\|null`                     | description からクレジット類を除いたあらすじ本文（改行保持）。構造版のみ分解、フラットは全文フォールバック（PH-0014 F-0057）                                                   | PH-0014                |
-| `episodeLinks`          | `{prev?,next?,first?}\|null`       | 説明文末尾の `so…←前話 / 次話→so… / 第一話→so…` 抽出（relatedSeries とは別）                                                                                                   | PH-0014                |
-| `descriptionStructured` | `boolean`                          | description が構造分解できたか（false＝raw のみ）                                                                                                                              | PH-0014                |
-| `tags`                  | `string[]`                         | 正規化タグ名配列                                                                                                                                                               | snapshot / E2          |
-| `tagsCurated`           | `string[]`                         | キュレーションタグ部分集合（`tags` の subset）                                                                                                                                 | E2                     |
-| `lastUpdated`           | `string\|null`                     | 実変化があった最終 ISO8601                                                                                                                                                     | 変化時                 |
+| フィールド          | 型                                 | 内容                                                                                                                                                                           | 更新元                 |
+| ------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| `contentId`         | `string`                           | `so…` 形式 ID（不変）                                                                                                                                                          | snapshot / RSS         |
+| `episodeNo`         | `number\|null`                     | 話番号（nvapi 由来・一度確定したら保護）                                                                                                                                       | nvapi                  |
+| `title`             | `string`                           | 話タイトル（nvapi 由来優先・一度確定したら保護）                                                                                                                               | snapshot / nvapi       |
+| `viewCounter`       | `number\|null`                     | 再生数（snapshot 毎回上書き）                                                                                                                                                  | snapshot               |
+| `commentCounter`    | `number\|null`                     | コメント数                                                                                                                                                                     | snapshot               |
+| `likeCounter`       | `number\|null`                     | いいね数                                                                                                                                                                       | snapshot               |
+| `mylistCounter`     | `number\|null`                     | マイリスト数                                                                                                                                                                   | snapshot               |
+| `lengthSeconds`     | `number\|null`                     | 尺（秒）                                                                                                                                                                       | snapshot               |
+| `startTime`         | `string\|null`                     | 公開日時 ISO8601（nvapi 由来優先・保護）                                                                                                                                       | snapshot / nvapi       |
+| `thumbnailUrl`      | `string\|null`                     | サムネ URL                                                                                                                                                                     | snapshot               |
+| `description`       | `string\|null`                     | あらすじ（projection 時に HTML strip。`<br>`/`<p>` を改行化＝PH-0014）。複数源競合は**源優先マージ snapshot>nvapi>RSS**（①構造`<br>`優先の安全弁→②源ランク→③長さ・F-0058 案X） | snapshot / nvapi / RSS |
+| `descriptionSource` | `'snapshot'\|'nvapi'\|'rss'\|null` | 現 description の採用源（源優先マージの追従用・永続化し再ロードで復元）                                                                                                        | PH-0014 F-0058         |
+| `tags`              | `string[]`                         | 正規化タグ名配列                                                                                                                                                               | snapshot / E2          |
+| `tagsCurated`       | `string[]`                         | キュレーションタグ部分集合（`tags` の subset）                                                                                                                                 | E2                     |
+| `lastUpdated`       | `string\|null`                     | 実変化があった最終 ISO8601                                                                                                                                                     | 変化時                 |
 
 **メモリのみ — ファイル非永続**:
 
