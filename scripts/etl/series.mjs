@@ -9,6 +9,11 @@ export function stripHtml(html) {
   return (
     html
       .replace(/<br\s*\/?>/gi, '\n')
+      // ブロック要素（段落 <p>・<div>・リスト <li>）の境界を改行に変換する。
+      // ニコニコ RSS の description は本文を <p class="nico-description">…</p> 等で囲み
+      // <br> を使わないため、ここを潰すと全段落が 1 行に詰まる（§56 / description 改行潰れ対策）。
+      .replace(/<\/(?:p|div|li)>/gi, '\n')
+      .replace(/<(?:p|div|li)\b[^>]*>/gi, '\n')
       .replace(/<[^>]+>/g, '')
       .replace(/&nbsp;/gi, ' ')
       .replace(/&amp;/gi, '&')
@@ -16,10 +21,15 @@ export function stripHtml(html) {
       .replace(/&gt;/gi, '>')
       .replace(/&quot;/gi, '"')
       .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-      // 実体参照のデコードで <br> が復活した場合（&lt;br&gt; 等）に再度改行化＋残タグ除去（§56 防御）
+      // 実体参照のデコードで <br>/<p> 等が復活した場合（&lt;br&gt; 等）に再度改行化＋残タグ除去（§56 防御）
       .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(?:p|div|li)>/gi, '\n')
+      .replace(/<(?:p|div|li)\b[^>]*>/gi, '\n')
       .replace(/<[^>]+>/g, '')
       .replace(/\r\n?/g, '\n')
+      // ブロック境界由来の行頭・行末の余分な空白（RSS の "\n      <p>" インデント等）を除去
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n[ \t]+/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim()
   )

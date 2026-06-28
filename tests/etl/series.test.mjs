@@ -23,6 +23,23 @@ describe('stripHtml (F-0014)', () => {
     expect(stripHtml(null)).toBe('')
     expect(stripHtml('')).toBe('')
   })
+
+  it('ブロック要素 <p>/<div>/<li> の境界を改行にする（RSS の段落潰れ対策）', () => {
+    // 連続する <p> 段落は空行で分離（<br><br> 相当）。前後の余分な空白は出さない。
+    expect(stripHtml('<p>段落1</p><p>段落2</p>')).toBe('段落1\n\n段落2')
+    // RSS の thumbnail/description/info を模した複数 <p>＋インデント空白
+    expect(
+      stripHtml(
+        '<p class="nico-thumbnail"><img src="x"/></p>\n  <p class="nico-description">本文</p>\n  <p class="nico-info">24:00 投稿</p>'
+      )
+    ).toBe('本文\n\n24:00 投稿')
+  })
+
+  it('<br><br> 区切りの説明文（nvapi 由来）は従来どおり段落改行を保持する（回帰防止）', () => {
+    expect(stripHtml('あらすじ<br><br>キャスト<br><br>スタッフ')).toBe(
+      'あらすじ\n\nキャスト\n\nスタッフ'
+    )
+  })
 })
 
 describe('extractSeriesIdFromUrl (F-0015)', () => {
