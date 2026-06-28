@@ -237,6 +237,150 @@ export function parseDescription(rawHtml) {
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// extractCredits — 「他作品に繋がる名前タグ」を 1 列に統合して抽出（新設計）。
+//
+// 動機: ユーザーは「同じ声優・監督・脚本・音楽・制作スタジオ・原作者などで他作品を
+//   探す」ために使う。cast/staff/studios/copyright の分類は発見用途では不要なので
+//   捨て、**関係者の名前を 1 つの dedup したリスト**にまとめる。役名・役割ラベルは
+//   出さない（名前だけがタグ）。precision は parseDescription のガードを土台に保ちつつ、
+//   分類を捨てた分シンプルにし、copyright マイニングで recall を上げる。
+// ──────────────────────────────────────────────────────────────────────────
+
+// 連結値の分割モード（測定で決定。doc 8.x 参照）:
+//   'none' = 分割しない / 'safe' = 読点 、 と , のみ / 'all' = 中黒 ・ も分割。
+// 'safe' を既定とする: `高橋ナツコ、成田 順` のような明確な複数人は分割でき、
+// `ジョージ・R・R・マーティン` のような外国人名の中黒を壊さない（測定で precision 最良）。
+export const CREDIT_SPLIT_MODE = 'safe'
+
+// 主題歌系 role: value は「曲タイトル」か「アーティスト名」のどちらか。
+// 曲タイトル（『…』「…」）は単作品＝発見に繋がらないので捨て、アーティスト名（他作品でも
+// 再登場）は残す。作詞/作曲/編曲 は人名なので別扱い不要（そのまま名前として取る）。
+const THEME_ROLE_RE = /主題歌|テーマ|挿入歌|ＯＰ|ＥＤ/
+
+// 末尾の所属括弧を除去: `米山和仁（劇団ホチキス）`→`米山和仁`、`Aimer(DefSTAR RECORDS)`→`Aimer`。
+// 全角/半角の対応括弧が末尾にあるときだけ落とす（名前途中の括弧 `(株)` 等は触らない）。
+function stripAffiliation(s) {
+  let prev
+  let out = s.trim()
+  // 末尾括弧が入れ子・連続することがあるので無くなるまで剥がす。
+  do {
+    prev = out
+    out = out.replace(/[（(][^（）()]*[）)]\s*$/, '').trim()
+  } while (out !== prev)
+  return out
+}
+
+// 主題歌 value から曲タイトル（引用符内）を除去し、残った文字列（アーティスト）を返す。
+function stripSongTitles(v) {
+  return v
+    .replace(/[「『“"][^」』”"]*[」』”"]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+// 連結値を人名/社名へ分割する（モード依存）。copyright マイニングは常に 'all'（集英社・MAPPA）。
+function splitNames(s, mode) {
+  if (mode === 'none') return [s]
+  const re = mode === 'all' ? /[、，,・]/ : /[、，,]/
+  return s
+    .split(re)
+    .map((x) => x.trim())
+    .filter(Boolean)
+}
+
+// 発見に繋がらないノイズ名か（true=捨てる）。
+//   - 空 / 製作委員会名（単作品で無価値）/ © 記号・年（©2017 等）
+//   - 数値・記号のみ（曲順番号・空括弧）/ 文（句点を含むプロ―ズ）/ 極端に長い（曲名・あらすじ片）
+const YEAR_ONLY_RE = /^[©Ⓒ\s]*\d{4}(?:[-–~〜]\d{2,4})?年?$/
+const SYMBOL_ONLY_RE = /^[\d\s.,、，:：#＃[\]()（）/／・\-–—~〜'"`’”+&!！?？]+$/
+function isNoiseName(s) {
+  const t = (s ?? '').trim()
+  if (!t) return true
+  if (/製作委員会|制作委員会|パートナーズ|partners/i.test(t)) return true
+  if (YEAR_ONLY_RE.test(t)) return true
+  if (SYMBOL_ONLY_RE.test(t)) return true
+  if (hasProsePeriod(t)) return true
+  if ([...t].length > 30) return true
+  return false
+}
+
+// 1 つの生 value を「掃除済みの名前配列」へ。
+// **所属除去を分割より先に**行うのが要点: `水無月すう(…連載、角川コミックス・エース刊)` のように
+// 括弧内に区切り（、・）を含む所属注記があるとき、先に分割すると括弧が壊れて garbage になる。
+// 末尾括弧を丸ごと落としてから分割すれば内部の区切りに触れず安全（測定で precision 改善を確認）。
+function cleanValueToNames(value, { theme = false, mode = CREDIT_SPLIT_MODE } = {}) {
+  let v = (value ?? '').trim()
+  if (!v) return []
+  if (theme) {
+    v = stripSongTitles(v)
+    if (!v) return [] // 曲タイトルだけだった＝発見に無価値
+  }
+  v = stripAffiliation(v)
+  const out = []
+  for (const piece of splitNames(v, mode)) {
+    const name = stripAffiliation(piece) // 分割後の各片にも末尾括弧が残りうるので再度
+    if (!isNoiseName(name)) out.push(name)
+  }
+  return out
+}
+
+// copyright 行から制作実体（人名・社名）をマイニングする。
+//   `©カラー／EVA製作委員会`→[カラー]、`©藤本タツキ／集英社・MAPPA`→[藤本タツキ,集英社,MAPPA]、
+//   `原作:谷口悟朗、…J.C.STAFF／脚本・演出:…`→[谷口悟朗, J.C.STAFF, …]。
+//   ノイズ（©記号・年・製作委員会名）は isNoiseName で落とす。
+function mineCopyright(copyright) {
+  if (!copyright) return []
+  const out = []
+  for (const line of copyright.split('\n')) {
+    // 区切り（全角／・半角/・読点・中黒）でトークン化。copyright は中黒も分割対象（集英社・MAPPA）。
+    for (let tok of line.split(/[／/、，,・]/)) {
+      tok = tok
+        .replace(/[©Ⓒ]|\([Cc]\)|[Ⓡ™]/g, '') // ©/(C)/®/™
+        .replace(/All Rights Reserved\.?/gi, '')
+        .replace(/^[\s.。…・,，、:：'"“”‐\-–—]+/, '') // 行頭の記号・年残り前の飾り
+        .replace(/^\s*\d{4}(?:[-–~〜]\d{2,4})?\s*/, '') // 先頭の年（©2016 ...）
+        .replace(/^[^：:]{1,14}[：:]\s*/, (m) => (/[A-Za-z]/.test(m) ? m : '')) // 行頭の役ラベル（原作:）を除去（英字 URL 風は残す）
+        .trim()
+      tok = stripAffiliation(tok)
+      if (!isNoiseName(tok)) out.push(tok)
+    }
+  }
+  return out
+}
+
+/**
+ * 生 description（HTML）から「他作品に繋がる名前タグ」を 1 列に統合して抽出する（新設計）。
+ * cast の声優名・staff の人名/社名（主題歌は曲名を除きアーティストを残す）・studios・
+ * copyright マイニング由来の制作実体を、所属括弧除去・分割・ノイズ落とし・dedup した配列で返す。
+ * @param {string|null|undefined} rawHtml
+ * @param {('none'|'safe'|'all')} [mode] - 連結値の分割モード（既定 CREDIT_SPLIT_MODE）。測定用に注入可。
+ * @returns {string[]}  順序保持・重複除去済みの名前タグ列
+ */
+export function extractCredits(rawHtml, mode = CREDIT_SPLIT_MODE) {
+  const p = parseDescription(rawHtml)
+  const names = []
+  for (const c of p.cast) {
+    for (const a of c.actors ?? []) names.push(...cleanValueToNames(a, { mode }))
+  }
+  for (const s of p.staff) {
+    const theme = THEME_ROLE_RE.test(s.role ?? '')
+    for (const n of s.names ?? []) names.push(...cleanValueToNames(n, { theme, mode }))
+  }
+  for (const st of p.studios) names.push(...cleanValueToNames(st, { mode }))
+  names.push(...mineCopyright(p.copyright))
+  // dedup（順序保持）
+  const seen = new Set()
+  const out = []
+  for (const n of names) {
+    if (n && !seen.has(n)) {
+      seen.add(n)
+      out.push(n)
+    }
+  }
+  return out
+}
+
 /**
  * 複数 description のパース結果メトリクスを集計（F-0059 ＝ログ/回帰検出用）。
  * @param {Iterable<string|null>} rawDescriptions
@@ -250,6 +394,7 @@ export function summarizeDescriptionParse(rawDescriptions) {
     withStaff: 0,
     withStudios: 0,
     withCopyright: 0,
+    withCredits: 0,
     unclassifiedParagraphs: 0,
     parsedRatePct: 0,
   }
@@ -262,6 +407,7 @@ export function summarizeDescriptionParse(rawDescriptions) {
     if (r.staff.length) m.withStaff++
     if (r.studios.length) m.withStudios++
     if (r.copyright) m.withCopyright++
+    if (extractCredits(raw).length) m.withCredits++ // 新設計の統合カバレッジ（≥1名）
     m.unclassifiedParagraphs += r.unclassified.length
   }
   m.parsedRatePct = m.total ? Math.round((1000 * (m.structured - 0)) / m.total) / 10 : 0
