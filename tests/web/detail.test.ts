@@ -55,18 +55,20 @@ describe('renderDetail (F-0025)', () => {
     expect(watchLink?.getAttribute('href')).toBe('https://www.nicovideo.jp/watch/so1001')
   })
 
-  it('credits を「演者/制作」1 行・名前チップのみで描画・重複除去・?credit= リンク', () => {
+  it('credits を「演者/制作」1 行・名前チップのみで描画・重複除去・?credit=key リンク', () => {
     renderDetail(container, {
       ...SERIES,
-      // 声優・スタッフ人名・制作会社・原作者を統合した1列（重複 杉山紀彰/ufotable は1つに）
+      // 声優・スタッフ人名・制作会社・原作者を統合した1列。recurrent=クリック可・key で照合。
+      // 重複（杉山紀彰/ufotable は key で1つに）。TYPE-MOON は表示名と key（正規化）が異なる。
       credits: [
-        '杉山紀彰',
-        '川澄綾子',
-        '杉山紀彰',
-        '奈須きのこ',
-        'TYPE-MOON',
-        'ufotable',
-        'ufotable',
+        { name: '杉山紀彰', key: '杉山紀彰', recurrent: true },
+        { name: '川澄綾子', key: '川澄綾子', recurrent: true },
+        { name: '杉山紀彰', key: '杉山紀彰', recurrent: true },
+        { name: '奈須きのこ', key: '奈須きのこ', recurrent: true },
+        { name: 'TYPE-MOON', key: 'type-moon', recurrent: true },
+        { name: 'ufotable', key: 'ufotable', recurrent: true },
+        { name: 'ufotable', key: 'ufotable', recurrent: true },
+        { name: '三浦貴博', key: '三浦貴博', recurrent: false }, // singleton=非クリック淡色
       ],
     })
     // 行は1つ（演者/制作の統合）。見出しに「演者/制作」。
@@ -74,19 +76,27 @@ describe('renderDetail (F-0025)', () => {
     expect(rows.length).toBe(1)
     const label = (rows[0].querySelector('.detail-credit-label')?.textContent || '').trim()
     expect(label).toContain('演者/制作')
-    // チップは統合・重複除去された名前列
+    // 全チップ（recurrent + singleton）が統合・重複除去された名前列で並ぶ
     const chips = [...rows[0].querySelectorAll('.credit-chip')].map((c) => c.textContent)
-    expect(chips).toEqual(['杉山紀彰', '川澄綾子', '奈須きのこ', 'TYPE-MOON', 'ufotable'])
+    expect(chips).toEqual([
+      '杉山紀彰',
+      '川澄綾子',
+      '奈須きのこ',
+      'TYPE-MOON',
+      'ufotable',
+      '三浦貴博',
+    ])
     // (i) は1つ（統合した見出しに1つ）
     expect(container.querySelectorAll('.detail-credits .info-btn').length).toBe(1)
-    // チップはクリックで人物/会社フィルタ一覧へ（?credit=）。声優も制作会社も同じパラメータ。
-    const first = rows[0].querySelector('a.credit-chip') as HTMLAnchorElement
-    expect(first.getAttribute('href')).toContain('credit=')
-    expect(decodeURIComponent(first.getAttribute('href') || '')).toContain('杉山紀彰')
-    const studioChip = [...rows[0].querySelectorAll('a.credit-chip')].find(
-      (c) => c.textContent === 'ufotable'
-    ) as HTMLAnchorElement
-    expect(studioChip.getAttribute('href')).toContain('credit=')
+    // recurrent はクリック可（a.credit-chip）・href は ?credit=<key>（正規化キーで照合）。
+    const links = [...rows[0].querySelectorAll('a.credit-chip')]
+    expect(links.length).toBe(5)
+    const typeMoon = links.find((c) => c.textContent === 'TYPE-MOON') as HTMLAnchorElement
+    expect(decodeURIComponent(typeMoon.getAttribute('href') || '')).toContain('credit=type-moon')
+    // singleton はクリック不可（span・--singleton）＝<a> ではない。
+    const singleton = rows[0].querySelector('.credit-chip--singleton') as HTMLElement
+    expect(singleton.tagName).toBe('SPAN')
+    expect(singleton.textContent).toBe('三浦貴博')
   })
 
   it('credits が空なら credits セクション自体を出さない', () => {

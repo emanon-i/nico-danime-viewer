@@ -2587,6 +2587,20 @@
     }
   }
 
+  /* singleton（他作品に繋がらない＝recurrence<閾値）＝非クリックの淡色チップ。
+     クリック不可なので hover の accent を出さず、薄く・破線枠で「参考表示」を示す。 */
+  span.credit-chip--singleton {
+    color: var(--text-muted);
+    background: transparent;
+    border-style: dashed;
+    cursor: default;
+
+    &:hover {
+      color: var(--text-muted);
+      border-color: var(--border);
+    }
+  }
+
   .detail-desc {
     font-size: var(--text-l3);
     color: var(--text-muted);

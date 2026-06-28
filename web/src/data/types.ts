@@ -18,8 +18,9 @@ export interface Work {
   franchiseKey: string | null
   colKey: string | null
   /**
-   * 演者/制作（声優・スタッフ人名・制作会社・原作者等を 1 列に統合した名前タグ・1話目由来・
-   * 重複除去）。人物フィルタ `?credit=<名前>` の照合用。旧 JSON（cast/staff 時代）では欠落。
+   * 人物フィルタ `?credit=<key>` の照合用 canonical key 配列（1話目由来・recurrence≥閾値の
+   * クリック可能タグのみ・重複除去）。singleton（他作品に繋がらない）は持たせない。
+   * 旧 JSON（cast/staff 時代）では欠落。
    */
   credits?: string[]
   /** シリーズの各話数（episodes テーブルの件数）。「全N話」表示に使う */
@@ -151,6 +152,21 @@ export interface SeriesEpisode {
   tags?: string[]
 }
 
+/**
+ * 統合クレジットタグ（演者/制作を 1 カテゴリに統合した発見タグ・1話目由来）。
+ * name=表示名 / key=正規化キー（`?credit=` 値・照合用）/ recurrent=他作品に繋がる
+ * （recurrence≥閾値）＝クリック可能か（false=singleton・非クリック/淡色）。
+ * count/source/role は soft metadata（序列・将来の facet 用・UI 非必須）。
+ */
+export interface CreditTag {
+  name: string
+  key: string
+  recurrent: boolean
+  count?: number
+  source?: string
+  role?: string
+}
+
 export interface SeriesDetail {
   seriesId: number
   title: string
@@ -162,10 +178,11 @@ export interface SeriesDetail {
   relatedSeries: RelatedSeries[]
   episodes: SeriesEpisode[]
   /**
-   * 演者/制作（声優・スタッフ人名・制作会社・原作者等を 1 列に統合した名前タグ・1話目由来・
-   * 重複除去）。詳細画面のチップ表示＋ `?credit=` フィルタ用。旧 JSON では欠落＝optional。
+   * 演者/制作を 1 カテゴリに統合した発見タグ列（1話目由来）。詳細画面のチップ表示用。
+   * recurrent なものはクリックで `?credit=<key>` フィルタ、singleton は非クリック表示。
+   * 旧 JSON（string[] 時代）との互換は loader/描画側で吸収。
    */
-  credits?: string[]
+  credits?: CreditTag[]
 }
 
 export interface SeriesDetailJson {
@@ -180,5 +197,5 @@ export interface SeriesDetailJson {
   colKey: string | null
   relatedSeries: RelatedSeries[]
   episodes: SeriesEpisode[]
-  credits?: string[]
+  credits?: CreditTag[]
 }

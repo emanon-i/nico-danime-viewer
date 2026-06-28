@@ -1,4 +1,4 @@
-import type { SeriesDetail, SeriesEpisode } from '../../data/types'
+import type { SeriesDetail, SeriesEpisode, CreditTag } from '../../data/types'
 import { watchLink, seriesLink } from '../../shared/deeplink'
 import { buildDetailUrl, buildListUrl } from '../router'
 import { icon } from '../../components/icon'
@@ -22,32 +22,33 @@ function tagChip(tag: string): HTMLAnchorElement {
   return chip
 }
 
-/** 空白除去＋重複除去（順序保持）。 */
-function dedupNames(names: string[]): string[] {
+const CREDIT_NOTE =
+  'これらは説明文からの自動抽出のため、誤り・抜け・不正確が含まれる場合があります。' +
+  '濃いタグは他の作品にも登場する人物/会社（クリックで横断）、淡いタグはこの作品のみで確認できたものです。'
+
+/** 旧 JSON（credits が string[]）との後方互換: 文字列なら recurrent 扱いの CreditTag に正規化。 */
+function normalizeCreditTags(credits: SeriesDetail['credits']): CreditTag[] {
+  const out: CreditTag[] = []
   const seen = new Set<string>()
-  const out: string[] = []
-  for (const n of names) {
-    const v = (n ?? '').trim()
-    if (v && !seen.has(v)) {
-      seen.add(v)
-      out.push(v)
-    }
+  for (const c of credits ?? []) {
+    const tag: CreditTag = typeof c === 'string' ? { name: c, key: c, recurrent: true } : c
+    const k = tag.key || tag.name
+    if (!tag.name || seen.has(k)) continue
+    seen.add(k)
+    out.push(tag)
   }
   return out
 }
 
-const CREDIT_NOTE =
-  'これらは説明文からの自動抽出のため、誤り・抜け・不正確が含まれる場合があります。'
-
 /**
  * 抽出クレジットを「演者/制作」1 行のタグ列で描画。
  * 声優・スタッフ人名・制作会社・原作者等を**1 カテゴリに統合**し、名前のみをチップ化する
- * （役名・役割ラベルは持たない）。各チップは**クリックでその人物/会社の一覧へ遷移**（`?credit=`）
- * ＝既存タグ chip と同作法。重複除去。データ無しなら null（行ごと非表示）。見出しに (i)（自動抽出の注意）。
+ * （役名・役割ラベルは持たない）。**recurrent（他作品に繋がる）タグはクリックで `?credit=<key>`**、
+ * singleton は非クリック（淡色）で表示するだけ。見出しに (i)（自動抽出の注意）。空なら null。
  */
-function buildCredits(credits: string[]): HTMLElement | null {
-  const names = dedupNames(credits ?? [])
-  if (names.length === 0) return null
+function buildCredits(credits: SeriesDetail['credits']): HTMLElement | null {
+  const tags = normalizeCreditTags(credits)
+  if (tags.length === 0) return null
 
   const wrap = document.createElement('div')
   wrap.className = 'detail-credits'
@@ -69,15 +70,23 @@ function buildCredits(credits: string[]): HTMLElement | null {
 
   const chips = document.createElement('span')
   chips.className = 'detail-credit-chips'
-  for (const n of names) {
-    // クリックでその人物/会社の一覧へ（?credit=）。既存タグ chip と同作法。
-    const chip = document.createElement('a')
-    chip.className = 'credit-chip'
-    chip.href = buildListUrl({ credit: n })
-    chip.textContent = n
-    // ピル方針 §9.12: min(20ch) 超過は … 省略＋全文ツールチップ。
-    if ([...n].length > 20) chip.dataset.tooltip = n
-    chips.appendChild(chip)
+  for (const t of tags) {
+    if (t.recurrent) {
+      // クリックでその人物/会社の一覧へ（?credit=<key>・canonical key で照合）。
+      const chip = document.createElement('a')
+      chip.className = 'credit-chip'
+      chip.href = buildListUrl({ credit: t.key })
+      chip.textContent = t.name
+      if ([...t.name].length > 20) chip.dataset.tooltip = t.name
+      chips.appendChild(chip)
+    } else {
+      // singleton（他作品に繋がらない）＝非クリックの淡色チップ（削除せず提示）。
+      const chip = document.createElement('span')
+      chip.className = 'credit-chip credit-chip--singleton'
+      chip.textContent = t.name
+      if ([...t.name].length > 20) chip.dataset.tooltip = t.name
+      chips.appendChild(chip)
+    }
   }
   r.appendChild(chips)
   wrap.appendChild(r)
