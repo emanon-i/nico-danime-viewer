@@ -65,16 +65,40 @@ export function worksCreditKeys(tags) {
  * canonical key → 表示名（display）のグローバル対応表。適用中ピル（`?credit=<key>`）で原表記
  * （TYPE-MOON・諏訪部 順一 等）を出すために使う。works.credits は key 配列のみ（照合用）なので
  * 表示名を別途持つ。**key と display が異なるものだけ**収録（kanji 名は key==display ＝省略しピル側で
- * key にフォールバック）＝肥大最小化。最初に出会った display を採用。
+ * key にフォールバック）＝肥大最小化。
+ * 表示名の選定は **iteration 順に依存しない安定タイブレーク**（#5: 非決定性の排除）:
+ *   最頻表記 → 同数なら最長表記 → なお同点なら localeCompare 最小。
+ * これにより readdir 順や Store 挿入順が変わってもビルド毎に同一の表示名が選ばれる。
  * @param {Map<number, Array<{display:string,key:string}>>} perSeries
  * @returns {Record<string,string>}
  */
 export function buildCreditDisplayMap(perSeries) {
-  const map = {}
+  // key → (display → 出現数)
+  const counts = new Map()
   for (const tags of perSeries.values()) {
     for (const t of tags ?? []) {
-      if (t.key !== t.display && map[t.key] == null) map[t.key] = t.display
+      if (t.key === t.display) continue // kanji 名（key==display）は省略＝ピル側で key にフォールバック
+      let m = counts.get(t.key)
+      if (!m) counts.set(t.key, (m = new Map()))
+      m.set(t.display, (m.get(t.display) ?? 0) + 1)
     }
+  }
+  const map = {}
+  for (const [key, m] of counts) {
+    let best = null
+    for (const [disp, c] of m) {
+      if (
+        best == null ||
+        c > best.c ||
+        (c === best.c && [...disp].length > [...best.disp].length) ||
+        (c === best.c &&
+          [...disp].length === [...best.disp].length &&
+          disp.localeCompare(best.disp) < 0)
+      ) {
+        best = { disp, c }
+      }
+    }
+    if (best) map[key] = best.disp
   }
   return map
 }

@@ -6,6 +6,7 @@ import {
   countRecurrence,
   summarizeCreditExtraction,
 } from '../../scripts/etl/credits.mjs'
+import { buildCreditDisplayMap } from '../../scripts/store/credit-index.mjs'
 
 // 構造版 = <br> または stripHtml 済みの \n\n 区切り。本エンジンは両方を読む。
 const br = (parts) => parts.join('<br><br>')
@@ -386,5 +387,61 @@ describe('credits.mjs — 残課題の根治（実保存形式 \\n\\n）', () =>
     expect(names(stored(['s。', '©2020 SANRIO CO., LTD.']))).toEqual(['SANRIO'])
     expect(names(stored(['s。', '©1990年－1994年 ぴえろ']))).toEqual(['ぴえろ'])
     expect(names(stored(['s。', '©Benesse Corporation1988－']))).toEqual(['Benesse']) // 年範囲＋法人格除去
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────────────
+// 独立再確認の追加5件（paren迂回/半角句点/latin+カナ中黒/+結合/決定性）。
+// ──────────────────────────────────────────────────────────────────────────
+describe('credits.mjs — 追加残課題の根治', () => {
+  it('#1 括弧注記があっても splitPeople を迂回しない（注記分離→人名分割）', () => {
+    // 漫画ペア＋出版社注記括弧: 注記を落としてから半角2名を分割
+    expect(
+      keys(stored(['s。', '漫画:三好智樹 橋本智広『鬼滅』（講談社「マガジン」連載）']))
+    ).toEqual(['三好智樹', '橋本智広'])
+    // 埋め込み役割語＋括弧: 脚本/作画 を落とし すかぢ・狗神煌 を残す
+    expect(names(stored(['s。', '原作:脚本 すかぢ 作画 狗神煌（ぱれっと）']))).toEqual([
+      'すかぢ',
+      '狗神煌',
+    ])
+    // 姓 名（ふりがな括弧付き）は 1 人のまま（誤分割せず・読みも捨てる）
+    expect(keys(stored(['s。', '出演:木村 了（きむら りょう）']))).toEqual(['木村了'])
+  })
+
+  it('#2 半角句点 ｡(U+FF61) を句点として扱い、あらすじ片ブロックをタグ化しない', () => {
+    // ｡ を含むプロ―ズ段落はブロック単位で synopsis 化（別段落の実クレジットは残す）
+    const raw = stored(['導入。', '主人公:声優A', '概要:ミュージカル化｡幕末の動乱を描く｡'])
+    expect(names(raw)).toEqual(['声優A'])
+  })
+
+  it('#4 latin+カナ中黒の社名（HALF H・Pスタジオ）は割らない', () => {
+    expect(names(stored(['s。', '音響制作:HALF H・Pスタジオ']))).toEqual(['HALF H・Pスタジオ'])
+    expect(names(stored(['s。', 'アニメーション制作:HALF H・P STUDIO']))).toEqual([
+      'HALF H・P STUDIO',
+    ])
+    // 漢字/ひらがな混じりは従来どおり割る（人物＋会社）
+    expect(names(stored(['s。', '原作:奈須きのこ・TYPE-MOON']))).toEqual([
+      '奈須きのこ',
+      'TYPE-MOON',
+    ])
+  })
+
+  it('#+ ＋/+ 結合の制作者ペアを分割（末尾＋の group 名は名前だけ残す）', () => {
+    expect(keys(stored(['s。', '原作:佐島 勤＋森 夕（電撃文庫）']))).toEqual(['佐島勤', '森夕'])
+    expect(names(stored(['s。', '脚本:倉田英之+黒田洋介']))).toEqual(['倉田英之', '黒田洋介'])
+    expect(names(stored(['s。', '歌:DIALOGUE＋']))).toEqual(['DIALOGUE']) // 末尾＋は空片が落ちて名前だけ
+  })
+
+  it('#5 buildCreditDisplayMap は iteration 順に依存せず決定的（最頻表記→最長→辞書順）', () => {
+    const mk = (rev) => {
+      const data = [
+        [1, [{ key: 'type-moon', display: 'TYPE-MOON' }]],
+        [2, [{ key: 'type-moon', display: 'Type-Moon' }]],
+        [3, [{ key: 'type-moon', display: 'TYPE-MOON' }]],
+      ]
+      return buildCreditDisplayMap(new Map(rev ? [...data].reverse() : data))
+    }
+    expect(mk(false)).toEqual({ 'type-moon': 'TYPE-MOON' }) // 最頻（2回）
+    expect(mk(true)).toEqual(mk(false)) // 順序非依存
   })
 })

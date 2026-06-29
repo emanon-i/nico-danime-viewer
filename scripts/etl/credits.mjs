@@ -462,8 +462,9 @@ function splitPeople(p) {
 function splitConnected(value, protectLatin = false) {
   const denyKey = value.normalize('NFKC').toLowerCase()
   if (JOINED_NAME_DENYLIST.has(denyKey)) return [value]
-  // まず読点/カンマ/スラッシュ/×（括弧外のみ・ほぼ確実に複数人/社区切り。WIT STUDIO×CloverWorks）。
-  const parts = splitOutsideParens(value, /[、，,/／×✕]/)
+  // まず読点/カンマ/スラッシュ/×/＋（括弧外のみ・ほぼ確実に複数人/社区切り。WIT STUDIO×CloverWorks、
+  // 佐島 勤＋森 夕、倉田英之+黒田洋介）。末尾 ＋ の group 名（DIALOGUE＋）は空片が filter される＝名前は残る。
+  const parts = splitOutsideParens(value, /[、，,/／×✕＋+]/)
   // 各 part を中黒で分割（括弧外のみ・全 part が純カタカナ = Western 1 名なら割らない）。
   const out = []
   for (const p of parts) {
@@ -475,12 +476,13 @@ function splitConnected(value, protectLatin = false) {
       const allKatakana = segs.length > 0 && segs.every((s) => /^[゠-ヿー]+$/.test(s))
       // 頭文字を中黒で繋いだ 1 名（声優「M・A・O」/ 屋号「P・R・O」）は割らない。
       const allSingleChar = segs.length > 0 && segs.every((s) => [...s].length === 1)
-      // 純ラテン社名（HALF H・P STUDIO）は 1 名＝割らない。日本語/かな混じり（奈須きのこ・TYPE-MOON、
-      // School Days製作委員会）は片側が非ラテンなので保護しない＝割る（#2: 誤統合・委員会丸ごと消滅を回避）。
+      // ラテン社名（HALF H・P STUDIO / HALF H・Pスタジオ）は 1 名＝割らない。各 seg が「ラテンを含み
+      // かつ漢字/ひらがなを含まない」（＝ラテン or カタカナのみ）ときだけ保護（#2/#4）。漢字/ひらがな
+      // 混じり（奈須きのこ・TYPE-MOON、School Days製作委員会）は片側が非ラテンなので割る（誤統合・委員会丸ごと消滅を回避）。
       const allLatin =
         protectLatin &&
         segs.length > 0 &&
-        segs.every((s) => /[A-Za-z]/.test(s) && !/[ぁ-んァ-ヶ一-龯々〆ー]/u.test(s))
+        segs.every((s) => /[A-Za-z]/.test(s) && !/[ぁ-ん一-龯々〆]/u.test(s))
       if (allKatakana || allSingleChar || allLatin) out.push(p)
       else out.push(...segs)
     } else {
@@ -632,16 +634,19 @@ function entryToTags(role, value, blockSource) {
     // タイトル除去で末尾に残った役割注記（奥田 陽介『…』作画監督 → 奥田 陽介 作画監督）を分離。
     p = stripTrailingRole(p)
     if (!p) continue
-    // 空白区切りの人名リスト/姓名を splitPeople で判定（全角/半角を統一規則で）。
-    // 括弧があるもの（所属・連載・ふりがな注記）は丸ごと splitAffiliation に渡す＝空白で割らない。
-    const subs = /[（(]/.test(p) ? [p] : splitPeople(p)
-    for (const sub of subs) {
-      // 先に所属括弧を分離（中黒分割より前）。これで「真島ヒロ・上田敦夫（講談社連載）」は注記を
-      // 落としてから中黒分割でき（→真島ヒロ/上田敦夫）、「今野康之（スワラ・プロ）」は括弧内を割らない。
-      const { name, org } = splitAffiliation(sub, dropParen)
-      for (const part of splitConnected(name, true)) push(part, source)
-      if (org) for (const o of splitConnected(org, true)) push(o, 'studio') // 所属/括弧内メンバーも分割
+    // 先に所属/注記括弧を分離する（#1: 括弧があっても splitPeople を迂回しない）。これで
+    // 「三好智樹 橋本智広（講談社…連載）」「脚本 すかぢ 作画 狗神煌（…）」も注記を落としてから
+    // 空白で人名分割でき、「今野康之（スワラ・プロ）」は括弧内を割らない。
+    const { name: pName, org } = splitAffiliation(p, dropParen)
+    // 区切り（/ 、 , ×）→ 人名（空白・姓名/2名判定）→ 中黒、の順で分割する。順序が重要:
+    // 「構成/竹内良輔 漫画/三好 輝」は先に / で役割/名前を分けてから姓名（三好 輝）を 1 人に保ち、
+    // 「三好智樹 橋本智広」は / が無いので splitPeople が純漢字 4+4 を 2 人に割る。
+    for (const piece of splitOutsideParens(pName, /[、，,/／×✕＋+]/)) {
+      for (const person of splitPeople(piece)) {
+        for (const part of splitConnected(person, true)) push(part, source)
+      }
     }
+    if (org) for (const o of splitConnected(org, true)) push(o, 'studio') // 所属/括弧内メンバーも分割
   }
   return tags
 }
@@ -743,7 +748,9 @@ function mineCopyright(block) {
  *            synopsis:string|null, copyrightRaw:string|null }}
  */
 export function extractCredits(rawHtml) {
-  const text = stripHtml(rawHtml)
+  // 半角句点 ｡(U+FF61) を全角 。 に統一する（#2: hasProsePeriod 等が ｡ を句点と見ず、あらすじ片
+  //「ミュージカル化｡幕末の動乱…」が誤ってタグ化されるのを防ぐ。下流の句点処理に一貫して効かせる）。
+  const text = (stripHtml(rawHtml) || '').replace(/｡/g, '。')
   if (!text) return { structured: false, tags: [], synopsis: null, copyrightRaw: null }
 
   const structured = isStructuredCredits(rawHtml)

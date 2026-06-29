@@ -129,7 +129,9 @@ export async function loadStore(dataDir) {
     files = []
   }
 
-  const jsonFiles = files.filter((f) => f.endsWith('.json'))
+  // readdir の順序は OS/FS 依存で非決定的。ソートして読み込み順＝Store の挿入順を決定的にする
+  //（creditNames 等の first-seen 採用がビルド毎にブレないようにする・#5）。
+  const jsonFiles = files.filter((f) => f.endsWith('.json')).sort()
 
   // Promise.all で並列ロード（OS のファイルキャッシュを活用）
   const CHUNK = 200
