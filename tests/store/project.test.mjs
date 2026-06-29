@@ -2,11 +2,11 @@
 // プロジェクション（works.json）の firstAt 定義テスト（PH 修正: firstAt = MIN(startTime)）
 
 import { describe, it, expect } from 'vitest'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStore, upsertSeries, upsertEpisodes } from '../../scripts/store/store.mjs'
-import { exportWorks, exportNew } from '../../scripts/store/project.mjs'
+import { exportWorks, exportNew, exportWorksPartial } from '../../scripts/store/project.mjs'
 
 function ep(o) {
   return {
@@ -124,5 +124,51 @@ describe('exportNew pubDate 時系列ソート（④-1 RFC822 文字列ソート
     const items = await projectNew(store)
     expect(items[0].watchId).toBe('a')
     expect(items[items.length - 1].watchId).toBe('b')
+  })
+})
+
+describe('exportWorksPartial creditNames マージ（既存表示名を優先・恒久決定化）', () => {
+  it('毎時 partial は既存 key の表示名を上書きせず、未知 key だけ追加・既存は欠落させない', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'partial-'))
+    try {
+      // 既存 works.json（前回ビルド）: type-moon=正規 casing、別 partial に出ない key も保持されること。
+      await writeFile(
+        join(dir, 'works.json'),
+        JSON.stringify({
+          lastUpdated: '2026-06-20T00:00:00Z',
+          works: [{ seriesId: 2, title: '別作品', credits: ['other-only'] }],
+          creditNames: { 'type-moon': 'TYPE-MOON', 'other-only': '別表記スタジオ' },
+        })
+      )
+
+      // 今回の毎時対象（seriesId=1）: 1話目に casing 違いの Type-Moon と新規 key（諏訪部 順一）。
+      const store = createStore()
+      upsertSeries(store, [{ seriesId: 1, title: 'S', isAvailable: true }])
+      upsertEpisodes(store, [
+        ep({
+          contentId: 'so100',
+          seriesId: 1,
+          description: 's。\n\n原作:Type-Moon／声の出演:諏訪部 順一',
+        }),
+      ])
+
+      await exportWorksPartial(store, new Set([1]), dir, '2026-06-21T00:00:00Z')
+      const json = JSON.parse(await readFile(join(dir, 'works.json'), 'utf-8'))
+
+      // 既存 casing は不変（partial の 'Type-Moon' で上書きしない）
+      expect(json.creditNames['type-moon']).toBe('TYPE-MOON')
+      // 既存に無い key は partial から追加（key≠display）
+      expect(json.creditNames['諏訪部順一']).toBe('諏訪部 順一')
+      // partial 非対象の既存 key は carry-forward（欠落しない）
+      expect(json.creditNames['other-only']).toBe('別表記スタジオ')
+      // key/フィルタは決定的: 対象シリーズの credits は再算出されている
+      const w1 = json.works.find((w) => w.seriesId === 1)
+      expect(w1.credits).toContain('type-moon')
+      expect(w1.credits).toContain('諏訪部順一')
+      // 既存シリーズ2も保持
+      expect(json.works.find((w) => w.seriesId === 2)).toBeTruthy()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

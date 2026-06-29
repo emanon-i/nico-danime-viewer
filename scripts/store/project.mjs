@@ -426,11 +426,13 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
   }
 
   const works = [...worksMap.values()].sort((a, b) => a.seriesId - b.seriesId)
-  // key→display 表は既存分を carry-forward しつつ、今回の対象シリーズ分で上書き/追加（partial store
-  // なので全体は再算出できない＝既存とマージ）。ピル表示用・key≠display のみ。
-  const creditNames = {
-    ...(existing.creditNames ?? {}),
-    ...buildCreditDisplayMap(creditIndex.perSeries),
+  // key→display 表（ピル表示用・key≠display のみ）。partial store では全体を再算出できないため既存と
+  // マージするが、**既存表示名を優先し、既存に無い key だけ partial から追加**する。partial subset の
+  // 代表表記で既存の casing（TYPE-MOON↔type-moon 等）を上書きすると毎時更新で表示名が揺れるため。
+  // 欠落は起こさない（carry-forward 維持）。日次フル exportWorks は全件から決定的に再算出＝自己修復。
+  const creditNames = { ...(existing.creditNames ?? {}) }
+  for (const [k, disp] of Object.entries(buildCreditDisplayMap(creditIndex.perSeries))) {
+    if (creditNames[k] == null) creditNames[k] = disp
   }
   await writeJson(outDir, 'works.json', { lastUpdated, works, creditNames })
 }

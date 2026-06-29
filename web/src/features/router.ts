@@ -29,7 +29,7 @@ export interface ListState {
   year: string
   /** お気に入りのみ表示（§50）。URL-backed＝通常フィルタと同じくピル × で解除・reload 保持。 */
   fav: boolean
-  /** 演者/制作（声優・スタッフ人名・制作会社・原作者等）の名前で絞り込み。詳細のチップ → `?credit=<name>`。''=なし。 */
+  /** 演者/制作（声優・スタッフ人名・制作会社・原作者等）の canonical key で絞り込み。詳細のチップ → `?credit=<key>`。''=なし。 */
   credit: string
 }
 
