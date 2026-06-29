@@ -38,7 +38,7 @@ import {
 } from './etl/series.mjs'
 import { deriveCoursFromTagsFromStore } from './etl/cours.mjs'
 import { projectAll, exportNew as exportNewStore, exportWorksPartial } from './store/project.mjs'
-import { summarizeDescriptionParse } from './etl/description.mjs'
+import { summarizeCreditExtraction } from './etl/credits.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -704,12 +704,12 @@ async function runFullJS() {
   await writeBackStore(store, DATA_DIR, { now })
   await projectAll(store, DATA_DIR, now)
 
-  // PH-0014 / F-0059: description 構造分解メトリクス（成功率・未分類数・fallback 数）。
-  // 分類率の急落＝フォーマットドリフトの兆候として後から気づけるようにログへ出す。
-  const descMetrics = summarizeDescriptionParse(
+  // credit 抽出メトリクス（構造化率・カバレッジ・平均タグ数）。実体 extractCredits を通すので
+  // 実保存形式（HTML strip 済みの \n\n / ／）でも正しく数える。急落＝フォーマットドリフトの兆候。
+  const creditMetrics = summarizeCreditExtraction(
     [...store.episodes.values()].map((e) => e.description)
   )
-  logger.info('fetch', '[JS] description parse metrics (PH-0014)', descMetrics)
+  logger.info('fetch', '[JS] credit extraction metrics', creditMetrics)
 
   writeFileSync(join(DATA_DIR, '.deploy-needed'), 'daily\n')
   logger.info('fetch', '[JS] all done', { now, ep0: guard.ep0 })
