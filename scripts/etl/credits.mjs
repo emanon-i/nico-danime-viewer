@@ -82,6 +82,17 @@ function stripTrailingRole(s) {
 function isRoleLabel(key) {
   return ROLE_LABEL_RE.test(key)
 }
+// 先頭の役割語（制作/製作/企画/監修/協力 とその連結）。`制作協力ENGI`→`ENGI`・`製作竜の子…`→`竜の子…`（#1b）。
+// 完全な役割語のみ照合＝姓（協・監 等の単字）は剥がさない。
+const LEADING_ROLE_RE =
+  /^(?:アニメーション制作協力|アニメーション制作|制作協力|製作協力|企画製作|企画制作|制作|製作|監修|協力)+/u
+// 末尾の部署ラベル（実制作会社名ではない）。`TOブックス企画製作部`→`TOブックス`（#1b）。
+// 注: `編集室`/`編集部` は実在の編集スタジオ名（森田編集室・瀬山編集室）を壊すため含めない。
+const DEPT_SUFFIX_RE = /(?:企画製作部|企画制作部|製作部|制作部)$/u
+// 委員会代理の generic プロジェクト（作品名＋プロジェクト/Project の製作委員会相当）。末尾一致のみ＝
+// `プロジェクトラブライブ！`（先頭）や `project No.9`（末尾が No.9）は守る。copyright/studio 経路だけで落とす
+// （JAM Project 等の themeSong/cast は対象外）（#1c）。
+const GENERIC_PROJECT_RE = /(?:プロジェクト|project)$/iu
 // 括弧内が「代表作の役職注記」（…作画監督 / …アニメパート演出 等）かの判定用。**明確に制作役割の語**だけ。
 // 企画/制作/製作/音楽/設定/美術/撮影/編集 は社名にも現れる（◯◯企画・◯◯制作）ため除外＝実在社名を守る。
 const ANNOTATION_ROLE_RE =
@@ -155,7 +166,39 @@ const VALUE_STOPWORDS = new Set([
   '脚本',
   '演出',
   '振付',
+  // 主題歌ラベル（value/song 経路に label だけ漏れたもの。曲名は元々落とす方針・人名は作詞作曲経路で取る）
+  'オープニングテーマ',
+  'エンディングテーマ',
+  'テーマソング',
+  'テーマ曲',
+  'イメージソング',
+  'キャラクターソング',
 ])
+
+// 主題歌ラベル（value 内に埋め込まれて run-on になるもの）。エントリ区切りに置換して分離する。
+// 例: 音楽:「Dolce Triade オープニングテーマ｢…｣OKINO」→ Dolce Triade / OKINO に割る。
+const THEME_LABEL_RE =
+  /(オープニングテーマ|エンディングテーマ|テーマソング|テーマ曲|イメージソング|キャラクターソング|挿入歌|劇中歌|主題歌)/g
+
+// 出版注記（雑誌名/レーベル/連載表記）= 著者でも出版社でもない publication note。タグにしない。
+//   - 月刊/週刊/季刊/別冊… 接頭の雑誌名（月刊Gファンタジー・週刊少年マガジン）
+//   - ◯◯文庫（角川文庫・電撃文庫・富士見ファンタジア文庫）= レーベル名
+//   - 連載/掲載/所載 を含む run-on 注記（一迅社月刊ZERO-SUM連載中 等）
+// 注: `◯◯刊`/`◯◯連載` の末尾注記は cleanDisplay で剥がして実出版社（集英社・KADOKAWA・双葉社…）に
+// 寄せてから、この RE で残った雑誌/レーベル/run-on だけを落とす（実在出版社は守る）。
+const PUBLICATION_NOTE_RE = /(?:月刊|週刊|隔週刊|隔月刊|季刊|別冊|連載|掲載|所載)|文庫$/u
+// 末尾の出版注記（◯◯刊・◯◯連載中・◯◯掲載・◯◯所載）。実出版社名を残して注記だけ剥がす。
+const TRAILING_PUB_NOTE_RE = /[\s\u3000]*(?:連載中|連載|掲載中|掲載|所載)[\s\u3000]*$/u
+
+// 著作権年号（1900-2099・`年`接尾・範囲表記 1990年－1994年 に対応）。先頭/末尾/埋め込みで実体から剥がす。
+const YEAR_TOKEN = String.raw`(?:19|20)\d{2}\s*年?`
+const YEAR_RANGE = `${YEAR_TOKEN}(?:\\s*[-–—~〜－‐]\\s*(?:(?:19|20)?\\d{1,4})?\\s*年?)?`
+const LEADING_YEAR_RE = new RegExp(`^${YEAR_RANGE}[\\s\u3000]*`, 'u') // 2020 SANRIO→SANRIO / 1990年－1994年 ぴえろ→ぴえろ
+const TRAILING_YEAR_RANGE_RE = new RegExp(
+  `[\\s\u3000]*${YEAR_TOKEN}\\s*[-–—~〜－‐]\\s*\\d{0,4}\\s*年?\\s*$`,
+  'u'
+) // …1981- / Corporation1988－
+const EMBEDDED_YEAR_RE = new RegExp(`[\\s\u3000]+${YEAR_RANGE}[\\s\u3000]*`, 'gu') // … 1993 … → 区切り
 
 // 放送局・配給など「作品横断だが制作クリエイティブでない」高頻度ノイズ（発見タグから外す）。
 const BROADCASTER_RE =
@@ -272,6 +315,13 @@ function stripSubtitleTilde(s) {
 function cleanDisplay(name) {
   let s = (name ?? '').trim()
   s = s.replace(/^[©Ⓒⓒ®™\s]+/u, '') // 行頭の ©/®（©Frontwing → Frontwing）
+  // 孤立した法人格接頭・英語クレジット boilerplate 接頭を剥がして実名を回収する
+  //（LTD. TIGER PICTURE ENTERTAINMENT→TIGER…・Inc. developed by QualiArts→QualiArts）。
+  s = s.replace(/^(?:co|ltd|inc|llc|corp|k\.?k)\.?[\s,]+/i, '')
+  s = s.replace(
+    /^(?:developed|published|presented|distributed|licensed|produced|created)\s+by\s+/i,
+    ''
+  )
   s = s.replace(/^[（(](?:CV|Cv|cv|ＣＶ)[）)]\s*/u, '') // 声優マーカー (CV) 接頭（(CV)宮野 真守 → 宮野 真守）
   // バランスした角括弧/隅付き括弧の注記（[mf文庫jシリーズ] 等のレーベル/代表作）を先に除去。
   s = s.replace(/【[^】]*】|［[^］]*］|\[[^\]]*\]/gu, ' ').trim()
@@ -286,10 +336,19 @@ function cleanDisplay(name) {
   s = s.replace(/\s+著.*$/u, '') // 「○○ 著『…』」
   s = s.replace(/\s*[…‥]+$/u, '') // 末尾の…（and more… 等）
   s = s.replace(/[\s、,]*(?:他|ほか)(?:多数)?[。\s]*$/u, '') // 末尾「他」「ほか。」
-  s = s.replace(/(\D)\s*(?:19|20)\d{2}$/u, '$1') // 末尾の年（アンサンブル 2014→アンサンブル・1869 等は非数字前置のみ）
+  // 著作権年号（先頭/末尾・範囲表記含む）を剥がす。©2020 SANRIO→SANRIO / Benesse Corporation1988-→Benesse Corporation。
+  s = s.replace(LEADING_YEAR_RE, '') // 先頭の年（2020 SANRIO→SANRIO・1990年－1994年 ぴえろ→ぴえろ）
+  s = s.replace(TRAILING_YEAR_RANGE_RE, '') // 末尾の年範囲（…1981- / …1998-2025 / Corporation1988－）
+  s = s.replace(/(\D)\s*(?:19|20)\d{2}\s*年?$/u, '$1') // 末尾の単年（アンサンブル 2014→アンサンブル・1869 等は非数字前置のみ）
   s = s.replace(/^[・,，、/／\s]+/, '').replace(/[・,，、/／\s」』）)】＞>｣》\]｝}]+$/, '')
   // 名前末尾にくっついた役割注記（`奥田 陽介 作画監督`／`竹内良輔 漫画`）を分離。
   s = stripTrailingRole(s.trim())
+  // 先頭の役割語（制作協力ENGI→ENGI）・末尾の部署（TOブックス企画製作部→TOブックス）を剥がす（#1b）。
+  s = s.replace(LEADING_ROLE_RE, '').trim()
+  s = s.replace(DEPT_SUFFIX_RE, '').trim()
+  // 出版注記の末尾（集英社刊 → 集英社・講談社 連載 → 講談社）を剥がして実出版社名に寄せる。
+  s = s.replace(TRAILING_PUB_NOTE_RE, '').trim()
+  s = s.replace(/刊$/u, '').trim() // 末尾「刊」（集英社刊・双葉社刊）。雑誌/レーベルは PUBLICATION_NOTE_RE で別途落とす。
   // 引用符無しで名前に続いた副題（茨木野～奈落で鍛えた…～）を除去。
   s = stripSubtitleTilde(s.trim())
   return s.trim()
@@ -354,6 +413,16 @@ function splitOutsideParens(value, sepRe) {
 const JP_CHAR = '一-龯々〆ヵヶぁ-んァ-ヶーゝゞ'
 const JP_NAME_SPACE_RE = new RegExp(`(?<=[${JP_CHAR}]) +(?=[${JP_CHAR}])`)
 
+// 純漢字（姓名内に空白を持たない完全な氏名片）か。`\p{sc=Han}` で 髙﨑廣 等の異体字も拾う。
+const PURE_KANJI_RE = /^[\p{sc=Han}々〆ヶヵ]+$/u
+// 半角スペース 2 分割が「2 人」か「1 人の姓 名」かの判定（#3）。
+// 両トークンが純漢字かつ各 4 文字以上 ＝ それぞれが完結した氏名（三好智樹 橋本智広）＝ 2 人。
+// 4 文字未満（井上 喜久子＝2+3 / 佐々木 研太郎＝3+3）は姓 名の可能性が残るため割らない（誤分割回避）。
+// 4 文字姓は実在ほぼ皆無＝「姓 名」が 4+4 になることはなく、誤って 1 人を 2 タグ化しない安全側の閾値。
+function isTwoFullNames(a, b) {
+  return PURE_KANJI_RE.test(a) && PURE_KANJI_RE.test(b) && [...a].length >= 4 && [...b].length >= 4
+}
+
 // 値（括弧無し）を人名リストに分割する。データ規約と整合する空白の扱い:
 //   - 全角空白 U+3000 ＝主に「人物間」区切り（舞台/ライブの全角空白区切りリスト）。
 //   - 半角空白 ＝主に「姓 名」区切り（兵頭 秀明 / 佐野 岳）。
@@ -380,13 +449,17 @@ function splitPeople(p) {
       .filter(Boolean)
     if (hp.length >= 3)
       out.push(...hp) // 半角空白の 3 名以上リスト（関根優那 高橋りな 寒竹優衣）
-    else out.push(u) // 2 要素以下は姓名（木村 了）＝分割しない（normalizePersonKey が空白除去）
+    else if (hp.length === 2 && isTwoFullNames(hp[0], hp[1]))
+      out.push(...hp) // 純漢字 4+4 の半角空白 2 トークン＝2 人（三好智樹 橋本智広）
+    else out.push(u) // それ以外の 2 要素以下は姓名（木村 了）＝分割しない（normalizePersonKey が空白除去）
   }
   return out.length ? out : [p]
 }
 
 // 中黒/読点/カンマで連結された複数名を分割する（発見用途）。Western 単一名・括弧内は割らない。
-function splitConnected(value) {
+// protectLatin: クレジット role 値（制作:HALF H・P STUDIO 等）では純ラテン社名の中黒を割らない（#2）。
+// © 行（mineCopyright）では中黒が別権利者の区切り（©ATLUS・TMS / ©SCEI・IPA）なので保護しない＝割る。
+function splitConnected(value, protectLatin = false) {
   const denyKey = value.normalize('NFKC').toLowerCase()
   if (JOINED_NAME_DENYLIST.has(denyKey)) return [value]
   // まず読点/カンマ/スラッシュ/×（括弧外のみ・ほぼ確実に複数人/社区切り。WIT STUDIO×CloverWorks）。
@@ -402,7 +475,13 @@ function splitConnected(value) {
       const allKatakana = segs.length > 0 && segs.every((s) => /^[゠-ヿー]+$/.test(s))
       // 頭文字を中黒で繋いだ 1 名（声優「M・A・O」/ 屋号「P・R・O」）は割らない。
       const allSingleChar = segs.length > 0 && segs.every((s) => [...s].length === 1)
-      if (allKatakana || allSingleChar) out.push(p)
+      // 純ラテン社名（HALF H・P STUDIO）は 1 名＝割らない。日本語/かな混じり（奈須きのこ・TYPE-MOON、
+      // School Days製作委員会）は片側が非ラテンなので保護しない＝割る（#2: 誤統合・委員会丸ごと消滅を回避）。
+      const allLatin =
+        protectLatin &&
+        segs.length > 0 &&
+        segs.every((s) => /[A-Za-z]/.test(s) && !/[ぁ-んァ-ヶ一-龯々〆ー]/u.test(s))
+      if (allKatakana || allSingleChar || allLatin) out.push(p)
       else out.push(...segs)
     } else {
       out.push(p)
@@ -415,7 +494,8 @@ function splitConnected(value) {
 // のような実在のグループ/スタジオ/フランチャイズ名は **落とさない**（generic な project/プロジェクト
 // 接尾では弾かない＝実名の取りこぼし回避）。
 function isCommittee(value) {
-  return COMMITTEE_RE.test(value)
+  // 原文に空白混入（こまねこフィルムパー トナーズ）があっても判定できるよう空白を無視して照合する（#5）。
+  return COMMITTEE_RE.test(value) || COMMITTEE_RE.test(value.replace(/[\s\u3000]+/g, ''))
 }
 
 // 話数レンジ/ハッシュ断片か（#1〜20・第61話～第97話・27～50話・Vol.2～3）。
@@ -440,9 +520,11 @@ function isPlausibleName(value) {
   if (/(です|ます|なります|表記|について)/.test(v)) return false // 注記文（※…が正式表記です 等）＝名前でない
   if (/(CC-BY|contributors|改変|ライセンス|all rights|reserved)/i.test(v)) return false // ライセンス/権利表記片
   if (/[:：;；]/.test(v)) return false // コロン/セミコロン残り＝役割ラベル/区切りの取り残し（名前でない）
+  if (/(under license|used under|all rights|reserved)/i.test(v)) return false // 英語著作権 boilerplate 断片
   if (/^[\d\s.,，、:：#＃[\]()（）・/／'"?？!！~～ー-]+$/.test(v)) return false // 数値/記号のみ
   if (isEpisodeFragment(v)) return false // 話数レンジ/ハッシュ断片
   if (isCommittee(v)) return false
+  if (PUBLICATION_NOTE_RE.test(v)) return false // 雑誌/レーベル/連載注記（月刊◯◯・◯◯文庫・◯◯連載）
   if (BROADCASTER_RE.test(v.normalize('NFKC'))) return false
   // 年号入り copyright 文字列
   if (COPYRIGHT_MARK_RE.test(v) && /\d{4}/.test(v)) return false
@@ -482,6 +564,9 @@ function entryToTags(role, value, blockSource) {
   // から漏れ、後段の NFKC（normalizePersonKey）で 、 化して「池尻裕､名嘉真法久」が 1 キーに
   // 結合残存する（#4 根治）。全角読点/カンマは ENTRY_SEP_RE が既に拾う。
   value = (value ?? '').replace(/､/g, '、')
+  // 主題歌ラベル（音楽:「… オープニングテーマ｢曲｣OKINO …」）と空白で囲まれた埋め込み年号
+  //（製作:竜の子プロダクション 1993 日本コロムビア）をエントリ区切りに置換して分離する（#4 / #1c）。
+  value = value.replace(THEME_LABEL_RE, '、').replace(EMBEDDED_YEAR_RE, '、')
   const tags = []
   const push = (display, source) => {
     // 委員会/年号 copyright は cleanDisplay が括弧/曲名で切る前に生値で弾く
@@ -490,6 +575,12 @@ function entryToTags(role, value, blockSource) {
     const disp = cleanDisplay(display)
     if (!disp) return
     if (!isPlausibleName(disp)) return
+    // 委員会代理の generic ◯◯プロジェクト（製作/制作・copyright 経路のみ）を落とす（#1c）。
+    if (
+      (source === 'copyright' || source === 'studio') &&
+      GENERIC_PROJECT_RE.test(disp.replace(/[\s\u3000]+/g, ''))
+    )
+      return
     const key = normalizePersonKey(disp)
     if (!key || [...key].length <= 1) return // 1 文字キー（頭文字片）はタグにしない
     if (VALUE_STOPWORDS.has(key)) return // 正規化後が役割語/汎用語（ほか。→ほか 等）
@@ -509,7 +600,7 @@ function entryToTags(role, value, blockSource) {
         const cm = seg.match(/[:：]([^:：]*)$/)
         if (cm) seg = cm[1]
         const { name } = splitAffiliation(seg.trim())
-        for (const part of splitConnected(name)) push(part, 'themeSong')
+        for (const part of splitConnected(name, true)) push(part, 'themeSong')
       }
     }
     return tags
@@ -548,8 +639,8 @@ function entryToTags(role, value, blockSource) {
       // 先に所属括弧を分離（中黒分割より前）。これで「真島ヒロ・上田敦夫（講談社連載）」は注記を
       // 落としてから中黒分割でき（→真島ヒロ/上田敦夫）、「今野康之（スワラ・プロ）」は括弧内を割らない。
       const { name, org } = splitAffiliation(sub, dropParen)
-      for (const part of splitConnected(name)) push(part, source)
-      if (org) for (const o of splitConnected(org)) push(o, 'studio') // 所属/括弧内メンバーも分割
+      for (const part of splitConnected(name, true)) push(part, source)
+      if (org) for (const o of splitConnected(org, true)) push(o, 'studio') // 所属/括弧内メンバーも分割
     }
   }
   return tags
@@ -604,6 +695,10 @@ function stripCorpSuffix(s) {
 // 裸の法人格サフィックスだけのキー（ltd/inc/co/llc/corp/kk）はタグにしない（安全網）。
 const BARE_CORP_RE = /^(?:co|ltd|inc|llc|corp|kk|coltd)$/i
 
+// 空白で囲まれた役割語（`MilkyCartoon 原作 Naomi Iwata` の 原作）= 実体間の区切り。区切りに置換して割る。
+const EMBEDDED_ROLE_SEP_RE =
+  /[\s\u3000]+(?:原作|原案|原著|監督|総監督|脚本|構成|シリーズ構成|作画|作画監督|演出|音楽|キャラクターデザイン|キャラクター原案)[\s\u3000]+/gu
+
 function mineCopyright(block) {
   const tags = []
   const pushName = (display) => {
@@ -611,6 +706,7 @@ function mineCopyright(block) {
     const disp = stripCorpSuffix(cleanDisplay(display))
     if (!disp) return
     if (!isPlausibleName(disp)) return
+    if (GENERIC_PROJECT_RE.test(disp.replace(/[\s\u3000]+/g, ''))) return // generic ◯◯プロジェクト（委員会代理）
     const key = normalizePersonKey(disp)
     if (!key || [...key].length <= 1) return
     if (VALUE_STOPWORDS.has(key) || isRoleLabel(key) || BARE_CORP_RE.test(key)) return
@@ -625,8 +721,13 @@ function mineCopyright(block) {
     for (let tok of line.split(/[／/]/)) {
       tok = tok
         .replace(/^[\s.。・,，、:：'"“”‐–—-]+/u, '') // 行頭の飾り
-        .replace(/^\s*(?:19|20)\d{2}(?:\s*[-–~〜]\s*\d{2,4})?\s*/u, '') // 先頭の年（©2016 …）
+        .replace(LEADING_YEAR_RE, '') // 先頭の年（©2016 … / 1990年－1994年）
         .trim()
+      tok = tok.replace(LEADING_ROLE_RE, '').trim() // 先頭の役割語（制作協力ENGI→ENGI）
+      tok = tok.replace(DEPT_SUFFIX_RE, '').trim() // 末尾の部署（…企画製作部→…）
+      tok = tok
+        .replace(EMBEDDED_YEAR_RE, '／') // 埋め込み年号で実体を区切る（…1993…→区切り）
+        .replace(EMBEDDED_ROLE_SEP_RE, '／') // 埋め込み役割語（… 原作 …）で実体を区切る
       tok = stripCorpSuffix(tok) // CO., LTD. を分割前に剥がす（SANRIO CO., LTD.→SANRIO）
       if (!tok) continue
       for (const part of splitConnected(tok)) pushName(part)
