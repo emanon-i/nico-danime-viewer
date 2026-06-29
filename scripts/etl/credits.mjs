@@ -478,6 +478,10 @@ function extractSongNames(value) {
  * @returns {Array<{display:string, key:string, source:string, role:string}>}
  */
 function entryToTags(role, value, blockSource) {
+  // 読点の幅統一を **分割の前に** 行う（半角読点 ､ U+FF64 → 、）。これをしないと ､ が分割集合
+  // から漏れ、後段の NFKC（normalizePersonKey）で 、 化して「池尻裕､名嘉真法久」が 1 キーに
+  // 結合残存する（#4 根治）。全角読点/カンマは ENTRY_SEP_RE が既に拾う。
+  value = (value ?? '').replace(/､/g, '、')
   const tags = []
   const push = (display, source) => {
     // 委員会/年号 copyright は cleanDisplay が括弧/曲名で切る前に生値で弾く
@@ -581,6 +585,56 @@ function parseBlock(block, blockSource) {
   return tags
 }
 
+// 著作権（©）行から制作実体（著者・出版社・制作会社）をマイニングする（#3 = recall 要件）。
+// role:value を持たない `©藤本タツキ／集英社・MAPPA` `©カラー／EVA製作委員会` は parseBlock では
+// 拾えず空になるため、ここで © 直後の著者名・／後の社名を救出する。年号・◯◯製作委員会・記号は除外。
+// 英語法人格サフィックス（CO., LTD. / Inc. / LLC / Corp.）。連結分割の前に末尾から剥がす＝
+// 「SANRIO CO., LTD.」が読点分割で「SANRIO CO.」「LTD.」に砕けるのを防ぎ「SANRIO」に寄せる。
+const CORP_SUFFIX_RE =
+  /[\s,，、]*(?:co\.?\s*,?\s*ltd\.?|company\s*,?\s*limited|corporation|corp\.?|incorporated|inc\.?|l\.?l\.?c\.?|ltd\.?|co\.|k\.?\s*k\.?)\.?\s*$/i
+function stripCorpSuffix(s) {
+  let prev
+  let out = s.trim()
+  do {
+    prev = out
+    out = out.replace(CORP_SUFFIX_RE, '').trim()
+  } while (out !== prev && out)
+  return out
+}
+// 裸の法人格サフィックスだけのキー（ltd/inc/co/llc/corp/kk）はタグにしない（安全網）。
+const BARE_CORP_RE = /^(?:co|ltd|inc|llc|corp|kk|coltd)$/i
+
+function mineCopyright(block) {
+  const tags = []
+  const pushName = (display) => {
+    if (isCommittee(display)) return
+    const disp = stripCorpSuffix(cleanDisplay(display))
+    if (!disp) return
+    if (!isPlausibleName(disp)) return
+    const key = normalizePersonKey(disp)
+    if (!key || [...key].length <= 1) return
+    if (VALUE_STOPWORDS.has(key) || isRoleLabel(key) || BARE_CORP_RE.test(key)) return
+    tags.push({ display: disp, key, source: 'copyright', role: 'copyright' })
+  }
+  for (let line of block.split('\n')) {
+    line = stripQuotedTitles(line)
+      .replace(/[©Ⓒⓒ]|\([Cc]\)|[®™]/g, ' ') // © (C) ® ™
+      .replace(/all rights reserved\.?/gi, ' ')
+      .replace(/､/g, '、')
+    // 主区切り＝スラッシュ（©著者／出版社・制作会社）。各トークンの先頭年号と法人格を落として連結分割。
+    for (let tok of line.split(/[／/]/)) {
+      tok = tok
+        .replace(/^[\s.。・,，、:：'"“”‐–—-]+/u, '') // 行頭の飾り
+        .replace(/^\s*(?:19|20)\d{2}(?:\s*[-–~〜]\s*\d{2,4})?\s*/u, '') // 先頭の年（©2016 …）
+        .trim()
+      tok = stripCorpSuffix(tok) // CO., LTD. を分割前に剥がす（SANRIO CO., LTD.→SANRIO）
+      if (!tok) continue
+      for (const part of splitConnected(tok)) pushName(part)
+    }
+  }
+  return tags
+}
+
 /**
  * 生 description → 発見タグ列（per-series・recurrence 適用前）。
  * @param {string|null|undefined} rawHtml
@@ -614,9 +668,11 @@ export function extractCredits(rawHtml) {
     const isCopyright = COPYRIGHT_MARK_RE.test(block) || COMMITTEE_RE.test(block)
 
     if (isCopyright) {
-      // copyright ブロックも role:value を再パースして制作実体（原作者/監督/制作会社）を救出。
+      // copyright ブロックから制作実体（原作者/監督/制作会社）を救出。
+      // role:value があれば parseBlock、無ければ mineCopyright（©著者／社名）で拾う（#3 recall）。
       copyrightRaw = copyrightRaw ? `${copyrightRaw}\n${block}` : block
       if (hasColonSeg) allTags.push(...parseBlock(block, 'copyright'))
+      else allTags.push(...mineCopyright(block))
       continue
     }
 
