@@ -538,6 +538,7 @@ async function render(): Promise<void> {
       data: {
         tags: cache.tags?.tags ?? [],
         cours: cache.cours?.cours ?? [],
+        creditNames: cache.works?.creditNames,
       },
       favFilter,
       wantFilter,

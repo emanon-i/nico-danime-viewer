@@ -14,6 +14,8 @@ import { coursList, toggleCours } from './filter'
 export interface ListData {
   tags: Tag[]
   cours: CoursGroup[]
+  /** canonical key → 表示名（原表記）。適用中ピルで `?credit=` の key を元の名前で出すため（任意）。 */
+  creditNames?: Record<string, string>
 }
 
 // マークフィルタ（お気に入り/見たい/見た）のアイコン・クラス・ラベル。サイドバーのチェック
@@ -682,8 +684,12 @@ export function renderList(
     addLinkChip(coursLabel, { ...state, cours: toggleCours(state.cours, c) })
   }
   if (state.row) addLinkChip(`${state.row}行`, { ...state, row: '' })
-  // 人物フィルタ: 演者/制作チップは URL-backed。[×] は credit を外す（タグと同作法）。
-  if (state.credit) addLinkChip(`演者/制作「${state.credit}」`, { ...state, credit: '' })
+  // 人物フィルタ: 演者/制作チップは URL-backed。ピルは原表記（display）を出す（key は照合用）。
+  // creditNames に無い key（漢字名等で key==display）はそのまま key を表示＝元の名前と一致。
+  if (state.credit) {
+    const creditLabel = data?.creditNames?.[state.credit] ?? state.credit
+    addLinkChip(`演者/制作「${creditLabel}」`, { ...state, credit: '' })
+  }
   if (favFilter) addBtnChip(MARK_META.fav.text, onClearFav, MARK_META.fav)
   if (wantFilter) addBtnChip(MARK_META.want.text, onClearWant, MARK_META.want)
   if (watchedFilter) addBtnChip(MARK_META.watched.text, onClearWatched, MARK_META.watched)

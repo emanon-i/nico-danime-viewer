@@ -18,9 +18,9 @@ export interface Work {
   franchiseKey: string | null
   colKey: string | null
   /**
-   * 人物フィルタ `?credit=<key>` の照合用 canonical key 配列（1話目由来・recurrence≥閾値の
-   * クリック可能タグのみ・重複除去）。singleton（他作品に繋がらない）は持たせない。
-   * 旧 JSON（cast/staff 時代）では欠落。
+   * 人物フィルタ `?credit=<key>` の照合用 canonical key 配列（1話目由来・**全タグ均一にクリック可**で
+   * recurrence の多寡で絞らない・重複除去）。1 作品しかヒットしない key もそのまま持たせる
+   * （クリックすれば自作品 1 件が返る＝一貫・予測可能）。旧 JSON（cast/staff 時代）では欠落。
    */
   credits?: string[]
   /** シリーズの各話数（episodes テーブルの件数）。「全N話」表示に使う */
@@ -53,6 +53,12 @@ export interface Work {
 export interface WorksJson {
   lastUpdated: string
   works: Work[]
+  /**
+   * 適用中ピルの表示名復元用 canonical key → 表示名（原表記）対応表。`?credit=<key>` の key は
+   * 照合用で小文字化/空白除去されるため、ピルには元の表記（TYPE-MOON・諏訪部 順一 等）を出す。
+   * key==display の名前（多くの漢字名）は省略＝ピル側で key にフォールバックする。旧 JSON では欠落。
+   */
+  creditNames?: Record<string, string>
 }
 
 export interface RankingEntry {
@@ -177,8 +183,9 @@ export interface SeriesDetail {
   episodes: SeriesEpisode[]
   /**
    * 演者/制作を 1 カテゴリに統合した発見タグ列（1話目由来）。詳細画面のチップ表示用。
-   * recurrent なものはクリックで `?credit=<key>` フィルタ、singleton は非クリック表示。
-   * 旧 JSON（string[] 時代）との互換は loader/描画側で吸収。
+   * **全タグ均一にクリック可能**で `?credit=<key>` フィルタへ遷移（recurrence の多寡で
+   * クリック可否や見た目を変えない＝既存タグ `#…` と同作法）。旧 JSON（string[] 時代）との
+   * 互換は loader/描画側で吸収。
    */
   credits?: CreditTag[]
 }

@@ -60,3 +60,21 @@ export function worksCreditKeys(tags) {
   }
   return out
 }
+
+/**
+ * canonical key → 表示名（display）のグローバル対応表。適用中ピル（`?credit=<key>`）で原表記
+ * （TYPE-MOON・諏訪部 順一 等）を出すために使う。works.credits は key 配列のみ（照合用）なので
+ * 表示名を別途持つ。**key と display が異なるものだけ**収録（kanji 名は key==display ＝省略しピル側で
+ * key にフォールバック）＝肥大最小化。最初に出会った display を採用。
+ * @param {Map<number, Array<{display:string,key:string}>>} perSeries
+ * @returns {Record<string,string>}
+ */
+export function buildCreditDisplayMap(perSeries) {
+  const map = {}
+  for (const tags of perSeries.values()) {
+    for (const t of tags ?? []) {
+      if (t.key !== t.display && map[t.key] == null) map[t.key] = t.display
+    }
+  }
+  return map
+}

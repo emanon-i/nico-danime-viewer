@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { recalcSeriesMetricsJS } from '../etl/metrics.mjs'
-import { buildCreditIndex, worksCreditKeys } from './credit-index.mjs'
+import { buildCreditIndex, worksCreditKeys, buildCreditDisplayMap } from './credit-index.mjs'
 
 // ── ヘルパ ───────────────────────────────────────────────────────────────────
 
@@ -137,7 +137,10 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
   // series_id 昇順（SQLと同一の決定的順序）
   works.sort((a, b) => a.seriesId - b.seriesId)
 
-  await writeJson(outDir, 'works.json', { lastUpdated, works })
+  // 適用中ピルの表示名復元用 key→display 表（key≠display のものだけ＝肥大最小化）。
+  const creditNames = buildCreditDisplayMap(creditIndex.perSeries)
+
+  await writeJson(outDir, 'works.json', { lastUpdated, works, creditNames })
 }
 
 // ── ranking.json ─────────────────────────────────────────────────────────────
@@ -423,7 +426,13 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
   }
 
   const works = [...worksMap.values()].sort((a, b) => a.seriesId - b.seriesId)
-  await writeJson(outDir, 'works.json', { lastUpdated, works })
+  // key→display 表は既存分を carry-forward しつつ、今回の対象シリーズ分で上書き/追加（partial store
+  // なので全体は再算出できない＝既存とマージ）。ピル表示用・key≠display のみ。
+  const creditNames = {
+    ...(existing.creditNames ?? {}),
+    ...buildCreditDisplayMap(creditIndex.perSeries),
+  }
+  await writeJson(outDir, 'works.json', { lastUpdated, works, creditNames })
 }
 
 // ── 全 projection を実行 ─────────────────────────────────────────────────────
