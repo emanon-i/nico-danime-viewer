@@ -43,7 +43,46 @@
 
 **破壊リスク**: 低（出力内容は同じ・書き込み手順のみ変更）。ただし workflows の rsync 対象パスに `.staging/` が混ざらないよう `.gitignore`/rsync exclude を確認。
 
-## 4. 神モジュールの分割 — テスト圏外ロジックの救出（C8）
+## 4. scripts の型検査導入（C20）
+
+**問題**: `tsconfig.json` の include は `web/src/**/*.ts`・vite/vitest config・`tests/**/*.ts` のみで、**`scripts/`（約 5,600 行）は `pnpm typecheck` の完全な圏外**（`checkJs`/`allowJs` なし）。`store.mjs` の丁寧な JSDoc `@typedef` 群（`store.mjs:21-88`）は何にも検査されていない装飾。最も複雑で最もテストが薄い層に型検査もない。eslint も `tseslint.configs.recommended`（type-checked なし）。
+
+**対象ファイル**: `tsconfig.json`（または scripts 用の `tsconfig.scripts.json` を新設して `typecheck` script に追加）、段階的に `scripts/**/*.mjs`、`eslint.config.js`。
+
+**変更方針**（段階導入・一気にやらない）:
+
+1. `tsconfig.scripts.json` を新設: `allowJs: true, checkJs: true, noEmit: true`、include を **小さく確実なモジュールから**（`scripts/lib/`, `scripts/etl/tags.mjs`, `scripts/etl/metrics.mjs` 等）開始。`pnpm typecheck` を `tsc -p . && tsc -p tsconfig.scripts.json` に
+2. エラーを解消しながら include を `nico/` → `store/` → `fetch.mjs` へ拡大（各拡大が 1 PR）。既存 JSDoc が資産なので想定コストは中程度
+3. 最後に eslint を `recommended-type-checked` へ引き上げ（`no-floating-promises` 等が有効化）
+
+**受け入れ条件**: 各段階で `pnpm typecheck` 緑・CI（Phase 1 の ci.yml）でゲート。JSDoc の嘘（実装と型注釈の乖離）が検出・修正されること自体が成果。
+
+**検証方法**: `pnpm typecheck`。段階拡大ごとに検出された型齟齬を PR 説明に列挙。
+
+## 5. 射影ソートの決定性ローカル化（C23）
+
+**問題**: 「決定的ビルド」は `store.mjs:134` のファイル名ソート（ロード順固定）という**大域不変量に暗黙依存**している。`tags.json`（`project.mjs:206` seriesCount のみ）・`hotTop20/popularTop20`（`:211-224` スコアのみ）・`topTagsFrom`（`:234` カウントのみ）・`new.json`（`:300` pubDate のみ）のソートに明示タイブレークがなく、同点は Store 挿入順で決まる。ロード方式（並列化・Map 再構成）を変えた瞬間に出力が揺れる。
+
+**対象ファイル**: `scripts/store/project.mjs`、`tests/store/project.test.mjs`。
+
+**変更方針**: 各ソートに第 2 キーを明示追加 — tags は `(seriesCount DESC, name ASC)`、hot/popular Top20 は `(score DESC, seriesId ASC)`、topTagsFrom は `(count DESC, name ASC)`、new は `(pubDate DESC, watchId DESC)`。**現在のロード順で生成される出力と diff ゼロになるキーを選ぶ**（挙動不変の保証）。
+
+**受け入れ条件**:
+
+- [ ] `scripts/reproject.mjs` で変更前後の全公開 JSON が diff ゼロ
+- [ ] 同点データを逆順投入しても出力が一致するテスト（挿入順シャッフル）
+
+## 6. provisional ID の衝突検知（C24）
+
+**問題**: `provisionalSeriesId`（`list.mjs:284-288`）は 32bit djb2 変種で衝突検知なし。衝突すると**別作品のエピソードが同一負 ID に混線**（検出不能な静かな破損）。現状 ~2,000 タイトルで確率 ~0.05% だが件数の二乗で増加。
+
+**対象ファイル**: `scripts/nico/list.mjs`（または provisional 登録箇所 `fetch.mjs:140-173`）、`tests/nico/list.test.mjs`。
+
+**変更方針**: provisional 登録時に「その負 ID が既に**別タイトル**に割当済みか」を series-index/store で確認。衝突時は salt 付き再ハッシュ（`title + ' ' + n`）で空きを探し、`logger.warn` で記録。既存データは触らない（発生していない前提・発生済みなら daily の再照合で顕在化する）。
+
+**受け入れ条件**: 人工的に衝突する 2 タイトルのフィクスチャで別 ID が割り当てられ warn が出るテスト。
+
+## 7. 神モジュールの分割 — テスト圏外ロジックの救出（C8）
 
 **問題**: 重要アルゴリズムが I/O スクリプトに埋め込まれ未 export=単体テスト不能。
 
@@ -55,10 +94,12 @@
 1. 話数パーサ → `scripts/etl/episode-order.mjs` へ移動・export（store.mjs は import）。`tests/etl/episode-order.test.mjs` 追加
 2. rescue/reconciliation → `scripts/etl/reconcile.mjs` へ移動。ネットワーク呼び出し（`fetchSeriesData`）は引数注入（既存の `_http` シームと同じ流儀）にして単体テスト可能に
 3. あわせて `stripHtml` を `etl/series.mjs` から `scripts/lib/text.mjs` へ移し、store→etl の逆依存を解消
+4. **hourly の partial 二重ロード＋ミューテーションマージの整理**（第2回レビュー）: `runHourlyJS` は `loadPartialStore` を 2 回呼び（`fetch.mjs:724,822`）、D2 の RSS 由来 description が D3 の再ロードで潰されるため `rssDescriptions` 退避のワークアラウンドが入っている（`fetch.mjs:788-789,869-877`）— run 内の順序ハザード。ロードを 1 回に統合するか「ロード完了後にのみ Store を書く」順序に整理
+5. **「シリーズ先頭話探索」ロジックの一本化**: 同じ「シリーズの最古エピソードを探す」導出が `store.mjs`（`_getEpisodesForSeriesSorted`）・`etl/series.mjs`・`etl/cours.mjs`・`store/credit-index.mjs:19-32` の **4 箇所**に重複。共通ヘルパ（または C11 の seriesId→episodes インデックス）に集約
 
 **受け入れ条件**: 既存テスト全緑 + 新規テスト（話数パーサの既知ケース・rescue の分岐）。`fetch.mjs` が 700 行程度まで縮む。
 
-## 5. HTTP リトライ一般化 + snapshot 窓単位の失敗許容（C7）
+## 8. HTTP リトライ一般化 + snapshot 窓単位の失敗許容（C7）
 
 **問題**: リトライは 503 のみ（`lib/http.mjs:42-51`）。429/5xx/ネットワークリセットは即 throw。snapshot は年窓ループ（`nico/snapshot.mjs:109-118`）内の 1 窓失敗で日次全体が中断（150 分 run が無駄になる）。
 

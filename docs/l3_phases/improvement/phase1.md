@@ -38,6 +38,7 @@
    - 診断情報を detail に含める: works.latestAt 最大の contentId/タイトル、new 最新の watchId — 将来のトリアージを一目化
 2. **provisional 猶予**: `seriesId < 0` を U3・値域サムネ・値域 episodeCount の FAIL 対象から除外し、「provisional N 件が過渡状態」という WARN（ci=false）で可視化。fetch 側のグレース（`fetch.mjs:103-104` の 2〜3 日）と整合させる
 3. あわせて **RSS HWM 固着の検証**（仮説）: state ブランチの `state/rss.json` の最新 pubDate と、実際のフィード `ch.nicovideo.jp/ch2632720/video?rss=2.0` の先頭 pubDate を突き合わせる。フィード側が進んでいるのに state が止まっていれば `nico/rss.mjs:13-24` の条件付き GET/HWM を修正（別 PR）
+4. **deploy 検証の強化**（第2回レビュー）: `deploy-pages.yml` は state 復元が無音失敗しても（`continue-on-error` + `cp ... || true`、`deploy-pages.yml:41,47-49`）、main コミット済みの公開 JSON 6 本で dist の assert（`:70-74`）が緑になり得る。しかし `data/series/*.json`（詳細ページ）は state ブランチにしかないため、**詳細ページ全滅のまま正常デプロイ**が可能。dist 内 `data/series/` の件数下限 assert を追加するか、ops-health の U4 側で series 実体の配信到達性を検査する
 
 **受け入れ条件**:
 
@@ -48,7 +49,35 @@
 
 **検証方法**: `pnpm ops:health -- --ci` をローカル実行 + 新規テスト。マージ後、次の失敗パターン到来時に誤報が止まっていることを workflow 履歴で確認。
 
-## 3. AGENTS.md / README の現行化（C3）
+## 3. quick-wins バンドル（C21 / C29 / C17 / C22）
+
+いずれも数分〜数十分の修正で、**現に起きている実害**を止める。1 PR にまとめてよい（ただし (c) は web、(a)(b)(d) は運用/設定なので分けても可）。
+
+**(a) `.deploy-needed` の rsync exclude 漏れ（C21）**
+
+- **問題**: daily の state 保存 rsync（`fetch-daily.yml:165`）が `.deploy-needed` を exclude していない（hourly `fetch-hourly.yml:135` は exclude 済み）。fetch.mjs は既存センチネルを unlink しない（書くだけ: `fetch.mjs:714,917`）。→ daily がセンチネルを state ブランチにコミット → 次の hourly が復元して「新規 0 件」でも無条件デプロイ（毎日 1 回、churn 対策の自己敗北）
+- **変更方針**: `fetch-daily.yml:165` に `--exclude='.deploy-needed'` を追加。加えて防御として `runHourlyJS` 冒頭で残存センチネルを unlink。あわせて「hourly はメトリクスのみの更新ではデプロイしない」仕様（`fetch.mjs:915-918`）を意図どおりか確認し、dataflow.md に明文化
+- **受け入れ条件**: daily 翌回の hourly が挿入 0 件時に deploy をスキップする（workflow 履歴で確認）
+
+**(b) `packageManager` ピン（C29）**
+
+- **問題**: `package.json` に `packageManager` フィールドなし。CI は `pnpm/action-setup` の `version: 9` でマイナーがフロート、ローカルは pnpm 10 が入り得る（lockfile を書き換え → CI の `--frozen-lockfile` が赤）
+- **変更方針**: CI が使っている 9.x 系に合わせ `"packageManager": "pnpm@9.15.9"`（корepack 対応）を追加。workflows の `version: 9` は `packageManager` 優先にできるなら削除
+- **受け入れ条件**: `pnpm install` 後に lockfile が無変更。CI 緑
+
+**(c) web リーク 2 箇所の修正（C17）**
+
+- **問題**: `marquee.ts:99,176` の `window.addEventListener('pointerup', resume)` が解除されず、`top.ts:303-311` の IntersectionObserver が disconnect されない。`app.innerHTML=''` 再レンダーのたびに蓄積（Top 訪問ごとに window リスナー +2・observer +1・detached DOM 保持）
+- **変更方針**: marquee は rAF の self-cancel（`!viewport.isConnected`）と同じ条件でリスナーも解除（または `viewport` へ付け替え）。top は observer 参照を保持し、切断時（次 render 前 or `hero.isConnected` 監視）に `disconnect()`
+- **受け入れ条件**: Top→一覧→Top を繰り返しても `getEventListeners(window)`（DevTools）の pointerup が増えない
+
+**(d) skills 複製の破損修正＋同期保証（C22）**
+
+- **問題**: `.agents/skills/.../SKILL.md` の json コードフェンスに prettier（`trailingComma: es5`）が不正な末尾カンマを注入済み（`.claude` 側は正常）。原因は eslint が `.claude/**` のみ ignore で 2 コピーが別ツールチェーン管理になっていること。同期を保証する仕組みがない
+- **変更方針**: ① 壊れた JSON を修正 ② `.prettierignore` に両 skills ディレクトリを追加（コードフェンス破壊防止）③ `tests/structure.test.ts` に「2 ツリーが同一（自己参照パス行を除く）」の同期テストを追加（または片方を正としてコピー生成する script を用意）
+- **受け入れ条件**: 両コピーの diff が意図差分（自己参照パス）のみ。json 例が `JSON.parse` 可能
+
+## 4. AGENTS.md / README の現行化（C3）
 
 **問題**: AGENTS.md:6,14-15 が dev/build を「雛形（未実装）」と記載（実際は `vite.config.ts` 93 行実装済み・本番稼働中）。AGENTS.md:25「生成物はコミットしない」が実態（公開 JSON 6 本はシードとしてコミット、series/state のみ git 外）と矛盾。README の開発者向けセクションに test/lint/typecheck の記載なし。
 
@@ -60,7 +89,7 @@
 
 **検証方法**: レビューで突き合わせ（機械検証なし）。
 
-## 4. prevViewCounter クロバー修正（C2）
+## 5. prevViewCounter クロバー修正（C2）
 
 **問題**: `scripts/store/store.mjs:520-521` が upsert のたびに無条件で `existing.prevViewCounter = existing.viewCounter` を実行。1 run 内で同一エピソードが 2 回 upsert されると（daily の B3 seed → A2 rescue → B6 verify は再 upsert し得る）、2 回目で prev が「更新後の値」に潰れ、その日の delta（Hot ランキングの核）が静かに 0 になる。
 
@@ -78,7 +107,27 @@
 
 **検証方法**: `pnpm test`。マージ後、翌日次の ranking.json で hotScore 非ゼロ率が維持されることを ops-health で確認。
 
-## 5. 死んだ drop-rate assert の整理（C13 の一部）
+## 6. データロードの部分失敗耐性（C18）
+
+**問題**: `main.ts:136` の `ensureData` が 5 ファイル（works/ranking/tags/cours/new）を `Promise.all` で取得し、**1 つでも失敗すると全体 reject → 空 catch（`main.ts:151-153`）**。エラー表示もリトライ UI もなく、works.json が読めていても ranking.json の 404 で全画面ブランクになる。次の render 契機（ユーザー操作）まで自動回復もしない。
+
+**対象ファイル**: `web/src/main.ts`（`ensureData`）、`web/src/data/loader.ts`、`tests/web/loader.test.ts`（ケース追加）。
+
+**変更方針**:
+
+1. `Promise.allSettled` に変更し、ソース別に degrade: works が取れれば一覧/検索は動かす。ranking 欠落なら Top のランキング枠に「読み込めませんでした」＋再試行ボタン、tags/cours 欠落ならフィルタ候補を隠す
+2. works まで欠落した場合のみ全画面のエラー状態（メッセージ＋再試行ボタン）。空 catch を廃し、失敗ソースを 1 回だけ console.warn
+3. （任意）`loadSeriesDetail` に `AbortController` を導入して詳細→詳細の高速遷移での競合を閉じる
+
+**受け入れ条件**:
+
+- [ ] ranking.json だけ 404 のフィクスチャで一覧・検索・詳細が動作し、Top に欠落通知が出る
+- [ ] 全ファイル 404 でエラー画面＋再試行が出て、再試行で回復する
+- [ ] 既存の loader/top/e2e テスト緑
+
+**検証方法**: happy-dom テスト + `pnpm dev` で DevTools のネットワークブロックを使い手動確認。
+
+## 7. 死んだ drop-rate assert の整理（C13 の一部）
 
 **問題**: `scripts/fetch.mjs:367` が `assertSnapshotOk` に合成 meta（`previousTotalCount=null`）を渡すため、`nico/assert.mjs:64-73` の 20% 減少ゲートは永久に発火しない。実際の縮小保護は `detectShrinkFromStore`（`fetch.mjs:69-78`）が担っている。
 
@@ -88,12 +137,14 @@
 
 **受け入れ条件**: 死んだ分岐が消えるか、実際に発火し得る配線になる。テストが実態と一致。
 
-## 6. 小物の頑健性（C13 残り）
+## 8. 小物の頑健性（C13 残り）
 
 一括 or 個別の小 PR。いずれも挙動追加なしの防御:
 
 1. **localStorage quota**: `web/src/features/shared/user-state.ts:22-24`（`saveIds`）・`main.ts:341`・`theme.ts:50` の `setItem` を try/catch（Safari プライベートモード/quota で click ハンドラが未捕捉例外にならないように）。失敗時は静かに無視 or 一度だけ通知
 2. **未使用 sanitize 層の扱い決定**: `web/src/shared/sanitize.ts` はどの描画経路からも import されていない（textContent 徹底が実防御）。「将来 innerHTML 化する時のための保険」とファイル冒頭に明記するか、削除してテストも整理。**推奨: 明記して保持**（PH-0006 の設計意図を尊重）
 3. **重複 util の共有化**: `ms()`/`soNum()` が `web/src/main.ts:165-172` と `features/list/filter.ts:198-223` に重複 → `web/src/shared/` へ抽出。`normalizeTitleForMatch` の同名別実装（`nico/rss.mjs:133` vs `etl/cours.mjs:53`）はどちらかをリネームして混同を防ぐ
+4. **settings インポートの無音失敗**: `settings-modal.ts:219-221` の `catch {}` で不正ファイルのインポート失敗がユーザーに一切通知されない → モーダル内にエラーメッセージを表示
+5. **stripHtml の実体デコード漏れ**: `etl/series.mjs:7-36` は 16 進数値実体（`&#x...;`）未対応・`String.fromCharCode` が astral コードポイントで壊れる（`fromCodePoint` に）・named entity の取り漏らし。現行フィードでは低頻度だが下流（credits 判定）が clean テキスト前提のため防御的に修正＋テスト
 
 **受け入れ条件**: `pnpm lint && pnpm typecheck && pnpm test` 緑。grep で重複定義が消えている。
