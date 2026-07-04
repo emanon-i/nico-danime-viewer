@@ -72,6 +72,7 @@ export function initMarquee(viewport: HTMLElement, track: HTMLElement): void {
   const step = (ts: number) => {
     if (!viewport.isConnected) {
       cancelAnimationFrame(raf) // 再レンダリングで切り離されたら停止（rAF の累積を防ぐ）
+      window.removeEventListener('pointerup', resume)
       return
     }
     if (last === 0) last = ts
@@ -145,6 +146,7 @@ export function initAutoScroll(viewport: HTMLElement): void {
   const step = (ts: number) => {
     if (!viewport.isConnected) {
       cancelAnimationFrame(raf)
+      window.removeEventListener('pointerup', resume)
       return
     }
     if (last === 0) last = ts
