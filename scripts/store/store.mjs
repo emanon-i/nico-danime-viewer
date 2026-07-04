@@ -502,8 +502,9 @@ export async function writeSeriesFiles(store, dataDir, seriesIds) {
  * PRESERVE（既存値を上書きしない）:
  *   seriesId, episodeNo, title, startTime（一度 nvapi で確定した値を保護）
  * UPDATE（常に更新）:
- *   viewCounter, prevViewCounter=現 viewCounter, commentCounter, likeCounter,
+ *   viewCounter, commentCounter, likeCounter,
  *   mylistCounter, lengthSeconds, thumbnailUrl, tags, tagsCurated, lastUpdated
+ *   （prevViewCounter は viewCounter 実変化時のみ旧値へ更新）
  *
  * @param {Store} store
  * @param {Partial<EpisodeEntry>[]} rawEps
@@ -517,8 +518,10 @@ export function upsertEpisodes(store, rawEps) {
 
     if (existing) {
       // PRESERVE seriesId, episodeNo, title, startTime（確定済みなら守る）
-      const prevView = existing.viewCounter // 旧 viewCounter を prev に退避
-      existing.prevViewCounter = prevView
+      // 実変化時のみ退避（同値再取り込みで delta が消えるのを防ぐ）
+      if (raw.viewCounter != null && raw.viewCounter !== existing.viewCounter) {
+        existing.prevViewCounter = existing.viewCounter
+      }
 
       // 実変化チェック（変化があった場合のみ dirty に追加・lastUpdated 更新）
       let changed = false

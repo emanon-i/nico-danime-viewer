@@ -3,6 +3,9 @@
 
 import { fetchWithToS } from '../lib/http.mjs'
 import { logger } from '../lib/logger.mjs'
+import { BRANCH_CHANNEL } from '../config.mjs'
+
+export { BRANCH_CHANNEL }
 
 const NVAPI_BASE = 'https://nvapi.nicovideo.jp/v2/series'
 const NVAPI_HEADERS = {
@@ -10,8 +13,6 @@ const NVAPI_HEADERS = {
   'X-Frontend-Version': '0',
   'X-Niconico-Language': 'ja-jp',
 }
-
-export const BRANCH_CHANNEL = 'ch2632720'
 
 /**
  * nvapi v2/series/<id> を取得して data を返す。

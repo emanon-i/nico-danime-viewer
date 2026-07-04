@@ -132,24 +132,32 @@ function workYear(w: Work): number | null {
 
 async function ensureData(): Promise<void> {
   if (cache.works !== null) return
-  try {
-    const [works, ranking, tags, cours, newData] = await Promise.all([
-      loadWorks(),
-      loadRanking(),
-      loadTags(),
-      loadCours(),
-      loadNew(),
-    ])
-    // UI 非表示タグを除外（§68 クール由来＋§C 構造的定番＝最終回/神回/総集編/各話番号）。
-    // クール絞り込みは別 UI、構造タグはノイズ。データ（works.tags/tags.json）は保持。
-    if (tags) {
-      tags.tags = tags.tags.filter((t) => !isHiddenTag(t.name))
-      tags.topHotTags = withoutHiddenTagNames(tags.topHotTags)
-      tags.topPopularTags = withoutHiddenTagNames(tags.topPopularTags)
-    }
-    cache = { works, ranking, tags, cours, newData }
-  } catch {
-    // データ未生成の場合はスケルトンのまま続行
+  function settle<T>(r: PromiseSettledResult<T>, name: string): T | null {
+    if (r.status === 'fulfilled') return r.value
+    console.error(`[data] ${name} の読み込みに失敗:`, r.reason) // 部分障害を可視化（従来は無音）
+    return null
+  }
+  const [worksRes, rankingRes, tagsRes, coursRes, newRes] = await Promise.allSettled([
+    loadWorks(),
+    loadRanking(),
+    loadTags(),
+    loadCours(),
+    loadNew(),
+  ])
+  const tags = settle(tagsRes, 'tags.json')
+  // UI 非表示タグを除外（§68 クール由来＋§C 構造的定番＝最終回/神回/総集編/各話番号）。
+  // クール絞り込みは別 UI、構造タグはノイズ。データ（works.tags/tags.json）は保持。
+  if (tags) {
+    tags.tags = tags.tags.filter((t) => !isHiddenTag(t.name))
+    tags.topHotTags = withoutHiddenTagNames(tags.topHotTags)
+    tags.topPopularTags = withoutHiddenTagNames(tags.topPopularTags)
+  }
+  cache = {
+    works: settle(worksRes, 'works.json'),
+    ranking: settle(rankingRes, 'ranking.json'),
+    tags,
+    cours: settle(coursRes, 'cours.json'),
+    newData: settle(newRes, 'new.json'),
   }
 }
 

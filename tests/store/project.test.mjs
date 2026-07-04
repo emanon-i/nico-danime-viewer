@@ -6,7 +6,12 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStore, upsertSeries, upsertEpisodes } from '../../scripts/store/store.mjs'
-import { exportWorks, exportNew, exportWorksPartial } from '../../scripts/store/project.mjs'
+import {
+  exportWorks,
+  exportNew,
+  exportWorksPartial,
+  exportTags,
+} from '../../scripts/store/project.mjs'
 
 function ep(o) {
   return {
@@ -76,6 +81,26 @@ describe('exportWorks firstAt/latestAt', () => {
   })
 })
 
+describe('exportTags: seriesCount 同数タイは name 昇順', () => {
+  it('タグ B・A が同数(2)の場合は name 昇順で A が先に出る', async () => {
+    const store = createStore()
+    upsertSeries(store, [
+      { seriesId: 1, title: 'S1', isAvailable: true, tags: [{ name: 'B', isCurated: false }] },
+      { seriesId: 2, title: 'S2', isAvailable: true, tags: [{ name: 'B', isCurated: false }] },
+      { seriesId: 3, title: 'S3', isAvailable: true, tags: [{ name: 'A', isCurated: false }] },
+      { seriesId: 4, title: 'S4', isAvailable: true, tags: [{ name: 'A', isCurated: false }] },
+    ])
+    const dir = await mkdtemp(join(tmpdir(), 'tags-'))
+    try {
+      await exportTags(store, dir, '2026-07-04T00:00:00Z', new Map())
+      const json = JSON.parse(await readFile(join(dir, 'tags.json'), 'utf-8'))
+      expect(json.tags.map((t) => t.name)).toEqual(['A', 'B'])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('exportNew pubDate 時系列ソート（④-1 RFC822 文字列ソートバグ）', () => {
   async function projectNew(store) {
     const dir = await mkdtemp(join(tmpdir(), 'new-'))
@@ -111,6 +136,22 @@ describe('exportNew pubDate 時系列ソート（④-1 RFC822 文字列ソート
     const items = await projectNew(store)
     expect(items.map((x) => x.watchId)).toEqual(['w2', 'w1', 'w3'])
     expect(items[0].title).toBe('25日(最新)')
+  })
+
+  it('pubDate 同時刻タイは watchId 降順', async () => {
+    const store = createStore()
+    store.rss.set('100', {
+      watchId: '100',
+      pubDate: 'Thu, 25 Jun 2026 22:30:00 +0900',
+      resolutionStatus: 'resolved',
+    })
+    store.rss.set('200', {
+      watchId: '200',
+      pubDate: 'Thu, 25 Jun 2026 22:30:00 +0900',
+      resolutionStatus: 'resolved',
+    })
+    const items = await projectNew(store)
+    expect(items.map((x) => x.watchId)).toEqual(['200', '100'])
   })
 
   it('pubDate 欠落/不正は末尾へ送る', async () => {

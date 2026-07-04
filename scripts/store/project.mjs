@@ -203,14 +203,17 @@ export async function exportTags(store, outDir, lastUpdated, metricsMap) {
     }
   }
 
-  const tags = [...tagMap.values()].sort((a, b) => b.seriesCount - a.seriesCount)
+  const tags = [...tagMap.values()].sort(
+    (a, b) => b.seriesCount - a.seriesCount || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+  )
 
   // Hot 上位 20 / Popular 上位 20 の頻出タグ
   const hotTop20 = [...store.series.values()]
     .filter((s) => s.isAvailable && metricsMap.has(s.seriesId))
     .sort(
       (a, b) =>
-        (metricsMap.get(b.seriesId)?.hotScore ?? 0) - (metricsMap.get(a.seriesId)?.hotScore ?? 0)
+        (metricsMap.get(b.seriesId)?.hotScore ?? 0) - (metricsMap.get(a.seriesId)?.hotScore ?? 0) ||
+        a.seriesId - b.seriesId
     )
     .slice(0, 20)
 
@@ -219,7 +222,7 @@ export async function exportTags(store, outDir, lastUpdated, metricsMap) {
     .sort(
       (a, b) =>
         (metricsMap.get(b.seriesId)?.totalViews ?? 0) -
-        (metricsMap.get(a.seriesId)?.totalViews ?? 0)
+          (metricsMap.get(a.seriesId)?.totalViews ?? 0) || a.seriesId - b.seriesId
     )
     .slice(0, 20)
 
@@ -231,7 +234,7 @@ export async function exportTags(store, outDir, lastUpdated, metricsMap) {
       }
     }
     return [...tc.entries()]
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
       .slice(0, 10)
       .map(([name]) => name)
   }
@@ -297,7 +300,7 @@ export async function exportNew(store, outDir, lastUpdated) {
     return Number.isNaN(t) ? -Infinity : t
   }
   const rssItems = [...store.rss.values()]
-    .sort((a, b) => ts(b.pubDate) - ts(a.pubDate))
+    .sort((a, b) => ts(b.pubDate) - ts(a.pubDate) || Number(b.watchId) - Number(a.watchId))
     .slice(0, 100)
 
   const items = rssItems.map((r) => {

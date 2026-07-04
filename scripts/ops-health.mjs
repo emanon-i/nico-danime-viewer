@@ -38,7 +38,8 @@ const FRESH = {
   liveData: { warn: 30 * 60, fail: 50 * 60 }, // Pages 配信 JSON の lastUpdated（daily 反映）
 }
 
-// ユーザー可視整合性ティアのしきい値（分）。これらは FAIL=データ実害 → --ci で通知対象。
+// ユーザー可視整合性ティアのしきい値（分）。U2 は FAIL=データ実害 → --ci で通知対象。
+// U1 は別々の上流源同士の鮮度差（運用シグナル）のため ci=false（--ci 通知対象外）。
 const UV = {
   newLag: 24 * 60, // 新着反映ラグ: works.latestAt 最大 − new.json pubDate 最大
   ingestStall: 36 * 60, // 取り込みストール: now − works.latestAt 最大
@@ -393,7 +394,7 @@ async function fetchState(statePath) {
 }
 
 // ── 5) ユーザー可視整合性ティア（実害 = --ci で通知対象）─────────────
-// U1 新着反映ラグ / U2 取り込みストール / U3 取りこぼし / U4 dangling。
+// U1 新着反映ラグ（ci=false・別上流源同士の鮮度差） / U2 取り込みストール / U3 取りこぼし / U4 dangling。
 async function checkUserVisible() {
   const G = 'user-visible (整合性)'
   if (!liveWorks || !Array.isArray(liveWorks.works)) {
@@ -420,7 +421,12 @@ async function checkUserVisible() {
       const lagMin = (worksLatest - newMax) / 60000
       const detail = `works最新 − new最新 = ${(lagMin / 60).toFixed(1)}h`
       if (lagMin > UV.newLag)
-        fail(G, 'U1 新着反映ラグ', `新着リストが本体に追随せず ${detail}（>${UV.newLag / 60}h）`)
+        fail(
+          G,
+          'U1 新着反映ラグ',
+          `新着リストが本体に追随せず ${detail}（>${UV.newLag / 60}h）`,
+          false
+        )
       else pass(G, 'U1 新着反映ラグ', detail)
     }
   } else {
@@ -445,7 +451,8 @@ async function checkUserVisible() {
     const worksIds = new Set(works.map((w) => String(w.seriesId)))
 
     // U3 取りこぼし（mode2）: series-index にあるのに works に無い series。
-    const leaked = [...idxVals].filter((id) => !worksIds.has(id))
+    // 負= provisional。日次解決までの窓で works に無いのは正常。
+    const leaked = [...idxVals].filter((id) => !worksIds.has(id) && Number(id) > 0)
     if (leaked.length > 0)
       fail(
         G,
@@ -457,7 +464,9 @@ async function checkUserVisible() {
     // U4 dangling（mode3）: 参照 seriesId が series 実体に無い。空シェル(配信中でない/0話)は除外。
     const refs = new Set()
     for (const w of works)
-      if (w.isAvailable !== false && (w.episodeCount ?? 0) >= 1) refs.add(String(w.seriesId))
+      // provisional は series 実体を持たなくて正常
+      if (w.isAvailable !== false && (w.episodeCount ?? 0) >= 1 && w.seriesId > 0)
+        refs.add(String(w.seriesId))
     for (const x of liveRanking?.hot ?? []) refs.add(String(x.seriesId))
     for (const x of liveRanking?.popular ?? []) refs.add(String(x.seriesId))
     const dangling = [...refs].filter((id) => !idxVals.has(id))
