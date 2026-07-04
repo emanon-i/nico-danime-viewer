@@ -24,11 +24,11 @@ description: ニコニコ動画の公開APIで dアニメストア「ニコニ�
 
 依存先は安定度で 3 段階。**snapshot で取れるものは snapshot を優先**し、非公式に頼る箇所は**必ず変更検知アサートで守る**（構造変化で取得を fail させ、壊れた／空の JSON を公開しない）。
 
-| 段階                                                          | 対象                                                                                                                     | 備考                                                                     |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| **公式（最も安定）**                                          | snapshot 検索API v2                                                                                                      | 公式ドキュメントあり: https://site.nicovideo.jp/search-api-docs/snapshot |
-| **半公式**                                                    | チャンネル RSS `ch.nicovideo.jp/ch2632720/video?rss=2.0`                                                                 | 公開フィード。新着の高頻度源                                             |
-| **非公式（ドキュメント無し・予告なく仕様変更/廃止されうる）** | nvapi（`/v1/ranking…`, `/v2/series/<id>`、要 `X-Frontend-Id: 6`）／静的 JSON（list.json・programlist.json）／period HTML | いつ壊れてもおかしくない前提で扱う                                       |
+| 段階 | 対象 | 備考 |
+|------|------|------|
+| **公式（最も安定）** | snapshot 検索API v2 | 公式ドキュメントあり: https://site.nicovideo.jp/search-api-docs/snapshot |
+| **半公式** | チャンネル RSS `ch.nicovideo.jp/ch2632720/video?rss=2.0` | 公開フィード。新着の高頻度源 |
+| **非公式（ドキュメント無し・予告なく仕様変更/廃止されうる）** | nvapi（`/v1/ranking…`, `/v2/series/<id>`、要 `X-Frontend-Id: 6`）／静的 JSON（list.json・programlist.json）／period HTML | いつ壊れてもおかしくない前提で扱う |
 
 ## 主データ源: snapshot 検索API v2
 
@@ -40,16 +40,16 @@ description: ニコニコ動画の公開APIで dアニメストア「ニコニ�
 
 ### 主要クエリパラメータ
 
-| パラメータ               | 必須             | 説明                                                                                 |
-| ------------------------ | ---------------- | ------------------------------------------------------------------------------------ |
-| `q`                      | 必須（空文字可） | 検索語。支店取得では `dアニメストア`                                                 |
-| `targets`                | 必須             | 検索対象フィールド。`title` / `description` / `tags`、**タグ完全一致は `tagsExact`** |
-| `fields`                 | 任意             | 取得項目（カンマ区切り）                                                             |
-| `filters[field][op]=val` | 任意             | 絞り込み。`op` は `gte` / `lt` / `gt` / `lte` / `0,1,2…`（範囲・完全一致）           |
-| `_sort`                  | 必須             | 並び順。降順は `-` 前置（例 `-viewCounter`、`-startTime`）                           |
-| `_offset`                | 任意             | 取得開始位置。**最大 100000**                                                        |
-| `_limit`                 | 任意             | 取得件数。**最大 100**                                                               |
-| `_context`               | 必須             | アプリ名（識別子）。例 `nico-danime-viewer`                                          |
+| パラメータ | 必須 | 説明 |
+|-----------|------|------|
+| `q` | 必須（空文字可） | 検索語。支店取得では `dアニメストア` |
+| `targets` | 必須 | 検索対象フィールド。`title` / `description` / `tags`、**タグ完全一致は `tagsExact`** |
+| `fields` | 任意 | 取得項目（カンマ区切り） |
+| `filters[field][op]=val` | 任意 | 絞り込み。`op` は `gte` / `lt` / `gt` / `lte` / `0,1,2…`（範囲・完全一致） |
+| `_sort` | 必須 | 並び順。降順は `-` 前置（例 `-viewCounter`、`-startTime`） |
+| `_offset` | 任意 | 取得開始位置。**最大 100000** |
+| `_limit` | 任意 | 取得件数。**最大 100** |
+| `_context` | 必須 | アプリ名（識別子）。例 `nico-danime-viewer` |
 
 ### 支店の取り方（最重要）
 
@@ -63,34 +63,34 @@ dアニメ支店は **チャンネル ID `2632720`**。`channelId` は fields �
 
 ### fields / sort / filter（公式準拠）
 
-| フィールド        |          取得           | sort | filter | 備考                                                              |
-| ----------------- | :---------------------: | :--: | :----: | ----------------------------------------------------------------- |
-| `contentId`       |            ✓            |      |   ✓    | 動画ID。支店各話は `so…`。filter 書式 `filters[contentId][0]=so…` |
-| `title`           |            ✓            |      |        | `targets` でも使う                                                |
-| `description`     |            ✓            |      |        | 各話のあらすじ。HTML（`<br>` 等）混じり                           |
-| `userId`          |            ✓            |      |        | チャンネル動画では空                                              |
-| `channelId`       |            ✓            |      | **✗**  | **取得のみ。支店判定はクライアント側**                            |
-| `viewCounter`     |            ✓            |  ✓   |   ✓    | 再生数（累計）                                                    |
-| `mylistCounter`   |            ✓            |  ✓   |   ✓    |                                                                   |
-| `likeCounter`     |            ✓            |  ✓   |   ✓    |                                                                   |
-| `commentCounter`  |            ✓            |  ✓   |   ✓    |                                                                   |
-| `lengthSeconds`   |            ✓            |  ✓   |   ✓    | 尺（秒）                                                          |
-| `startTime`       |            ✓            |  ✓   |   ✓    | 投稿時間（ISO8601）。**filter は TZ 必須（後述）**                |
-| `lastCommentTime` |            ✓            |  ✓   |   ✓    | 最終コメント時刻                                                  |
-| `lastResBody`     |            ✓            |      |        | 最新コメント本文                                                  |
-| `thumbnailUrl`    |            ✓            |      |        | サムネ                                                            |
-| `categoryTags`    |            ✓            |      |   ✓    |                                                                   |
-| `tags`            |            ✓            |      |   ✓    | スペース区切り                                                    |
-| `genre`           |            ✓            |      |   ✓    | 値の扱いは下記「genre」を参照                                     |
-| `contentType`     |            ✓            |      |   ✓    | enum: `long` / `short`                                            |
-| `tagsExact`       | （filter/targets 専用） |      |   ✓    | タグの完全一致（取得フィールドではない）                          |
-| `genre.keyword`   |     （filter 専用）     |      |   ✓    | `genre` の完全一致 filter 用                                      |
+| フィールド | 取得 | sort | filter | 備考 |
+|-----------|:---:|:---:|:---:|------|
+| `contentId` | ✓ | | ✓ | 動画ID。支店各話は `so…`。filter 書式 `filters[contentId][0]=so…` |
+| `title` | ✓ | | | `targets` でも使う |
+| `description` | ✓ | | | 各話のあらすじ。HTML（`<br>` 等）混じり |
+| `userId` | ✓ | | | チャンネル動画では空 |
+| `channelId` | ✓ | | **✗** | **取得のみ。支店判定はクライアント側** |
+| `viewCounter` | ✓ | ✓ | ✓ | 再生数（累計） |
+| `mylistCounter` | ✓ | ✓ | ✓ | |
+| `likeCounter` | ✓ | ✓ | ✓ | |
+| `commentCounter` | ✓ | ✓ | ✓ | |
+| `lengthSeconds` | ✓ | ✓ | ✓ | 尺（秒） |
+| `startTime` | ✓ | ✓ | ✓ | 投稿時間（ISO8601）。**filter は TZ 必須（後述）** |
+| `lastCommentTime` | ✓ | ✓ | ✓ | 最終コメント時刻 |
+| `lastResBody` | ✓ | | | 最新コメント本文 |
+| `thumbnailUrl` | ✓ | | | サムネ |
+| `categoryTags` | ✓ | | ✓ | |
+| `tags` | ✓ | | ✓ | スペース区切り |
+| `genre` | ✓ | | ✓ | 値の扱いは下記「genre」を参照 |
+| `contentType` | ✓ | | ✓ | enum: `long` / `short` |
+| `tagsExact` | （filter/targets 専用） | | ✓ | タグの完全一致（取得フィールドではない） |
+| `genre.keyword` | （filter 専用） | | ✓ | `genre` の完全一致 filter 用 |
 
 - **`contentId` は filter 可能**（書式 `filters[contentId][0]=so…`）。**`channelId` は filter 不可**（API が許可 filter フィールドを列挙し、その中に `channelId` は含まれない）→ 支店判定は取得後にクライアント側 `channelId==2632720`。
 - **`startTime` の filter は ISO8601＋タイムゾーン必須**: `filters[startTime][gte]=2025-01-01T00:00:00+09:00`。TZ を付けないと 400。期間ウィンドウ分割にもこの形式を使う。
 - `tagsExact` / `genre.keyword` は**取得フィールドではなく filter/targets 専用**（完全一致）。
 
-### ページング（\_offset 上限の回避）
+### ページング（_offset 上限の回避）
 
 - `_offset` は最大 100000、`_limit` は最大 100。順次取得は `_offset` を 100 ずつ進める。
 - 総件数が `_offset` 上限を超える／取りこぼし対策には、`filters[startTime][gte]` / `filters[startTime][lt]`（TZ 付き）で
@@ -102,17 +102,9 @@ dアニメ支店は **チャンネル ID `2632720`**。`channelId` は fields �
 {
   "meta": { "status": 200, "totalCount": 87327, "id": "..." },
   "data": [
-    {
-      "contentId": "so...",
-      "title": "...",
-      "viewCounter": 12345,
-      "channelId": 2632720,
-      "tags": "...",
-      "genre": "アニメ",
-      "startTime": "2022-...",
-    },
+    { "contentId": "so...", "title": "...", "viewCounter": 12345, "channelId": 2632720, "tags": "...", "genre": "アニメ", "startTime": "2022-..." }
     // ...
-  ],
+  ]
 }
 ```
 
@@ -170,11 +162,11 @@ dアニメ支店は **チャンネル ID `2632720`**。`channelId` は fields �
 
 ## 補助データ源（公開・静的・認証不要）
 
-| 用途                       | URL                                                             | 形                                                                                                                                       |
-| -------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 全作品カタログ／**五十音** | `https://site.nicovideo.jp/danime/static/data/list.json`        | `[{title, col_key, url: nicovideo.jp/series/<id>}]`                                                                                      |
-| 今季番組表                 | `https://site.nicovideo.jp/danime/static/data/programlist.json` | `[{workweek, worktime, title, series, imgpagh, fast}]`                                                                                   |
-| クール一覧（過去季も）     | `https://anime.nicovideo.jp/period/<年>-<季>-danime.html`       | サーバーレンダ HTML。`季 = winter/spring/summer/autumn`（例 `2025-autumn-danime`）。各作品は `/detail/<slug>/`、`-danime` が支店スコープ |
+| 用途 | URL | 形 |
+|------|-----|----|
+| 全作品カタログ／**五十音** | `https://site.nicovideo.jp/danime/static/data/list.json` | `[{title, col_key, url: nicovideo.jp/series/<id>}]` |
+| 今季番組表 | `https://site.nicovideo.jp/danime/static/data/programlist.json` | `[{workweek, worktime, title, series, imgpagh, fast}]` |
+| クール一覧（過去季も） | `https://anime.nicovideo.jp/period/<年>-<季>-danime.html` | サーバーレンダ HTML。`季 = winter/spring/summer/autumn`（例 `2025-autumn-danime`）。各作品は `/detail/<slug>/`、`-danime` が支店スコープ |
 
 - `programlist.json` の画像キーは **`imgpagh`**。`series` は数値のシリーズ id。
 - snapshot（再生数・タグ・各話メタ）と補助源（カタログ・シリーズ id・クール）を **contentId / series id / title で突き合わせ**て使う。
@@ -202,7 +194,7 @@ dアニメ支店は **チャンネル ID `2632720`**。`channelId` は fields �
 
   ```bash
   NICO_USER_AGENT="nico-danime-viewer/0.1 (contact: you@example.com)" \
-    node .agents/skills/nico-snapshot-api/scripts/fetch-branch.mjs
+    node .claude/skills/nico-snapshot-api/scripts/fetch-branch.mjs
   ```
 
 ## チェックリスト（取得コードを書くとき）
