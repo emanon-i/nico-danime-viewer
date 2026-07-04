@@ -3,8 +3,7 @@
 
 import { fetchWithToS } from '../lib/http.mjs'
 import { logger } from '../lib/logger.mjs'
-
-const RSS_URL = 'https://ch.nicovideo.jp/ch2632720/video?rss=2.0'
+import { BRANCH_RSS_URL } from '../config.mjs'
 
 /**
  * RSS を条件付き GET で取得（304 ならスキップ）
@@ -15,7 +14,7 @@ export async function fetchRss(etag = null, lastModified = null) {
   if (etag) headers['If-None-Match'] = etag
   if (lastModified) headers['If-Modified-Since'] = lastModified
 
-  const resp = await fetchWithToS(RSS_URL, { headers })
+  const resp = await fetchWithToS(BRANCH_RSS_URL, { headers })
   return {
     status: resp.status,
     etag: resp.headers?.get?.('ETag') ?? null,
@@ -37,7 +36,7 @@ export async function fetchRssMultiPage(lastGuid, maxPages = 5) {
   const seenGuids = new Set()
 
   for (let page = 1; page <= maxPages; page++) {
-    const url = page === 1 ? RSS_URL : `${RSS_URL}&page=${page}`
+    const url = page === 1 ? BRANCH_RSS_URL : `${BRANCH_RSS_URL}&page=${page}`
     const resp = await fetchWithToS(url, {})
     if (resp.status !== 200) {
       logger.warn('rss', 'fetchRssMultiPage: non-200', { page, status: resp.status })

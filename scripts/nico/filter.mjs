@@ -1,7 +1,8 @@
 // scripts/nico/filter.mjs
 // 支店フィルタ: channelId == 2632720 のエピソードのみ採用（本店データ混入防止）
 
-export const BRANCH_CHANNEL_ID = 2632720
+import { BRANCH_CHANNEL_ID } from '../config.mjs'
+export { BRANCH_CHANNEL_ID }
 
 /**
  * @param {unknown[]} episodes - snapshot API のレスポンス data[]
