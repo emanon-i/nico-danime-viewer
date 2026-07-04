@@ -9,6 +9,8 @@ import { progressiveReveal } from '../../components/reveal'
 import { initMarquee, initAutoScroll } from '../../components/marquee'
 import { buildHeader } from '../shared/header'
 
+let heroObserver: IntersectionObserver | null = null
+
 export interface TopData {
   popular: RankingEntry[]
   hotTags: string[]
@@ -300,14 +302,17 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
   // ヒーローが見えている間はヘッダ検索ボタンを非表示にする
   const hero = container.querySelector<HTMLElement>('.hero')
   const headerSearchBtn = container.querySelector<HTMLElement>('.header-search-btn')
+  heroObserver?.disconnect() // 前回レンダー分を解除（蓄積防止）
+  heroObserver = null
   if (hero && headerSearchBtn && 'IntersectionObserver' in window) {
-    new IntersectionObserver(
+    heroObserver = new IntersectionObserver(
       (entries) => {
         const visible = entries[0]?.isIntersecting ?? true
         headerSearchBtn.setAttribute('aria-hidden', visible ? 'true' : 'false')
       },
       { threshold: 0 }
-    ).observe(hero)
+    )
+    heroObserver.observe(hero)
   }
 
   if (!data) return
