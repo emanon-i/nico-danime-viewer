@@ -17,12 +17,12 @@ describe('upsertEpisodes: prevViewCounter', () => {
     expect(ep.prevViewCounter).toBeNull()
   })
 
-  it('同値 upsert でも prevViewCounter が現 viewCounter で上書きされる（現行挙動）', () => {
+  it('同値 upsert では prevViewCounter を更新しない', () => {
     const store = createStore()
     upsertEpisodes(store, [{ contentId: 'so1', title: 'ep1', viewCounter: 100 }])
     upsertEpisodes(store, [{ contentId: 'so1', viewCounter: 100 }])
     const ep = store.episodes.get('so1')
-    expect(ep.prevViewCounter).toBe(100)
+    expect(ep.prevViewCounter).toBeNull()
   })
 
   it('viewCounter 変化時に旧値が prevViewCounter に退避される', () => {
