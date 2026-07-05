@@ -45,6 +45,10 @@ const UV = {
   ingestStall: 36 * 60, // 取り込みストール: now − works.latestAt 最大
 }
 
+// live 追随（デプロイ反映）ラグしきい値（分）。state が live より新しいのにこの分数を
+// 超えて live 側が古いままなら「deploy 成功したが live 未反映」の疑い（ci=false・運用シグナル）。
+const DEPLOY_LAG_WARN_MIN = 120
+
 // 件数の下限（空 seed 事故・取得崩壊の検出。現状比でかなり余裕を持たせた床）。
 const FLOORS = {
   works: 5000, // 実測 6601
@@ -64,6 +68,7 @@ const CTRL_CHAR_RE = /[\u0000-\u001f\u007f]/
 let liveWorks = null // works.json の data（{ works: [...] }）
 let liveRanking = null // ranking.json の data（{ hot, popular, ... }）
 let liveNew = null // new.json の data（{ items: [...] }）
+let stateSha = null // state ブランチの最新コミット sha（checkStateBranch が取得。fetchState の SHA 固定に使う）
 
 // ── 出力ユーティリティ ────────────────────────────────────────────
 // 各 record は ci フラグを持つ。ci=true ＝「データの正しさ」＝ --ci で exit1（通知）対象。
@@ -175,9 +180,10 @@ async function checkStateBranch() {
       'api',
       `repos/${OWNER}/${REPO}/branches/state`,
       '--jq',
-      '.commit.commit.committer.date + "\\t" + .commit.commit.message',
+      '.commit.sha + "\\t" + .commit.commit.committer.date + "\\t" + .commit.commit.message',
     ])
-    const [date, ...msg] = out.trim().split('\t')
+    const [sha, date, ...msg] = out.trim().split('\t')
+    stateSha = sha || null // U3/U4 を live/state 世代ズレなく比較するため fetchState で固定使用
     const age = minutesSince(date)
     const grade = gradeAge(age, FRESH.hourlyState)
     const detail = `最新コミット ${fmtAge(age)}（${(msg.join('\t') || '').split('\n')[0]}）`
@@ -192,7 +198,9 @@ async function checkStateBranch() {
 
 // ── 3) ライブ Pages: 到達性・鮮度・件数・hotScore ─────────────────
 async function fetchJson(path) {
-  const url = `${PAGES_BASE}/${path}`
+  // live Pages はキャッシュ挟まり得るため cache-busting クエリを付与（fetchState の SHA 固定 raw は
+  // immutable なので付けない）。
+  const url = `${PAGES_BASE}/${path}?_=${Date.now()}`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 25000)
   try {
@@ -350,16 +358,36 @@ function checkStructure() {
     )
   else pass(G, '値域 episodeCount', `配信中 ${avail.length} 件すべて episodeCount≥1`)
 
-  const thBad = avail.filter(
-    (w) => !(typeof w.thumbnailUrl === 'string' && /^https?:\/\//.test(w.thumbnailUrl))
-  )
+  // サムネ検査: 仮シリーズ(seriesId<0)は日次解決までサムネ欠落があり得る中間状態なので、
+  // 実シリーズ(seriesId>=0)と分離して判定する（仮シリーズの欠落を実害 FAIL にしない）。
+  const isThumbOk = (w) => typeof w.thumbnailUrl === 'string' && /^https?:\/\//.test(w.thumbnailUrl)
+  const availReal = avail.filter((w) => w.seriesId >= 0)
+  const availProv = avail.filter((w) => w.seriesId < 0)
+
+  const thBad = availReal.filter((w) => !isThumbOk(w))
   if (thBad.length > 0)
     fail(
       G,
       '値域 サムネ URL',
       `配信中でサムネ非http(s)/欠落が ${thBad.length} 件（例: ${thBad[0].seriesId} ${thBad[0].title}）`
     )
-  else pass(G, '値域 サムネ URL', `配信中 ${avail.length} 件すべて http(s) サムネ`)
+  else
+    pass(G, '値域 サムネ URL', `配信中 ${availReal.length} 件（実シリーズ）すべて http(s) サムネ`)
+
+  const thProvMissing = availProv.filter((w) => !isThumbOk(w))
+  if (thProvMissing.length > 0)
+    warn(
+      G,
+      '値域 サムネ URL（仮シリーズ）',
+      `仮シリーズはサムネ欠落 ${thProvMissing.length} 件（日次解決までの正常な中間状態）`,
+      false
+    )
+  else
+    pass(
+      G,
+      '値域 サムネ URL（仮シリーズ）',
+      `仮シリーズ ${availProv.length} 件すべて http(s) サムネ`
+    )
 
   // (e) タイトル衛生（空・制御文字・前後空白＝いずれも破損シグナル。全作品対象）
   const tEmpty = works.filter(
@@ -376,7 +404,10 @@ function checkStructure() {
 
 // ── state ブランチの生ファイル取得（gh 非依存・公開 raw HTTP）──────
 async function fetchState(statePath) {
-  const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/state/${statePath}`
+  // stateSha があれば commit 固定（live/state 世代ズレでの偽FAILを防ぐ・immutable）。
+  // 無ければ（gh 未認証など）従来どおりブランチ名 URL にフォールバック。
+  const ref = stateSha || 'state'
+  const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${ref}/${statePath}`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 25000)
   try {
@@ -442,41 +473,95 @@ async function checkUserVisible() {
     else pass(G, 'U2 取り込みストール', detail)
   }
 
-  // U3/U4: state の series-index（contentId→seriesId）を実体集合プロキシに使う。
-  const idx = await fetchState('state/series-index.json')
-  if (!idx.ok || !idx.data || typeof idx.data !== 'object') {
-    warn(G, 'U3/U4 参照整合', `series-index 取得不可（http=${idx.status ?? '?'}）→ スキップ`, false)
+  // U3/U4: live works/ranking は hourly/daily の実行タイミング次第で state と世代がずれ、
+  // それだけで偽 FAIL になり得る。比較対象を live ではなく「同一 state コミット」の
+  // works.json / ranking.json / series-index.json（すべて stateSha 固定）に統一する。
+  if (!stateSha) {
+    warn(
+      G,
+      'U3/U4 参照整合（state内整合）',
+      'state ブランチの sha 未取得（gh 未認証等）→ スキップ',
+      false
+    )
   } else {
-    const idxVals = new Set(Object.values(idx.data).map((v) => String(v))) // ep を持つ seriesId 集合
-    const worksIds = new Set(works.map((w) => String(w.seriesId)))
+    const [stWorks, stRanking, stIdx] = await Promise.all([
+      fetchState('works.json'),
+      fetchState('ranking.json'),
+      fetchState('state/series-index.json'),
+    ])
 
-    // U3 取りこぼし（mode2）: series-index にあるのに works に無い series。
-    // 負= provisional。日次解決までの窓で works に無いのは正常。
-    const leaked = [...idxVals].filter((id) => !worksIds.has(id) && Number(id) > 0)
-    if (leaked.length > 0)
-      fail(
-        G,
-        'U3 取りこぼし',
-        `series-index にあるが works に無い: ${leaked.length} 件（例 ${leaked.slice(0, 5).join(', ')}）`
-      )
-    else pass(G, 'U3 取りこぼし', `source(series-index) ⊆ works（取りこぼしなし）`)
+    // C-4: live 追随シグナル（deploy 成功したが live に未反映の疑い・ci=false）。
+    // 同一 state コミットの works.json lastUpdated と live works.json lastUpdated の差を見る。
+    if (stWorks.ok && stWorks.data?.lastUpdated && liveWorks.lastUpdated) {
+      const liveMs = Date.parse(liveWorks.lastUpdated)
+      const stateMs = Date.parse(stWorks.data.lastUpdated)
+      if (!Number.isNaN(liveMs) && !Number.isNaN(stateMs)) {
+        const lagMin = (stateMs - liveMs) / 60000 // 正＝state の方が新しい＝live が遅れている
+        const detail = `live ${(Math.abs(lagMin) / 60).toFixed(1)}h ${lagMin > 0 ? '遅れ' : '先行/同着'}`
+        if (lagMin > DEPLOY_LAG_WARN_MIN)
+          warn(
+            G,
+            'live 追随',
+            `live が state に未追随 ${(lagMin / 60).toFixed(1)}h（デプロイ未反映の疑い）`,
+            false
+          )
+        else pass(G, 'live 追随', detail, false)
+      }
+    }
 
-    // U4 dangling（mode3）: 参照 seriesId が series 実体に無い。空シェル(配信中でない/0話)は除外。
-    const refs = new Set()
-    for (const w of works)
-      // provisional は series 実体を持たなくて正常
-      if (w.isAvailable !== false && (w.episodeCount ?? 0) >= 1 && w.seriesId > 0)
-        refs.add(String(w.seriesId))
-    for (const x of liveRanking?.hot ?? []) refs.add(String(x.seriesId))
-    for (const x of liveRanking?.popular ?? []) refs.add(String(x.seriesId))
-    const dangling = [...refs].filter((id) => !idxVals.has(id))
-    if (dangling.length > 0)
-      fail(
+    const worksOk = stWorks.ok && Array.isArray(stWorks.data?.works)
+    const rankingOk = stRanking.ok && stRanking.data
+    const idxOk = stIdx.ok && stIdx.data && typeof stIdx.data === 'object'
+    if (!worksOk || !rankingOk || !idxOk) {
+      warn(
         G,
-        'U4 dangling',
-        `参照 seriesId が series 実体に無い: ${dangling.length} 件（例 ${dangling.slice(0, 5).join(', ')}）`
+        'U3/U4 参照整合（state内整合）',
+        `state works/ranking/series-index のいずれか取得不可（works=${worksOk} ranking=${rankingOk} idx=${idxOk}）→ スキップ`,
+        false
       )
-    else pass(G, 'U4 dangling', `works/ranking の全 seriesId が series 実体に存在`)
+    } else {
+      const stateWorks = stWorks.data.works
+      const idxVals = new Set(Object.values(stIdx.data).map((v) => String(v))) // ep を持つ seriesId 集合
+      const stateWorksIds = new Set(stateWorks.map((w) => String(w.seriesId)))
+
+      // U3 取りこぼし（mode2・state内整合）: series-index にあるのに state works に無い series。
+      // 負= provisional。日次解決までの窓で works に無いのは正常。
+      const leaked = [...idxVals].filter((id) => !stateWorksIds.has(id) && Number(id) > 0)
+      if (leaked.length > 0)
+        fail(
+          G,
+          'U3 取りこぼし（state内整合）',
+          `series-index にあるが state works に無い: ${leaked.length} 件（例 ${leaked.slice(0, 5).join(', ')}）`
+        )
+      else
+        pass(
+          G,
+          'U3 取りこぼし（state内整合）',
+          `state 内 source(series-index) ⊆ works（取りこぼしなし）`
+        )
+
+      // U4 dangling（mode3・state内整合）: 参照 seriesId が series 実体に無い。空シェル除外。
+      const refs = new Set()
+      for (const w of stateWorks)
+        // provisional は series 実体を持たなくて正常
+        if (w.isAvailable !== false && (w.episodeCount ?? 0) >= 1 && w.seriesId > 0)
+          refs.add(String(w.seriesId))
+      for (const x of stRanking.data.hot ?? []) if (x.seriesId > 0) refs.add(String(x.seriesId))
+      for (const x of stRanking.data.popular ?? []) if (x.seriesId > 0) refs.add(String(x.seriesId))
+      const dangling = [...refs].filter((id) => !idxVals.has(id))
+      if (dangling.length > 0)
+        fail(
+          G,
+          'U4 dangling（state内整合）',
+          `参照 seriesId が series 実体に無い: ${dangling.length} 件（例 ${dangling.slice(0, 5).join(', ')}）`
+        )
+      else
+        pass(
+          G,
+          'U4 dangling（state内整合）',
+          `state works/ranking の全 seriesId が series 実体に存在`
+        )
+    }
   }
 }
 
@@ -484,7 +569,9 @@ async function checkUserVisible() {
 async function main() {
   await Promise.all([checkActions(), checkStateBranch(), checkLive()])
   checkStructure() // live データ取得後に同期実行（追加 fetch なし）
-  await checkUserVisible() // liveWorks/liveRanking/liveNew + state series-index
+  // liveWorks/liveNew（U1/U2）+ state works/ranking/series-index（U3/U4, stateSha 固定・
+  // checkStateBranch 完了後なので解決済み）
+  await checkUserVisible()
 
   const counts = { PASS: 0, WARN: 0, FAIL: 0 }
   for (const r of results) counts[r.level]++

@@ -63,6 +63,7 @@ jobs:
           if [ -d state ]; then
             cp -r state/. src/data/ 2>/dev/null || true
           fi
+          rm -f src/data/.deploy-needed  # 前回実行の残骸を消し、次の gate 判定を誤らせない
 
       # ── Node / pnpm セットアップ ─────────────────────────────────
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -133,7 +134,8 @@ jobs:
           else
             mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --delete --exclude='.git' --exclude='.deploy-needed' src/data/. state_pub/
+          rm -f src/data/.deploy-needed  # gate は既に消費済み。ソース側から消して --delete で state 側も追随させる
+          rsync -av --delete --exclude='.git' src/data/. state_pub/
           cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
