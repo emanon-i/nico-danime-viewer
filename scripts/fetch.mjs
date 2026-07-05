@@ -137,7 +137,7 @@ function toIso(value) {
   return Number.isNaN(t) ? null : new Date(t).toISOString()
 }
 
-function registerProvisionalSeries(store, watchId, rssEntry) {
+export function registerProvisionalSeries(store, watchId, rssEntry) {
   const rawTitle = rssEntry.title ?? ''
   const contentId = contentIdFromThumbnail(rssEntry.thumbnailUrl ?? null)
   if (!contentId) return null
@@ -146,7 +146,14 @@ function registerProvisionalSeries(store, watchId, rssEntry) {
   const sid = provisionalSeriesId(seriesTitle)
 
   if (!store.series.has(sid)) {
-    storeUpsertSeries(store, [{ seriesId: sid, title: seriesTitle, isAvailable: true }])
+    storeUpsertSeries(store, [
+      {
+        seriesId: sid,
+        title: seriesTitle,
+        isAvailable: true,
+        thumbnailUrl: rssEntry.thumbnailUrl ?? null,
+      },
+    ])
   }
 
   storeUpsertEps(store, [
@@ -159,6 +166,7 @@ function registerProvisionalSeries(store, watchId, rssEntry) {
       startTime: toIso(rssEntry.pubDate),
       description: rssEntry.description ?? null,
       descriptionSource: 'rss', // PH-0014 源優先: rss は最下位（フラット）
+      thumbnailUrl: rssEntry.thumbnailUrl ?? null,
     },
   ])
 
@@ -317,16 +325,19 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
   logger.info('fetch', '[JS] A2 rescue done', { remaining: missedContentIds.size })
 }
 
-function _trimRss(store, maxItems = 200) {
+// RSS pubDate は RFC822（"Wed, 01 Jul 2026 22:30:00 +0900"）。文字列比較だと曜日名の
+// アルファベット順で「最古」が決まってしまい、火・水曜の item だけ生き残る事故になる
+// （exportNew の ts() と同じ方式に揃え、Date.parse の数値で比較する）。
+// 解釈不能・null は -Infinity（最古扱い＝優先的に削除）。
+export function _trimRss(store, maxItems = 200) {
   const all = [...store.rss.values()]
   if (all.length <= maxItems) return
 
-  const byDate = (a, b) => {
-    if (!a.pubDate && !b.pubDate) return 0
-    if (!a.pubDate) return -1
-    if (!b.pubDate) return 1
-    return a.pubDate < b.pubDate ? -1 : a.pubDate > b.pubDate ? 1 : 0
+  const ts = (r) => {
+    const t = r.pubDate ? Date.parse(r.pubDate) : NaN
+    return Number.isNaN(t) ? -Infinity : t
   }
+  const byDate = (a, b) => ts(a) - ts(b)
 
   const resolved = all.filter((r) => r.resolutionStatus === 'resolved').sort(byDate)
   const pending = all.filter((r) => r.resolutionStatus !== 'resolved').sort(byDate)
@@ -1016,14 +1027,19 @@ async function runCheckVersionJS() {
   logger.info('fetch', '[JS] check-version: snapshot version', { version })
 }
 
-const runner = CLI_ARGS.includes('--check-version')
-  ? runCheckVersionJS()
-  : CLI_MODE === 'seed'
-    ? runSeedBackfillJS()
-    : CLI_MODE === 'hourly'
-      ? runHourlyJS()
-      : runFullJS()
-runner.catch((err) => {
-  logger.error('fetch', err.message, err.assertFields ?? {})
-  process.exit(1)
-})
+// vitest 等からのテスト import では runner を起動しない（node scripts/fetch.mjs 実行時のみ起動）。
+// _trimRss / registerProvisionalSeries を回帰テストで import 可能にするための最小ガード。
+const isMainModule = fileURLToPath(import.meta.url) === process.argv[1]
+if (isMainModule) {
+  const runner = CLI_ARGS.includes('--check-version')
+    ? runCheckVersionJS()
+    : CLI_MODE === 'seed'
+      ? runSeedBackfillJS()
+      : CLI_MODE === 'hourly'
+        ? runHourlyJS()
+        : runFullJS()
+  runner.catch((err) => {
+    logger.error('fetch', err.message, err.assertFields ?? {})
+    process.exit(1)
+  })
+}

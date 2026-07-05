@@ -148,6 +148,29 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
+      # ── デプロイ反映確認（7/4: deploy 成功なのに live 未反映という実測異常の可視化） ──
+      # dist の lastUpdated が live に現れるまで 20秒間隔・最大5分ポーリング。反映されなくても
+      # ジョブは落とさず ::warning:: のみ出す（伝播遅延は運用シグナルであり実害ではないため）。
+      - name: Verify Pages deployment reflects new data
+        working-directory: src
+        run: |
+          expected=$(jq -r '.lastUpdated' dist/data/works.json)
+          echo "dist lastUpdated = $expected"
+          deadline=$((SECONDS + 300))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            live=$(curl -fsS --max-time 10 \
+              -H "User-Agent: nico-danime-viewer/1.0 (https://github.com/emanon-i/nico-danime-viewer)" \
+              "https://emanon-i.github.io/nico-danime-viewer/data/works.json?_=$(date +%s)" \
+              | jq -r '.lastUpdated' 2>/dev/null || echo '')
+            if [ "$live" = "$expected" ]; then
+              echo "live に反映済み（lastUpdated=$live）"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::warning::Pages デプロイが5分以内に live へ反映されず（伝播遅延の疑い）"
+          exit 0
+
       # ── 状態保存（デプロイ成功後のみ） ───────────────────────────
       # GITHUB_TOKEN で認証。state ブランチを clone（無ければ orphan 初期化）し、
       # data/ を反映して push。
@@ -163,7 +186,8 @@ jobs:
           else
             mkdir state_pub && (cd state_pub && git init -b state)
           fi
-          rsync -av --delete --exclude='.git' --exclude='.deploy-needed' src/data/. state_pub/
+          rm -f src/data/.deploy-needed  # ソース側から消して --delete で state 側の残骸も purge する
+          rsync -av --delete --exclude='.git' src/data/. state_pub/
           cd state_pub
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
