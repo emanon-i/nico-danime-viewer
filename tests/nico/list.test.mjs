@@ -13,8 +13,16 @@ describe('buildWatchColKeyMap', () => {
   it('/watch/soXXXX エントリのみ contentId→{colKey,title} に写像（/series/ は除外）', () => {
     const items = [
       { title: 'ああっ女神さまっ', col_key: 'あ', url: 'https://www.nicovideo.jp/series/109288' },
-      { title: '春を抱いていた Ⅰ', col_key: 'は', url: 'https://www.nicovideo.jp/watch/so39381031' },
-      { title: 'パパンがパンダ! その2', col_key: 'は', url: 'https://www.nicovideo.jp/watch/so37527849' },
+      {
+        title: '春を抱いていた Ⅰ',
+        col_key: 'は',
+        url: 'https://www.nicovideo.jp/watch/so39381031',
+      },
+      {
+        title: 'パパンがパンダ! その2',
+        col_key: 'は',
+        url: 'https://www.nicovideo.jp/watch/so37527849',
+      },
       { title: 'col_key欠落', col_key: '', url: 'https://www.nicovideo.jp/watch/so1' },
     ]
     const m = buildWatchColKeyMap(items)
@@ -169,6 +177,73 @@ describe('resolveByTitle — アポストロフィ正規化', () => {
     ])
     // DOG DAYS'' エピソードは DOG DAYS(102753) でなく DOG DAYS''(102755) にヒット
     expect(resolveByTitle("DOG DAYS''　第12話　帰郷", byTitle)).toBe(102755)
+  })
+})
+
+// ===== resolveByTitle — シーズン標識ガード（隣接シーズンへの誤吸着防止）=====
+// 未登録の第N期各話が、接頭辞一致で第1期に吸われないこと（→ null で仮シリーズへ）。
+// 話数表記（第N話/#N/EP/本編/第N章 等）は「期」を含まないので棄却されないこと。
+describe('resolveByTitle — シーズン標識ガード', () => {
+  const BASE = '君のことが大大大大大好きな100人の彼女'
+  const S1 = 434607
+  const S2 = 501304
+
+  // 全角スペースを含む文字列は文字列リテラル連結で表す（template だと no-irregular-whitespace に触れる）。
+  describe('別シーズン → 基底シリーズに付かない（null）', () => {
+    const byTitle = new Map([[BASE, S1]])
+    const cases = [
+      BASE + '　第3期　第1話　テスト', // 第N期（算用）
+      BASE + '　第二期　#3　テスト', // 第N期（漢数字）
+      BASE + '　シーズン2　テスト', // シーズンN
+      BASE + '　第2シーズン　テスト', // 第Nシーズン
+      BASE + '　Season 3 Test', // Season N
+      BASE + '　season3　テスト', // 小文字・空白なし
+      BASE + '　２ｎｄ　テスト', // 全角序数略記
+    ]
+    for (const t of cases) {
+      it('棄却: ' + t, () => {
+        expect(resolveByTitle(t, byTitle)).toBe(null)
+      })
+    }
+  })
+
+  describe('話数表記（第N話以外も含む）→ 基底シリーズに解決（弾かない）', () => {
+    const byTitle = new Map([[BASE, S1]])
+    const cases = [
+      BASE + '　第1話　テスト', // 第N話（算用）
+      BASE + '　#5　テスト', // #N
+      BASE + '　＃5　テスト', // 全角＃N
+      BASE + '　EP 11　テスト', // EP N
+      BASE + '　Episode 7　テスト', // Episode N
+      BASE + '　5　サブタイ', // 数字のみ
+      BASE + '　第一話　テスト', // 第N話（漢数字）
+      BASE + '　本編', // 本編
+      BASE + '　第3章　テスト', // 第N章（期ではない）
+      BASE + '　第2巻　テスト', // 第N巻
+      BASE + '　第4夜　テスト', // 第N夜
+      BASE + '　第5回　テスト', // 第N回
+    ]
+    for (const t of cases) {
+      it('受理: ' + t, () => {
+        expect(resolveByTitle(t, byTitle)).toBe(S1)
+      })
+    }
+  })
+
+  it('longest-match 保持: 第2期が登録済みなら第2期各話は第2期にフルマッチ（基底候補のみ棄却）', () => {
+    const byTitle = new Map([
+      [BASE, S1],
+      [BASE + ' 第2期', S2],
+    ])
+    expect(resolveByTitle(BASE + ' 第2期　#3　テスト', byTitle)).toBe(S2)
+  })
+
+  it('第3期各話は第2期にも付かない（第2期登録済みでも null → 仮シリーズへ）', () => {
+    const byTitle = new Map([
+      [BASE, S1],
+      [BASE + ' 第2期', S2],
+    ])
+    expect(resolveByTitle(BASE + ' 第3期　第1話', byTitle)).toBe(null)
   })
 })
 

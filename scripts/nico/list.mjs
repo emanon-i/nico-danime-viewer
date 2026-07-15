@@ -119,6 +119,14 @@ export function buildWatchColKeyMap(items) {
 // 「K 第1話」->「K」は ' ' で境界あり。「Kアニメ」->「K」は 'ア' で境界なし -> スキップ。
 const TITLE_BOUNDARY_RE = /^[\s第#（(「『[【・\d]/
 
+// シーズン/続編標識（別シーズンを示す）。前方一致した基底シリーズ候補の「残り」が
+// これで始まる場合、その各話は別シーズン所属なので候補を棄却する（隣接シーズンへの誤吸着防止）。
+// 重要: 話数標識（第N話/第N章/第N巻/第N幕/第N夜/第N回/第N輪/#N/EP N/Episode N/本編/数字のみ）は
+// 含めない＝棄却しない。判別の勘所は末尾字「期」＝シーズン（話/章/巻/幕/夜/回/輪 とは別字）。
+// 全角数字・全角シーズン略記（２ｎｄ 等）も対象。`\s` は U+3000 を含む。
+const SEASON_MARKER_RE =
+  /^(?:第[0-9０-９]+期|第[一二三四五六七八九十百]+期|(?:第[0-9０-９]+)?シーズン[0-9０-９]*|season\s*[0-9０-９]+|[0-9０-９]+(?:st|nd|rd|th)\s+season|[0-9０-９]+(?:ｓｔ|ｎｄ|ｒｄ|ｔｈ))/i
+
 // U+2018 / U+2019 / U+02BC → U+0027 に正規化（list.json と snapshot の表記ゆれ吸収）
 // 実例: DOG DAYS' のエピソードタイトルが U+2019、list.json が U+0027
 function normalizeQuotes(s) {
@@ -141,6 +149,10 @@ export function resolveByTitle(episodeTitle, byTitle) {
     if (normTitle.length === 0 || !normEp.startsWith(normTitle)) continue
     const next = normEp[normTitle.length]
     if (next !== undefined && !TITLE_BOUNDARY_RE.test(next)) continue
+    // シーズン標識ガード: 残りが「第N期/シーズン/Season/序数」で始まるなら別シーズン所属
+    // → この（短い基底）候補を棄却。未登録シーズンは resolveByTitle==null で仮シリーズへ落ちる。
+    const rest = normEp.slice(normTitle.length).replace(/^[\s・:：]+/, '')
+    if (SEASON_MARKER_RE.test(rest)) continue
     if (best === null || normTitle.length > best.len) {
       best = { seriesId, len: normTitle.length }
     }

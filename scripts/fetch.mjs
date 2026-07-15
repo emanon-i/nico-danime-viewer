@@ -59,6 +59,9 @@ import {
   countSeriesWithEpisodes,
   seriesWithNullEpisodes,
   chronoSort,
+  moveEpisodeToSeries,
+  planAuthoritativeMoves,
+  findEmptyRealSeries,
 } from './store/store.mjs'
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '../data')
@@ -453,6 +456,16 @@ async function runFullJS() {
       }
     }
     const eps = mapNvapiEpisodes(seriesId, data?.items ?? [])
+    // 権威的メンバーシップの是正: この新規シリーズの nvapi 各話が、既に別の正シリーズへ
+    // 誤登録されている場合は引き取る（PRESERVE ガードを迂回して直接移動）。追加 nvapi なし。
+    const b3Moves = planAuthoritativeMoves(store, seriesId, eps)
+    for (const mv of b3Moves) moveEpisodeToSeries(store, mv.contentId, seriesId, mv.episodeNo)
+    if (b3Moves.length > 0) {
+      logger.info('fetch', '[JS] B3 authoritative move (wrong series -> new series)', {
+        seriesId,
+        moved: b3Moves.length,
+      })
+    }
     storeUpsertEps(store, eps)
   }
 
@@ -529,6 +542,7 @@ async function runFullJS() {
         if (ep.seriesId === sid) provisionalCids.add(ep.contentId)
       }
       let mergeVerified = false
+      const orderMap = new Map() // contentId -> nvapi 話順（付け替え時に episodeNo を是正）
       try {
         const verifyData = await fetchSeriesData(realId)
         if (!isBranchSeries(verifyData?.detail)) {
@@ -536,6 +550,7 @@ async function runFullJS() {
           continue
         }
         const nvapiEps = mapNvapiEpisodes(realId, verifyData?.items ?? [])
+        for (const e of nvapiEps) orderMap.set(e.contentId, e.episodeNo)
         const nvapiCids = new Set(nvapiEps.map((e) => e.contentId))
         mergeVerified = [...provisionalCids].some((cid) => nvapiCids.has(cid))
         if (mergeVerified) storeUpsertEps(store, nvapiEps)
@@ -551,12 +566,9 @@ async function runFullJS() {
         continue
       }
 
-      // 4. 統合実施
-      for (const ep of store.episodes.values()) {
-        if (ep.seriesId === sid) {
-          ep.seriesId = realId
-          store._dirtySeries.add(realId)
-        }
+      // 4. 統合実施（moveEpisodeToSeries に集約: 旧新を dirty 化しつつ話順を nvapi で是正）
+      for (const cid of provisionalCids) {
+        moveEpisodeToSeries(store, cid, realId, orderMap.get(cid) ?? null)
       }
       store.series.delete(sid)
       // 前回 run で書き出された data/series/<neg>.json を削除（次回 loadStore での再インジェスト防止）
@@ -570,6 +582,56 @@ async function runFullJS() {
       })
     }
     logger.info('fetch', '[JS] B6 reconciliation done', { reconciled: reconciledCount })
+  }
+
+  // ── B7: 空シリーズのメンバーシップ照合（既存の誤登録データを修復）─────────────
+  // 各話0件の正シリーズ（＝各話が誤って別の正シリーズに取られている疑い。例: 第N期の各話が
+  // 第1期に残存）を nvapi 再取得し、権威的メンバーシップで引き取る。対象は空シリーズのみで
+  // 稀・治癒後は候補から外れる（自己沈静化）。ToS 配慮に 1 run の件数上限で保護。
+  {
+    const emptyReal = findEmptyRealSeries(store)
+    const cap = Number(process.env.NICO_EMPTY_RECONCILE_LIMIT ?? 50)
+    const targets = cap > 0 ? emptyReal.slice(0, cap) : emptyReal
+    if (emptyReal.length > targets.length) {
+      logger.warn('fetch', '[JS] B7 empty-series cap reached (deferred to next run)', {
+        empty: emptyReal.length,
+        processed: targets.length,
+        cap,
+      })
+    }
+    let b7Moved = 0
+    let b7Created = 0
+    for (const seriesId of targets) {
+      let data
+      try {
+        data = await fetchSeriesData(seriesId)
+      } catch (err) {
+        logger.warn('fetch', '[JS] B7 nvapi failed', { seriesId, err: err.message })
+        continue
+      }
+      if (!isBranchSeries(data?.detail)) {
+        logger.warn('fetch', '[JS] B7 non-branch series skipped', { seriesId })
+        continue
+      }
+      const eps = mapNvapiEpisodes(seriesId, data?.items ?? [])
+      // 移動を先に計画・実行（PRESERVE 迂回）→ その後 upsert で未登録話を新規作成
+      const moves = planAuthoritativeMoves(store, seriesId, eps)
+      for (const mv of moves) {
+        if (moveEpisodeToSeries(store, mv.contentId, seriesId, mv.episodeNo)) b7Moved++
+      }
+      const beforeCount = store.episodes.size
+      storeUpsertEps(store, eps)
+      b7Created += store.episodes.size - beforeCount
+      store._dirtySeries.add(seriesId)
+    }
+    if (targets.length > 0) {
+      logger.info('fetch', '[JS] B7 empty-series reconciliation done', {
+        emptySeries: emptyReal.length,
+        processed: targets.length,
+        moved: b7Moved,
+        created: b7Created,
+      })
+    }
   }
 
   if (missedContentIds.size > 0) {

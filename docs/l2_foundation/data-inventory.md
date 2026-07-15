@@ -213,10 +213,10 @@ format は両者同一。
 
 **メモリのみ — ファイル非永続**:
 
-| フィールド        | 型             | 内容                                                                                 | 注入元                                             |
-| ----------------- | -------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------- |
-| `seriesId`        | `number\|null` | null=orphan、負=仮シリーズ。series JSON のファイル名（キー）から再構築される         | `_ingestSeriesJson()`                              |
-| `prevViewCounter` | `number\|null` | 前回 viewCounter（delta/hotScore 計算用）。writeBack 時は series JSON に**含めない** | `_loadState()` が `state/prev-views.json` から注入 |
+| フィールド        | 型             | 内容                                                                                                                                                               | 注入元                                             |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| `seriesId`        | `number\|null` | null=orphan、負=仮シリーズ。series JSON のファイル名（キー）から再構築される。run 間で null/負→正だけでなく**正→正にも変わりうる**（誤登録の権威是正 B3/B7・§3-1） | `_ingestSeriesJson()`                              |
+| `prevViewCounter` | `number\|null` | 前回 viewCounter（delta/hotScore 計算用）。writeBack 時は series JSON に**含めない**                                                                               | `_loadState()` が `state/prev-views.json` から注入 |
 
 ---
 
@@ -245,6 +245,19 @@ return h <= 0 ? h - 1 : -h // 必ず負数・0 にならない
 | **reconciliation（日次 B6）** | 実シリーズの `allTitles` マップと完全一致照合 → nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）→ 検証 OK なら ep の `seriesId` を実 ID に付け替え → `store.series.delete(neg)` + `unlinkSync(data/series/<neg>.json)` |
 | **cleanup（日次 A2 末尾）**   | A2 step2 で ep が実 ID に付け替えられた後、空になった仮シリーズを B6 同様に `delete` + `unlinkSync`                                                                                                                                     |
 | **ファイル残存リスク**        | 削除せずに次回 `loadStore` で再インジェストされると seriesId が揺れる → B6/A2 cleanup で必ず消す設計                                                                                                                                    |
+
+---
+
+## 3-1. 正シリーズ間の誤登録是正（自己修復）
+
+seriesId 未取得の各話が、シーズン標識ガード導入前は前方一致で**隣接シーズン（正の実 ID）に誤登録**されることがあった（例: 第3期 第1話 → 第1期）。予防・治癒の二段構え:
+
+- **予防**: `resolveByTitle` のシーズン標識ガード（残りが `第N期`/`シーズン`/`Season`/序数 で始まる基底候補を棄却）。未取得シーズンは仮シリーズ（負 ID）へ落とし、既存 B6（負→実）で正しく統合する。話数標識（`第N話`/`第N章`/`#N`/`EP`/`本編` 等＝「期」を含まない）は棄却しない。
+- **治癒**: 既に正→正で誤登録済みのデータ（`upsertEpisodes` の PRESERVE で保護され遡及不可）を、nvapi の**排他的メンバーシップ**を権威に是正する。
+  - `moveEpisodeToSeries(store, contentId, target, episodeNo)`: `ep.seriesId` を直接付け替え（PRESERVE 迂回）・`episodeNo` を nvapi 話順で是正・**旧新両シリーズを dirty 化**。旧シリーズは削除しない（B6 の負シリーズと異なり、旧＝正当な他の各話を保持）。
+  - **B3 高速パス**: 新規シリーズ取得時、その nvapi 各話が別の正シリーズにあれば引き取る（追加アクセス0）。
+  - **B7 空シリーズ照合**: 各話0件の正・available シリーズ（`findEmptyRealSeries`）を nvapi 再取得し引き取る（1 run 件数上限あり）。各話が誤って別シリーズに取られている「空シリーズ」を修復（第3期のケース）。
+- **収束**: `state/series-index.json` は日次全再構築／毎時値上書きで自己修正。`data/series/*.json` は旧新とも dirty で再出力（旧から消え・新に載る）。projection（`works.json` 等）は `ep.seriesId` から再集計。
 
 ---
 
