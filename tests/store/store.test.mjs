@@ -22,6 +22,9 @@ import {
   chronoSort,
   episodeOrdinalFromTitle,
   countSeriesWithEpisodes,
+  moveEpisodeToSeries,
+  planAuthoritativeMoves,
+  findEmptyRealSeries,
 } from '../../scripts/store/store.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -667,5 +670,129 @@ describe('replaceSeriesTags', () => {
     const tags = store.series.get(99001)?.tags
     expect(tags).toHaveLength(2)
     expect(tags?.[0]).toEqual({ name: 'アクション', isCurated: true })
+  })
+})
+
+// ────────────────────────────────────────────────────────────────────────────
+// moveEpisodeToSeries / planAuthoritativeMoves / findEmptyRealSeries
+// （誤シリーズ登録の権威的是正）
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('moveEpisodeToSeries', () => {
+  it('別シリーズへ移動し non-null episodeNo を上書き・旧新両方を dirty 化', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ contentId: 'soX', seriesId: 100, episodeNo: 13 })])
+    store._dirtySeries.clear()
+    const moved = moveEpisodeToSeries(store, 'soX', 200, 1)
+    expect(moved).toBe(true)
+    const ep = store.episodes.get('soX')
+    expect(ep.seriesId).toBe(200)
+    expect(ep.episodeNo).toBe(1)
+    expect(store._dirtySeries.has(100)).toBe(true)
+    expect(store._dirtySeries.has(200)).toBe(true)
+  })
+
+  it('存在しない contentId は false', () => {
+    const store = createStore()
+    expect(moveEpisodeToSeries(store, 'none', 200, 1)).toBe(false)
+  })
+
+  it('同一シリーズは移動しない（false）が episodeNo の是正はする', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ contentId: 'soX', seriesId: 100, episodeNo: 5 })])
+    store._dirtySeries.clear()
+    expect(moveEpisodeToSeries(store, 'soX', 100, 1)).toBe(false)
+    expect(store.episodes.get('soX').episodeNo).toBe(1)
+    expect(store._dirtySeries.has(100)).toBe(true)
+  })
+
+  it('episodeNo 未指定なら既存話順を維持', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ contentId: 'soX', seriesId: 100, episodeNo: 7 })])
+    moveEpisodeToSeries(store, 'soX', 200)
+    expect(store.episodes.get('soX').episodeNo).toBe(7)
+    expect(store.episodes.get('soX').seriesId).toBe(200)
+  })
+})
+
+describe('planAuthoritativeMoves', () => {
+  it('別の正シリーズにある cid は移動計画に載る（nvapi 話順つき）', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ contentId: 'soA', seriesId: 100, episodeNo: 13 })])
+    expect(planAuthoritativeMoves(store, 200, [{ contentId: 'soA', episodeNo: 1 }])).toEqual([
+      { contentId: 'soA', oldSeriesId: 100, episodeNo: 1 },
+    ])
+  })
+
+  it('未登録 cid は載らない（新規作成扱い）', () => {
+    const store = createStore()
+    expect(planAuthoritativeMoves(store, 200, [{ contentId: 'soNew', episodeNo: 1 }])).toEqual([])
+  })
+
+  it('既に target にある cid は載らない（no-op）', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ contentId: 'soA', seriesId: 200, episodeNo: 1 })])
+    expect(planAuthoritativeMoves(store, 200, [{ contentId: 'soA', episodeNo: 1 }])).toEqual([])
+  })
+
+  it('仮シリーズ（負 seriesId）の cid は対象外（B6 が担当）', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ contentId: 'soA', seriesId: -123, episodeNo: 1 })])
+    expect(planAuthoritativeMoves(store, 200, [{ contentId: 'soA', episodeNo: 1 }])).toEqual([])
+  })
+
+  it('未割当（seriesId=null）の cid は対象外', () => {
+    const store = createStore()
+    upsertEpisodes(store, [makeEp({ contentId: 'soA', seriesId: null, episodeNo: 1 })])
+    expect(planAuthoritativeMoves(store, 200, [{ contentId: 'soA', episodeNo: 1 }])).toEqual([])
+  })
+})
+
+describe('findEmptyRealSeries', () => {
+  it('各話0件の正・available シリーズのみ返す（有話/非available/仮は除外）', () => {
+    const store = createStore()
+    upsertSeries(store, [
+      makeSeries({ seriesId: 100 }),
+      makeSeries({ seriesId: 200 }),
+      makeSeries({ seriesId: 300, isAvailable: false }),
+      makeSeries({ seriesId: -5 }),
+    ])
+    upsertEpisodes(store, [makeEp({ contentId: 'soA', seriesId: 100 })])
+    expect(findEmptyRealSeries(store)).toEqual([200])
+  })
+})
+
+describe('シナリオ回帰: 第3期 ep1 を第1期から第3期へ移動（B7 相当の合成）', () => {
+  it('空の第3期に nvapi 各話（ep1含む）を適用 → ep1 が第3期へ移り第1期から消える', () => {
+    const store = createStore()
+    const S1 = 434607
+    const S3 = 501305
+    upsertSeries(store, [
+      makeSeries({ seriesId: S1, title: '100人の彼女' }),
+      makeSeries({ seriesId: S3, title: '100人の彼女 第3期' }),
+    ])
+    for (let i = 1; i <= 12; i++) {
+      upsertEpisodes(store, [makeEp({ contentId: `so${i}`, seriesId: S1, episodeNo: i })])
+    }
+    // 第3期 ep1 が誤って第1期に（誤った episodeNo=13）
+    upsertEpisodes(store, [makeEp({ contentId: 'so100', seriesId: S1, episodeNo: 13 })])
+
+    expect(getEpisodesForSeries(store, S3)).toHaveLength(0)
+    expect(findEmptyRealSeries(store)).toContain(S3)
+
+    // B7 相当: 第3期 nvapi 各話（ep1 が話順1）を適用
+    const nvapiEps = [{ contentId: 'so100', episodeNo: 1 }]
+    for (const mv of planAuthoritativeMoves(store, S3, nvapiEps)) {
+      moveEpisodeToSeries(store, mv.contentId, S3, mv.episodeNo)
+    }
+
+    const s1Eps = getEpisodesForSeries(store, S1)
+    const s3Eps = getEpisodesForSeries(store, S3)
+    expect(s1Eps.map((e) => e.contentId)).not.toContain('so100')
+    expect(s1Eps).toHaveLength(12)
+    expect(s3Eps.map((e) => e.contentId)).toEqual(['so100'])
+    expect(s3Eps[0].episodeNo).toBe(1)
+    expect(store._dirtySeries.has(S1)).toBe(true)
+    expect(store._dirtySeries.has(S3)).toBe(true)
   })
 })

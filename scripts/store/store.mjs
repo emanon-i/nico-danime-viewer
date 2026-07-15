@@ -693,6 +693,87 @@ export function linkEpisodes(store, updates) {
 }
 
 /**
+ * 各話を targetSeriesId へ**権威的に移動**する（nvapi メンバーシップは排他的な権威）。
+ * upsertEpisodes の PRESERVE ガードを迂回し、seriesId/episodeNo を直接付け替える。
+ * 旧・新の両シリーズを dirty 化して両ファイルの再出力（旧から消え・新に載る）を促す。
+ * 旧シリーズ自体は削除しない（正当な他の各話を保持しうるため。仮→実の削除は fetch 側 B6 が担当）。
+ * @param {Store} store
+ * @param {string} contentId
+ * @param {number} targetSeriesId
+ * @param {number|null} [episodeNo] nvapi の話順。渡されたら上書き（COALESCE では直らないため）。
+ * @returns {boolean} 実際に別シリーズへ移動したら true
+ */
+export function moveEpisodeToSeries(store, contentId, targetSeriesId, episodeNo = null) {
+  const ep = store.episodes.get(contentId)
+  if (!ep) return false
+  const target = Number(targetSeriesId)
+  const oldId = ep.seriesId
+  const now = new Date().toISOString()
+  if (oldId === target) {
+    // 同一シリーズ: episodeNo の是正のみ行う（移動ではない）
+    if (episodeNo != null && ep.episodeNo !== episodeNo) {
+      ep.episodeNo = episodeNo
+      ep.lastUpdated = now
+      store._dirtySeries.add(target)
+    }
+    return false
+  }
+  ep.seriesId = target
+  if (episodeNo != null) ep.episodeNo = episodeNo
+  ep.lastUpdated = now
+  if (oldId != null) store._dirtySeries.add(oldId)
+  store._dirtySeries.add(target)
+  return true
+}
+
+/**
+ * nvapi の各話一覧（targetSeriesId の権威的メンバーシップ）と現在の store を突き合わせ、
+ * 「別の**正** seriesId に属している contentId」の移動計画を返す。
+ * 未登録 contentId は移動でなく新規作成扱い（対象外）。未割当/仮（<=0）は B6 が担当（対象外）。
+ * @param {Store} store
+ * @param {number} targetSeriesId
+ * @param {{contentId:string, episodeNo?:number}[]} nvapiEps
+ * @returns {{contentId:string, oldSeriesId:number, episodeNo:number|null}[]}
+ */
+export function planAuthoritativeMoves(store, targetSeriesId, nvapiEps) {
+  const target = Number(targetSeriesId)
+  const moves = []
+  for (const e of nvapiEps) {
+    const cid = e.contentId
+    if (!cid) continue
+    const ep = store.episodes.get(cid)
+    if (!ep) continue // 未登録 → 通常 upsert で新規作成
+    const oldId = ep.seriesId
+    if (oldId == null || oldId <= 0) continue // 未割当/仮 → B6 が担当
+    if (oldId === target) continue // 既に正しい
+    moves.push({
+      contentId: cid,
+      oldSeriesId: oldId,
+      episodeNo: e.episodeNo ?? ep.episodeNo ?? null,
+    })
+  }
+  return moves
+}
+
+/**
+ * 各話を1件も持たない**正・available** な seriesId を返す（＝各話が誤って別シリーズに
+ * 取られている疑いのある系列。fetch 側 B7 が nvapi 再取得して引き取る対象を選ぶのに使う）。
+ * @param {Store} store
+ * @returns {number[]}
+ */
+export function findEmptyRealSeries(store) {
+  const withEp = new Set()
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId != null) withEp.add(ep.seriesId)
+  }
+  const result = []
+  for (const [sid, s] of store.series) {
+    if (sid > 0 && s.isAvailable !== false && !withEp.has(sid)) result.push(sid)
+  }
+  return result
+}
+
+/**
  * シリーズのフィールドを更新する（ホワイトリスト）。
  * @param {Store} store
  * @param {number} seriesId
