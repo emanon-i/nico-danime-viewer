@@ -49,13 +49,14 @@ state ブランチへの rsync で永続化される。
 
 システム全体のカーソル・バージョン情報。毎時・日次ともに最後に上書き。
 
-| フィールド                    | 型             | 内容                                                        | 更新タイミング    |
-| ----------------------------- | -------------- | ----------------------------------------------------------- | ----------------- |
-| `rssLastGuid`                 | `string\|null` | 毎時 RSS ページング cursor（既読の最新 guid）               | 毎時 D フェーズ   |
-| `snapshotLastStartTime`       | `string\|null` | snapshot 増分取得用（前回最終 startTime）                   | 日次 Phase A      |
-| `snapshotVersionLastModified` | `string\|null` | 日次 version gate の前回値（変化なし → 早期終了）           | 日次 Phase A      |
-| `lastSeedAt`                  | `string\|null` | nvapi seed 最終実行時刻                                     | 日次（seed 時）   |
-| `snapshotFetchedAt`           | `string\|null` | Phase A 完全完了の ISO8601（E7 isAvailable 評価の基準時刻） | 日次 Phase A 末尾 |
+| フィールド                    | 型             | 内容                                                                      | 更新タイミング            |
+| ----------------------------- | -------------- | ------------------------------------------------------------------------- | ------------------------- |
+| `rssLastGuid`                 | `string\|null` | 毎時 RSS ページング cursor（既読の最新 guid）                             | 毎時 D フェーズ           |
+| `snapshotLastStartTime`       | `string\|null` | snapshot 増分取得用（前回最終 startTime）                                 | 日次 Phase A              |
+| `snapshotVersionLastModified` | `string\|null` | 日次 version gate の前回値（変化なし → 早期終了）                         | 日次 Phase A              |
+| `lastSeedAt`                  | `string\|null` | nvapi seed 最終実行時刻                                                   | 日次（seed 時）           |
+| `snapshotFetchedAt`           | `string\|null` | Phase A 完全完了の ISO8601（E7 isAvailable 評価の基準時刻）               | 日次 Phase A 末尾         |
+| `nvapiLastOkAt`               | `string\|null` | nvapi 直近成功時刻の ISO8601（`pnpm ops:health` の nvapi 劣化検知に使う） | 毎時/日次（nvapi 成功時） |
 
 lifecycle: **永続（毎回上書き）**
 

@@ -25,7 +25,14 @@ import {
   provisionalSeriesId,
   trimSeriesTitle,
 } from './nico/list.mjs'
-import { fetchSeriesData, mapNvapiEpisodes, isBranchSeries, seedAllSeries } from './nico/nvapi.mjs'
+import {
+  fetchSeriesData,
+  mapNvapiEpisodes,
+  isBranchSeries,
+  seedAllSeries,
+  getNvapiStats,
+  _resetNvapiStats,
+} from './nico/nvapi.mjs'
 import { fetchRssMultiPage, extractWatchId } from './nico/rss.mjs'
 
 import { deriveSeriesTagsFromStore } from './etl/tags.mjs'
@@ -355,6 +362,7 @@ async function runFullJS() {
   mkdirSync(DATA_DIR, { recursive: true })
   const now = new Date().toISOString()
   const stateDir = join(DATA_DIR, 'state')
+  _resetNvapiStats() // この run 単独の nvapi 到達性を測る（B3/B7/A2/NICO_FORCE_SEED backfill 分を集計）
 
   logger.info('fetch', '[JS] loadStore start')
   const store = await loadStore(DATA_DIR)
@@ -773,6 +781,17 @@ async function runFullJS() {
     logger.info('fetch', '[JS] NICO_FORCE_SEED=1: episodeNo backfill done', stats)
   }
 
+  // nvapi 到達性サマリ（PR #6 の自己修復が実際に走れたかの可観測化）。writeback 前に確定させる。
+  const nvapiStats = getNvapiStats()
+  if (nvapiStats.ok + nvapiStats.failed > 0) {
+    if (nvapiStats.ok === 0) {
+      logger.error('fetch', '[JS] nvapi stats: nvapi all requests failed this run', nvapiStats)
+    } else {
+      logger.info('fetch', '[JS] nvapi stats', nvapiStats)
+      storeUpdateMeta(store, { nvapiLastOkAt: now })
+    }
+  }
+
   logger.info('fetch', '[JS] phase F+G: project all')
   await writeBackStore(store, DATA_DIR, { now })
   await projectAll(store, DATA_DIR, now)
@@ -792,6 +811,7 @@ async function runHourlyJS() {
   mkdirSync(DATA_DIR, { recursive: true })
   const now = new Date().toISOString()
   const stateDir = join(DATA_DIR, 'state')
+  _resetNvapiStats() // この run 単独の nvapi 到達性を測る（D3 nvapi seed 分を集計）
 
   logger.info('fetch', '[JS] phase D: RSS (hourly)')
   const { store, contentToSeries } = await loadPartialStore(DATA_DIR, [])
@@ -977,6 +997,17 @@ async function runHourlyJS() {
   }
 
   await exportNewStore(store, DATA_DIR, now)
+
+  // nvapi 到達性サマリ（D3 nvapi seed 分）。meta.json 書き出し前に確定させる。
+  const nvapiStats = getNvapiStats()
+  if (nvapiStats.ok + nvapiStats.failed > 0) {
+    if (nvapiStats.ok === 0) {
+      logger.error('fetch', '[JS] nvapi stats: nvapi all requests failed this run', nvapiStats)
+    } else {
+      logger.info('fetch', '[JS] nvapi stats', nvapiStats)
+      storeUpdateMeta(store, { nvapiLastOkAt: now })
+    }
+  }
 
   mkdirSync(stateDir, { recursive: true })
   writeFileSync(join(stateDir, 'meta.json') + '.tmp', JSON.stringify(store.meta), 'utf-8')

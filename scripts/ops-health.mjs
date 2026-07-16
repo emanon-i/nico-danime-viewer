@@ -49,6 +49,10 @@ const UV = {
 // 超えて live 側が古いままなら「deploy 成功したが live 未反映」の疑い（ci=false・運用シグナル）。
 const DEPLOY_LAG_WARN_MIN = 120
 
+// nvapi 劣化しきい値（分）。meta.nvapiLastOkAt がこれより古い/null かつ未治癒の疑い（仮/空
+// シリーズが存在）なら B7 等の nvapi 依存自己修復が機能していない疑い＝データ正しさ FAIL。
+const NVAPI_STALE_MIN = 48 * 60
+
 // 件数の下限（空 seed 事故・取得崩壊の検出。現状比でかなり余裕を持たせた床）。
 const FLOORS = {
   works: 5000, // 実測 6601
@@ -484,11 +488,71 @@ async function checkUserVisible() {
       false
     )
   } else {
-    const [stWorks, stRanking, stIdx] = await Promise.all([
+    const [stWorks, stRanking, stIdx, stMeta] = await Promise.all([
       fetchState('works.json'),
       fetchState('ranking.json'),
       fetchState('state/series-index.json'),
+      fetchState('state/meta.json'),
     ])
+
+    // nvapi 健全性: PR #6 の B7 空シリーズ照合（自己修復）が実際に走れているかの可観測化。
+    // meta.nvapiLastOkAt が古い/未実行 かつ 未治癒の疑い（仮シリーズ or 空の正シリーズが存在）
+    // なら「無音劣化」の疑い＝データ正しさ FAIL（--ci 通知対象）。meta.json に本フィールドが
+    // 無い state（本チェック導入前の古い state）は移行期間として WARN に留める。
+    {
+      const hasNvapiField =
+        stMeta.ok &&
+        stMeta.data &&
+        Object.prototype.hasOwnProperty.call(stMeta.data, 'nvapiLastOkAt')
+      if (!stMeta.ok) {
+        warn(G, 'nvapi 健全性', `state/meta.json 取得不可（http=${stMeta.status}）`, false)
+      } else if (!hasNvapiField) {
+        warn(
+          G,
+          'nvapi 健全性',
+          'meta.json に nvapiLastOkAt が無い（導入前の state・移行期間）',
+          false
+        )
+      } else {
+        const nvapiLastOkAt = stMeta.data.nvapiLastOkAt
+        const age = nvapiLastOkAt ? minutesSince(nvapiLastOkAt) : null
+        const stale = age == null || age > NVAPI_STALE_MIN
+        const ageDetail = age == null ? '未実行(null)' : fmtAge(age)
+        const stateWorksArr =
+          stWorks.ok && Array.isArray(stWorks.data?.works) ? stWorks.data.works : null
+        // 未治癒の疑い: 仮シリーズ(seriesId<0) or 各話0件の正シリーズが存在するか。
+        // 注: 各話を他シリーズに取られた空シリーズは snapshot に現れず E7 で isAvailable=false に
+        // なる（＝被害の典型署名）ため、availability では絞らない。
+        const pending = stateWorksArr
+          ? stateWorksArr.some(
+              (w) => w.seriesId < 0 || (w.seriesId > 0 && (w.episodeCount ?? 0) < 1)
+            )
+          : null
+        if (stale && pending === true) {
+          fail(
+            G,
+            'nvapi 健全性',
+            `nvapiLastOkAt=${ageDetail} かつ未治癒の疑い（仮/空シリーズが存在）→ B7 自己修復が機能していない疑い`
+          )
+        } else if (stale && pending == null) {
+          warn(
+            G,
+            'nvapi 健全性',
+            `nvapiLastOkAt=${ageDetail}（works.json 未取得で判定不可）`,
+            false
+          )
+        } else if (stale) {
+          warn(
+            G,
+            'nvapi 健全性',
+            `nvapiLastOkAt=${ageDetail}（未治癒の仮/空シリーズは無し）`,
+            false
+          )
+        } else {
+          pass(G, 'nvapi 健全性', `直近成功 ${ageDetail}`)
+        }
+      }
+    }
 
     // C-4: live 追随シグナル（deploy 成功したが live に未反映の疑い・ci=false）。
     // 同一 state コミットの works.json lastUpdated と live works.json lastUpdated の差を見る。
