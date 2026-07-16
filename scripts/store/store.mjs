@@ -76,6 +76,7 @@ import { trimSeriesTitle } from '../nico/list.mjs'
  * @property {string|null} snapshotVersionLastModified
  * @property {string|null} lastSeedAt
  * @property {string|null} snapshotFetchedAt  Phase A 完全実行が完了した ISO 8601（version gate skip 時は更新しない）
+ * @property {string|null} nvapiLastOkAt  nvapi 直近成功時刻の ISO 8601（ops:health の劣化検知に使う）
  */
 
 /**
@@ -102,6 +103,7 @@ export function createStore() {
       snapshotVersionLastModified: null,
       lastSeedAt: null,
       snapshotFetchedAt: null,
+      nvapiLastOkAt: null,
     },
     _dirtySeries: new Set(),
   }
@@ -274,6 +276,7 @@ async function _loadState(store, stateDir) {
       snapshotVersionLastModified: meta.snapshotVersionLastModified ?? null,
       lastSeedAt: meta.lastSeedAt ?? null,
       snapshotFetchedAt: meta.snapshotFetchedAt ?? null,
+      nvapiLastOkAt: meta.nvapiLastOkAt ?? null,
     })
   } catch {
     /* 初回 bootstrap では存在しない */

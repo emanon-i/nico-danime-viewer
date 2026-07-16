@@ -215,6 +215,8 @@ snapshot に登場したが seriesId が未解決の ep を救出する。
 
 - **移動の実体** `moveEpisodeToSeries(store, contentId, target, episodeNo)`: `ep.seriesId` を直接付け替え（PRESERVE を迂回）、`episodeNo` を nvapi 話順で是正、**旧・新の両シリーズを dirty 化**（旧ファイルから消え・新ファイルに載る）。旧シリーズは削除しない（正当な他の各話を保持しうる。負の仮シリーズ削除は §4-1 B6 が担当）。
 - **収束**: `series-index.json` は日次で全再構築／毎時は値上書きで自己修正。`works.json` 等 projection は `ep.seriesId` から再集計。`ep.seriesId` は run 間で**正→正に変わり得る**（従来は null/負→正のみ）。
+- **B7 の自己再武装**: `findEmptyRealSeries` は「各話0件の正・available シリーズ」を毎 run 再計算するため、空シリーズが空である限り**毎日候補に入れ直される**（自己再武装）。1 run で治癒できなくても翌日また候補になる＝取りこぼしなく再試行され続ける設計。
+- **nvapi の間欠失敗への対処**: GitHub Actions ランナーからの nvapi 呼び出しは間欠的〜慢性的に失敗しうる（403/429/5xx/timeout）。`fetchWithToS`（`scripts/lib/http.mjs`）がこれらを指数バックオフ＋jitterでリトライし（429/503 は `Retry-After` を尊重）、B7 が「候補にはなったが1件も治癒しない」まま無音で失敗し続けるのを防ぐ。可観測化として `scripts/nico/nvapi.mjs` が run 単位の成功/失敗数を集計し（`[JS] nvapi stats`）、成功時は `state/meta.json` の `nvapiLastOkAt` を更新する。`pnpm ops:health` はこの `nvapiLastOkAt` の鮮度と仮/空シリーズの残存有無から nvapi 劣化（＝B7 が実効的に走れていない疑い）を検知する。
 
 ---
 

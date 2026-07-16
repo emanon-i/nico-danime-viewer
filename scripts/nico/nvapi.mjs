@@ -14,16 +14,41 @@ const NVAPI_HEADERS = {
   'X-Niconico-Language': 'ja-jp',
 }
 
+// ── 到達性メトリクス（GitHub Actions ランナーからの nvapi 慢性失敗を可視化するため）───
+// モジュールローカルの run 内カウンタ。fetch.mjs が run 開始時に _resetNvapiStats() でリセットし、
+// run 終端で getNvapiStats() を読んで stats ログ + meta.nvapiLastOkAt 更新に使う。
+let _nvapiOk = 0
+let _nvapiFailed = 0
+
+/** 現在の run（プロセス）の nvapi 成功/失敗件数を返す。 */
+export function getNvapiStats() {
+  return { ok: _nvapiOk, failed: _nvapiFailed }
+}
+
+/** テスト用 / run 開始時用: カウンタをリセットする。 */
+export function _resetNvapiStats() {
+  _nvapiOk = 0
+  _nvapiFailed = 0
+}
+
 /**
  * nvapi v2/series/<id> を取得して data を返す。
  * @param {number} seriesId
  * @returns {Promise<{detail: object, items: object[]}>}
  */
 export async function fetchSeriesData(seriesId) {
-  const resp = await fetchWithToS(`${NVAPI_BASE}/${seriesId}`, { headers: NVAPI_HEADERS })
+  let resp
+  try {
+    resp = await fetchWithToS(`${NVAPI_BASE}/${seriesId}`, { headers: NVAPI_HEADERS })
+  } catch (err) {
+    _nvapiFailed++
+    throw err
+  }
   if (resp.status !== 200) {
+    _nvapiFailed++
     throw new Error(`[nvapi] HTTP ${resp.status} for series/${seriesId}`)
   }
+  _nvapiOk++
   const json = await resp.json()
   return json.data
 }

@@ -2,8 +2,12 @@
 // Store (M1) の単体テスト
 
 import { describe, it, expect } from 'vitest'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import {
   createStore,
+  loadStore,
   upsertEpisodes,
   upsertSeries,
   linkEpisodes,
@@ -80,6 +84,7 @@ describe('createStore', () => {
     expect(store.episodes.size).toBe(0)
     expect(store.rss.size).toBe(0)
     expect(store.meta.rssLastGuid).toBeNull()
+    expect(store.meta.nvapiLastOkAt).toBeNull()
   })
 })
 
@@ -372,6 +377,46 @@ describe('meta state', () => {
     updateMetaState(store, { rssLastGuid: 'tag:nicovideo.jp,2024-01-01:/watch/12345' })
     const meta = getMetaState(store)
     expect(meta.rssLastGuid).toBe('tag:nicovideo.jp,2024-01-01:/watch/12345')
+  })
+
+  it('updateMetaState で nvapiLastOkAt を更新できる', () => {
+    const store = createStore()
+    updateMetaState(store, { nvapiLastOkAt: '2026-07-16T00:00:00.000Z' })
+    expect(getMetaState(store).nvapiLastOkAt).toBe('2026-07-16T00:00:00.000Z')
+  })
+
+  it('loadStore は state/meta.json の nvapiLastOkAt を読み込む（round-trip）', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nvapi-meta-'))
+    try {
+      const stateDir = path.join(dataDir, 'state')
+      await fs.mkdir(stateDir, { recursive: true })
+      await fs.writeFile(
+        path.join(stateDir, 'meta.json'),
+        JSON.stringify({ rssLastGuid: 'g1', nvapiLastOkAt: '2026-07-15T12:00:00.000Z' }),
+        'utf-8'
+      )
+      const store = await loadStore(dataDir)
+      expect(store.meta.nvapiLastOkAt).toBe('2026-07-15T12:00:00.000Z')
+    } finally {
+      await fs.rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it('loadStore は state/meta.json に nvapiLastOkAt が無ければ null のまま', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nvapi-meta-'))
+    try {
+      const stateDir = path.join(dataDir, 'state')
+      await fs.mkdir(stateDir, { recursive: true })
+      await fs.writeFile(
+        path.join(stateDir, 'meta.json'),
+        JSON.stringify({ rssLastGuid: 'g1' }),
+        'utf-8'
+      )
+      const store = await loadStore(dataDir)
+      expect(store.meta.nvapiLastOkAt).toBeNull()
+    } finally {
+      await fs.rm(dataDir, { recursive: true, force: true })
+    }
   })
 })
 
