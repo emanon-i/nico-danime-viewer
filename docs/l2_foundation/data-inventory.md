@@ -257,7 +257,7 @@ seriesId 未取得の各話が、シーズン標識ガード導入前は前方�
 - **治癒**: 既に正→正で誤登録済みのデータ（`upsertEpisodes` の PRESERVE で保護され遡及不可）を、nvapi の**排他的メンバーシップ**を権威に是正する。
   - `moveEpisodeToSeries(store, contentId, target, episodeNo)`: `ep.seriesId` を直接付け替え（PRESERVE 迂回）・`episodeNo` を nvapi 話順で是正・**旧新両シリーズを dirty 化**。旧シリーズは削除しない（B6 の負シリーズと異なり、旧＝正当な他の各話を保持）。
   - **B3 高速パス**: 新規シリーズ取得時、その nvapi 各話が別の正シリーズにあれば引き取る（追加アクセス0）。
-  - **B7 空シリーズ照合**: 各話0件の正・available シリーズ（`findEmptyRealSeries`）を nvapi 再取得し引き取る（1 run 件数上限あり）。各話が誤って別シリーズに取られている「空シリーズ」を修復（第3期のケース）。
+  - **B7 空シリーズ照合**: 各話0件の正シリーズ（`findEmptyRealSeries`／**isAvailable では絞らない**）を nvapi 再取得し引き取る（1 run 件数上限あり）。各話が誤って別シリーズに取られている「空シリーズ」を修復（第3期のケース）。被害シリーズは空ゆえ E7 で必ず `isAvailable=false` に落ちるため、available で絞ると恒久的に対象外になる（旧実装の真因）。
 - **収束**: `state/series-index.json` は日次全再構築／毎時値上書きで自己修正。`data/series/*.json` は旧新とも dirty で再出力（旧から消え・新に載る）。projection（`works.json` 等）は `ep.seriesId` から再集計。
 
 ---

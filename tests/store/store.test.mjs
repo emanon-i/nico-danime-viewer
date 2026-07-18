@@ -794,7 +794,7 @@ describe('planAuthoritativeMoves', () => {
 })
 
 describe('findEmptyRealSeries', () => {
-  it('各話0件の正・available シリーズのみ返す（有話/非available/仮は除外）', () => {
+  it('各話0件の正シリーズを返す（有話/仮は除外・isAvailable では絞らない）', () => {
     const store = createStore()
     upsertSeries(store, [
       makeSeries({ seriesId: 100 }),
@@ -803,7 +803,16 @@ describe('findEmptyRealSeries', () => {
       makeSeries({ seriesId: -5 }),
     ])
     upsertEpisodes(store, [makeEp({ contentId: 'soA', seriesId: 100 })])
-    expect(findEmptyRealSeries(store)).toEqual([200])
+    // 200（空・available）と 300（空・非available）の両方を対象にする。
+    // 300 を除外していたのが誤シリーズ登録の自己修復が本番で効かなかった真因。
+    expect(findEmptyRealSeries(store).sort((a, b) => a - b)).toEqual([200, 300])
+  })
+
+  it('空・非available シリーズも対象にする（E7 で落ちた被害シリーズを B7 が拾えるように）', () => {
+    const store = createStore()
+    upsertSeries(store, [makeSeries({ seriesId: 569267, isAvailable: false })])
+    // 各話0件・非available（E7 が空シリーズを isAvailable=false に落とした後の状態）
+    expect(findEmptyRealSeries(store)).toContain(569267)
   })
 })
 
@@ -814,7 +823,9 @@ describe('シナリオ回帰: 第3期 ep1 を第1期から第3期へ移動（B7 
     const S3 = 501305
     upsertSeries(store, [
       makeSeries({ seriesId: S1, title: '100人の彼女' }),
-      makeSeries({ seriesId: S3, title: '100人の彼女 第3期' }),
+      // 本番再現: 第3期は各話を第1期に奪われて空 → E7 が isAvailable=false に落とした状態。
+      // ここを true にしていたため heal が通り「直った」ように見えたのが false confidence の元凶。
+      makeSeries({ seriesId: S3, title: '100人の彼女 第3期', isAvailable: false }),
     ])
     for (let i = 1; i <= 12; i++) {
       upsertEpisodes(store, [makeEp({ contentId: `so${i}`, seriesId: S1, episodeNo: i })])

@@ -759,8 +759,15 @@ export function planAuthoritativeMoves(store, targetSeriesId, nvapiEps) {
 }
 
 /**
- * 各話を1件も持たない**正・available** な seriesId を返す（＝各話が誤って別シリーズに
+ * 各話を1件も持たない**正**シリーズの seriesId を返す（＝各話が誤って別シリーズに
  * 取られている疑いのある系列。fetch 側 B7 が nvapi 再取得して引き取る対象を選ぶのに使う）。
+ *
+ * 重要: **isAvailable では絞らない**。誤登録の被害シリーズ（例: 第3期）は各話を別シリーズ
+ * （第1期）に奪われて0件になり、snapshot 出現時の lastSeenAt が奪った側にしか付かないため、
+ * E7（applyIsAvailableGrace）で必ず isAvailable=false へ落ちる。つまり「空 かつ 非available」は
+ * 被害の典型署名であり、ここで available に絞ると B7 が被害シリーズを永久に対象外にして
+ * 自己修復が一切効かない（PR #6/#7 で heal が本番で1件も効かなかった真因）。B7 が各話を奪還
+ * すれば同一 run 内の lastSeenAt 更新 → E7 で isAvailable=true に復帰する。
  * @param {Store} store
  * @returns {number[]}
  */
@@ -770,8 +777,8 @@ export function findEmptyRealSeries(store) {
     if (ep.seriesId != null) withEp.add(ep.seriesId)
   }
   const result = []
-  for (const [sid, s] of store.series) {
-    if (sid > 0 && s.isAvailable !== false && !withEp.has(sid)) result.push(sid)
+  for (const sid of store.series.keys()) {
+    if (sid > 0 && !withEp.has(sid)) result.push(sid)
   }
   return result
 }
