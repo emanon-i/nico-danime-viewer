@@ -49,14 +49,15 @@ state ブランチへの rsync で永続化される。
 
 システム全体のカーソル・バージョン情報。毎時・日次ともに最後に上書き。
 
-| フィールド                    | 型             | 内容                                                                      | 更新タイミング            |
-| ----------------------------- | -------------- | ------------------------------------------------------------------------- | ------------------------- |
-| `rssLastGuid`                 | `string\|null` | 毎時 RSS ページング cursor（既読の最新 guid）                             | 毎時 D フェーズ           |
-| `snapshotLastStartTime`       | `string\|null` | snapshot 増分取得用（前回最終 startTime）                                 | 日次 Phase A              |
-| `snapshotVersionLastModified` | `string\|null` | 日次 version gate の前回値（変化なし → 早期終了）                         | 日次 Phase A              |
-| `lastSeedAt`                  | `string\|null` | nvapi seed 最終実行時刻                                                   | 日次（seed 時）           |
-| `snapshotFetchedAt`           | `string\|null` | Phase A 完全完了の ISO8601（E7 isAvailable 評価の基準時刻）               | 日次 Phase A 末尾         |
-| `nvapiLastOkAt`               | `string\|null` | nvapi 直近成功時刻の ISO8601（`pnpm ops:health` の nvapi 劣化検知に使う） | 毎時/日次（nvapi 成功時） |
+| フィールド                    | 型             | 内容                                                                                                                                                                                            | 更新タイミング            |
+| ----------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `rssLastGuid`                 | `string\|null` | 毎時 RSS ページング cursor（既読の最新 guid）                                                                                                                                                   | 毎時 D フェーズ           |
+| `snapshotLastStartTime`       | `string\|null` | snapshot 増分取得用（前回最終 startTime）                                                                                                                                                       | 日次 Phase A              |
+| `snapshotVersionLastModified` | `string\|null` | 日次 version gate の前回値（変化なし → 早期終了）                                                                                                                                               | 日次 Phase A              |
+| `lastSeedAt`                  | `string\|null` | nvapi seed 最終実行時刻                                                                                                                                                                         | 日次（seed 時）           |
+| `snapshotFetchedAt`           | `string\|null` | Phase A 完全完了の ISO8601（E7 isAvailable 評価の基準時刻）                                                                                                                                     | 日次 Phase A 末尾         |
+| `nvapiLastOkAt`               | `string\|null` | nvapi 直近成功時刻の ISO8601（`pnpm ops:health` の nvapi 劣化検知に使う）                                                                                                                       | 毎時/日次（nvapi 成功時） |
+| `sweepCursor`                 | `number`       | B7 ローテーション権威スイープの巡回カーソル（sorted 正 seriesId への index・既定 0）。日次で `batch` 件処理するたびに `(cursor+batch)%total` へ進み、約7日で全正シリーズを一巡（§dataflow 4-2） | 日次 B7 スイープ末尾      |
 
 lifecycle: **永続（毎回上書き）**
 
@@ -257,7 +258,8 @@ seriesId 未取得の各話が、シーズン標識ガード導入前は前方�
 - **治癒**: 既に正→正で誤登録済みのデータ（`upsertEpisodes` の PRESERVE で保護され遡及不可）を、nvapi の**排他的メンバーシップ**を権威に是正する。
   - `moveEpisodeToSeries(store, contentId, target, episodeNo)`: `ep.seriesId` を直接付け替え（PRESERVE 迂回）・`episodeNo` を nvapi 話順で是正・**旧新両シリーズを dirty 化**。旧シリーズは削除しない（B6 の負シリーズと異なり、旧＝正当な他の各話を保持）。
   - **B3 高速パス**: 新規シリーズ取得時、その nvapi 各話が別の正シリーズにあれば引き取る（追加アクセス0）。
-  - **B7 空シリーズ照合**: 各話0件の正シリーズ（`findEmptyRealSeries`／**isAvailable では絞らない**）を nvapi 再取得し引き取る（1 run 件数上限あり）。各話が誤って別シリーズに取られている「空シリーズ」を修復（第3期のケース）。被害シリーズは空ゆえ E7 で必ず `isAvailable=false` に落ちるため、available で絞ると恒久的に対象外になる（旧実装の真因）。
+  - **B6 毎時昇格**: 仮シリーズを毎時も `listIndexByTitle` 照合＋nvapi 検証で実シリーズへ昇格（速報レーン・`NICO_HOURLY_RECONCILE_LIMIT` 上限）。新規が偽シリーズのまま放置される時間を〜1時間に短縮。
+  - **B7 ローテーション権威スイープ**: 日次で全正シリーズを 1/7 巡回（`selectSweepTargets`／`meta.sweepCursor`／空シリーズは毎回優先）。各対象を nvapi 再取得し `planAuthoritativeMoves` で別正シリーズから各話を奪還。**空・partial・既知非空すべての誤登録**を「所属リストとの不一致」として是正し、約7日で全件一巡＝どの誤登録も最悪7日で回復。旧「空シリーズ限定 B7」は partial（例: `幼女戦記Ⅱ` が自前1話を持ちつつ別話を奪われる）を拾えなかったため、対象を絞らないローテーションに置換した。
 - **収束**: `state/series-index.json` は日次全再構築／毎時値上書きで自己修正。`data/series/*.json` は旧新とも dirty で再出力（旧から消え・新に載る）。projection（`works.json` 等）は `ep.seriesId` から再集計。
 
 ---
