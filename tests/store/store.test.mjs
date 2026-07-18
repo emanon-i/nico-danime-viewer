@@ -29,6 +29,7 @@ import {
   moveEpisodeToSeries,
   planAuthoritativeMoves,
   findEmptyRealSeries,
+  selectSweepTargets,
 } from '../../scripts/store/store.mjs'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ describe('createStore', () => {
     expect(store.rss.size).toBe(0)
     expect(store.meta.rssLastGuid).toBeNull()
     expect(store.meta.nvapiLastOkAt).toBeNull()
+    expect(store.meta.sweepCursor).toBe(0)
   })
 })
 
@@ -414,6 +416,40 @@ describe('meta state', () => {
       )
       const store = await loadStore(dataDir)
       expect(store.meta.nvapiLastOkAt).toBeNull()
+    } finally {
+      await fs.rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it('loadStore は state/meta.json の sweepCursor を読み込む（round-trip）', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sweep-cursor-'))
+    try {
+      const stateDir = path.join(dataDir, 'state')
+      await fs.mkdir(stateDir, { recursive: true })
+      await fs.writeFile(
+        path.join(stateDir, 'meta.json'),
+        JSON.stringify({ rssLastGuid: 'g1', sweepCursor: 42 }),
+        'utf-8'
+      )
+      const store = await loadStore(dataDir)
+      expect(store.meta.sweepCursor).toBe(42)
+    } finally {
+      await fs.rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it('loadStore は state/meta.json に sweepCursor が無ければ 0 のまま', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sweep-cursor-'))
+    try {
+      const stateDir = path.join(dataDir, 'state')
+      await fs.mkdir(stateDir, { recursive: true })
+      await fs.writeFile(
+        path.join(stateDir, 'meta.json'),
+        JSON.stringify({ rssLastGuid: 'g1' }),
+        'utf-8'
+      )
+      const store = await loadStore(dataDir)
+      expect(store.meta.sweepCursor).toBe(0)
     } finally {
       await fs.rm(dataDir, { recursive: true, force: true })
     }
@@ -813,6 +849,107 @@ describe('findEmptyRealSeries', () => {
     upsertSeries(store, [makeSeries({ seriesId: 569267, isAvailable: false })])
     // 各話0件・非available（E7 が空シリーズを isAvailable=false に落とした後の状態）
     expect(findEmptyRealSeries(store)).toContain(569267)
+  })
+})
+
+// ────────────────────────────────────────────────────────────────────────────
+// selectSweepTargets（B7 ローテーション権威スイープ・L2 dataflow.md §4-2）
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('selectSweepTargets', () => {
+  // 正 seriesId 100,200,300,400,500,600,700 の7件（各話あり・空なし）を持つ store を作る。
+  function makeSweepStore() {
+    const store = createStore()
+    const ids = [100, 200, 300, 400, 500, 600, 700]
+    upsertSeries(
+      store,
+      ids.map((sid) => makeSeries({ seriesId: sid }))
+    )
+    for (const sid of ids) {
+      upsertEpisodes(store, [makeEp({ contentId: `so-${sid}`, seriesId: sid })])
+    }
+    return { store, ids }
+  }
+
+  it('空シリーズが常に targets に含まれる（優先）', () => {
+    const { store } = makeSweepStore()
+    upsertSeries(store, [makeSeries({ seriesId: 900 })]) // 各話なし＝空の正シリーズ
+    const { targets } = selectSweepTargets(store, { batch: 1, cursor: 0 })
+    expect(targets).toContain(900)
+  })
+
+  it('cursor からの slice が正しく取れる', () => {
+    const { store } = makeSweepStore()
+    const { targets } = selectSweepTargets(store, { batch: 3, cursor: 1 })
+    // sorted = [100,200,300,400,500,600,700]・cursor=1,batch=3 → index1..3 = [200,300,400]
+    expect(targets.sort((a, b) => a - b)).toEqual([200, 300, 400])
+  })
+
+  it('末尾で先頭へ wrap する', () => {
+    const { store } = makeSweepStore()
+    const { targets } = selectSweepTargets(store, { batch: 3, cursor: 6 })
+    // sorted の末尾 index6=[700] + 先頭 wrap で index0,1=[100,200]
+    expect(targets.sort((a, b) => a - b)).toEqual([100, 200, 700])
+  })
+
+  it('nextCursor === (cursor + batch) % total', () => {
+    const { store } = makeSweepStore()
+    const { nextCursor } = selectSweepTargets(store, { batch: 3, cursor: 1 })
+    expect(nextCursor).toBe((1 + 3) % 7)
+  })
+
+  it('nextCursor は wrap 後も (cursor + batch) % total と一致する', () => {
+    const { store } = makeSweepStore()
+    const { nextCursor } = selectSweepTargets(store, { batch: 3, cursor: 6 })
+    expect(nextCursor).toBe((6 + 3) % 7)
+  })
+
+  it('batch >= total なら全件を返す', () => {
+    const { store } = makeSweepStore()
+    const { targets } = selectSweepTargets(store, { batch: 100, cursor: 2 })
+    expect(targets.sort((a, b) => a - b)).toEqual([100, 200, 300, 400, 500, 600, 700])
+  })
+
+  it('total === 0 のとき { targets: [...empty], nextCursor: 0 } を返す', () => {
+    const store = createStore()
+    upsertSeries(store, [makeSeries({ seriesId: -5 })]) // 仮シリーズのみ・正シリーズなし
+    const result = selectSweepTargets(store, { batch: 5, cursor: 3 })
+    expect(result).toEqual({ targets: [], nextCursor: 0 })
+  })
+
+  it('total === 0 でも空の正シリーズがあれば targets に含める', () => {
+    // 正シリーズは存在するが sorted 抽出前提が崩れるケースは無いため、
+    // total===0 は「正 seriesId が1つも存在しない」場合のみに相当する。
+    // その場合 findEmptyRealSeries も空を返す（正シリーズが無いため）。
+    const store = createStore()
+    const result = selectSweepTargets(store, { batch: 1, cursor: 0 })
+    expect(result).toEqual({ targets: [], nextCursor: 0 })
+  })
+
+  it('empty と slice が重なっても重複しない（Set 排除）', () => {
+    const { store } = makeSweepStore()
+    // 300 を空にする（既存 ep を削除する代わりに、別 series へ付け替えて 300 を空にする）
+    moveEpisodeToSeries(store, 'so-300', 400)
+    // slice が 300 を含む cursor/batch を選ぶ（sorted index2=300）
+    const { targets } = selectSweepTargets(store, { batch: 1, cursor: 2 })
+    const count300 = targets.filter((t) => t === 300).length
+    expect(count300).toBe(1)
+    expect(targets).toContain(300) // empty 側からも slice 側からも来るが1件のみ
+  })
+
+  it('cursor の負値・範囲外を正規化する', () => {
+    const { store } = makeSweepStore()
+    const a = selectSweepTargets(store, { batch: 2, cursor: -1 })
+    // -1 を正規化すると total-1=6 → index6,0 = [700,100]
+    expect(a.targets.sort((x, y) => x - y)).toEqual([100, 700])
+  })
+
+  it('batch が小数・0以下でも 1 以上の整数に丸められる', () => {
+    const { store } = makeSweepStore()
+    const a = selectSweepTargets(store, { batch: 0, cursor: 0 })
+    expect(a.targets).toEqual([100])
+    const b = selectSweepTargets(store, { batch: 1.9, cursor: 0 })
+    expect(b.targets).toEqual([100])
   })
 })
 

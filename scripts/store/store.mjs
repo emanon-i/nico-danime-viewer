@@ -77,6 +77,7 @@ import { trimSeriesTitle } from '../nico/list.mjs'
  * @property {string|null} lastSeedAt
  * @property {string|null} snapshotFetchedAt  Phase A 完全実行が完了した ISO 8601（version gate skip 時は更新しない）
  * @property {string|null} nvapiLastOkAt  nvapi 直近成功時刻の ISO 8601（ops:health の劣化検知に使う）
+ * @property {number} sweepCursor  B7 ローテーション権威スイープの巡回カーソル（既定 0）
  */
 
 /**
@@ -104,6 +105,7 @@ export function createStore() {
       lastSeedAt: null,
       snapshotFetchedAt: null,
       nvapiLastOkAt: null,
+      sweepCursor: 0,
     },
     _dirtySeries: new Set(),
   }
@@ -277,6 +279,7 @@ async function _loadState(store, stateDir) {
       lastSeedAt: meta.lastSeedAt ?? null,
       snapshotFetchedAt: meta.snapshotFetchedAt ?? null,
       nvapiLastOkAt: meta.nvapiLastOkAt ?? null,
+      sweepCursor: typeof meta.sweepCursor === 'number' ? meta.sweepCursor : 0,
     })
   } catch {
     /* 初回 bootstrap では存在しない */
@@ -781,6 +784,42 @@ export function findEmptyRealSeries(store) {
     if (sid > 0 && !withEp.has(sid)) result.push(sid)
   }
   return result
+}
+
+/**
+ * B7 ローテーション権威スイープの対象 seriesId を選ぶ（日次、L2 dataflow.md §4-2 実装契約）。
+ * 「各話0件の正シリーズ全件」（`findEmptyRealSeries`・優先）∪「sorted 正 seriesId の
+ * cursor から batch 件（末尾で先頭へ wrap）」を Set で重複排除して返す。約7日で全正
+ * シリーズを一巡することで、B3/B6 が拾えない「一度正シリーズに座った各話」の潜在誤登録
+ * （空・partial・既知非空を問わず）を是正する安全網として使う。
+ * @param {Store} store
+ * @param {{batch:number, cursor:number}} opts
+ * @returns {{targets:number[], nextCursor:number}}
+ */
+export function selectSweepTargets(store, { batch, cursor }) {
+  const sorted = [...store.series.keys()].filter((sid) => sid > 0).sort((a, b) => a - b)
+  const total = sorted.length
+  const empty = findEmptyRealSeries(store)
+
+  if (total === 0) {
+    return { targets: empty, nextCursor: 0 }
+  }
+
+  // 引数の防御: cursor は [0,total) に正規化。batch は 1 以上の整数に切り下げ。
+  const normCursor = ((cursor % total) + total) % total
+  const normBatch = Math.max(1, Math.floor(batch))
+
+  const slice =
+    normBatch >= total
+      ? sorted
+      : normCursor + normBatch <= total
+        ? sorted.slice(normCursor, normCursor + normBatch)
+        : sorted.slice(normCursor).concat(sorted.slice(0, normCursor + normBatch - total))
+
+  const targets = [...new Set([...empty, ...slice])]
+  const nextCursor = (normCursor + normBatch) % total
+
+  return { targets, nextCursor }
 }
 
 /**
