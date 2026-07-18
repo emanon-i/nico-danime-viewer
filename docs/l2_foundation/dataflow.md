@@ -22,7 +22,7 @@ scripts/fetch.mjs（GitHub Actions 内・サーバなし）
 - **永続**: state ブランチ + `data/series/{id}.json` への atomic rename（tmp→本体）
 - **2 ジョブ**: 毎時（hourly-js）/ 日次（full-js）
 - **isAvailable**: snapshot 由来。`series.lastSeenAt` ＋ `meta.snapshotFetchedAt` で grace 付き評価（Phase E7）。仮シリーズ（seriesId < 0）は grace 対象外
-- **seriesId 解決**: watch ページ不使用。全 static JSON union → nvapi authoritative が主経路。失敗時は仮シリーズ（負数 seriesId）を登録し、翌日の B6 reconciliation で本物に統合
+- **seriesId 解決**: watch ページ不使用。全 static JSON union → nvapi authoritative が主経路。失敗時は仮シリーズ（負数 seriesId）を登録し、**毎時 B6**（〜1時間）＋日次 B6/B3 で本物に統合。既存の正→正 誤登録は**日次 B7 ローテーション権威スイープ**（全正シリーズ 1/7 巡回・約7日一巡）が是正
 
 ---
 
@@ -116,7 +116,8 @@ flowchart TD
     B3 --> B4["B4: list.json 掲載シリーズに\ncol_key パッチ + isAvailable=true 強制"]
     B4 --> B5["B5: list-index.json 保存\n（タイトル→seriesId Map・毎時 D2 が参照）"]
     B5 --> B6["B6: 仮シリーズ(seriesId<0) × allTitles 完全一致 reconciliation\n→ nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）\n→ 検証 OK: ep の seriesId を実 ID に付け替え\n→ store.series.delete(仮 id)\n→ data/series/<neg>.json 削除（再インジェスト防止）"]
-    B6 --> A2["Phase A2: 取得漏れ救出\n① store の contentId→seriesId Map で直接解決\n② タグ/タイトル照合（最終手段）→ nvapi → ep 付け替え\n③ 全失敗 → 仮シリーズ登録（thumbnailUrl→contentId・負数 seriesId）"]
+    B6 --> B7R["B7: ローテーション権威スイープ\nselectSweepTargets（空シリーズ全件 + 正ID 1/7 巡回）\n各対象 nvapi → planAuthoritativeMoves で\n別正シリーズから各話奪還 + 未取得話は新規作成\nmeta.sweepCursor を進める（約7日で全件一巡）"]
+    B7R --> A2["Phase A2: 取得漏れ救出\n① store の contentId→seriesId Map で直接解決\n② タグ/タイトル照合（最終手段）→ nvapi → ep 付け替え\n③ 全失敗 → 仮シリーズ登録（thumbnailUrl→contentId・負数 seriesId）"]
     A2 --> LS["lastSeenAt = now\n（snapshot 出現シリーズのうち seriesId > 0）"]
     LS --> E["Phase E: ETL 派生\nE1: descriptionFirst（最古話 description）\nE2: tags 正規化（dアニメ接頭/接尾除去）\nE3: cours（タグ主源）\nE4: franchiseKey + relatedSeries\nE5: timestamps 同期\nE6: thumbnails 同期\nE7: isAvailable grace\n    snapshotFetchedAt > 3日前 → 評価スキップ\n    lastSeenAt < (snapshotFetchedAt - 2日) → false\n    ※ seriesId < 0（仮）は grace スキップ（isAvailable 固定 true）"]
     E --> F{"detectShrink\nep>0件数 < baseline×90%?"}
@@ -190,33 +191,56 @@ snapshot に登場したが seriesId が未解決の ep を救出する。
 
 ### 4-1. 仮シリーズ（SANDA 型）の仕組み
 
-| 項目                   | 内容                                                                                                                                                                                                                                   |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **seriesId**           | `provisionalSeriesId(seriesTitle)` が返す**負整数**（決定的・再実行で同値）                                                                                                                                                            |
-| **ハッシュ式**         | djb2 変形: `h = Math.imul(h,31) + ch.codePointAt(0) \| 0`（全文字）。`h <= 0 ? h-1 : -h` で必ず負数                                                                                                                                    |
-| **contentId 復元**     | `thumbnailUrl` の `/thumbnails/<N>/` → `so<N>` （`contentIdFromThumbnail`）                                                                                                                                                            |
-| **seriesTitle 抽出**   | `extractSeriesTitle`（「第N話」「#N」「Episode N」前の語を抽出）                                                                                                                                                                       |
-| **フロント表示**       | `seriesId < 0` → 公式シリーズページボタンを disabled + ツールチップ「公式シリーズ情報を取得中です」                                                                                                                                    |
-| **isAvailable**        | 仮登録時は `true`（E7 grace 対象外・仮のまま）                                                                                                                                                                                         |
-| **解消タイミング**     | 翌日の Phase B3（nvapi authoritative）で本物 seriesId が登録され B6 で統合                                                                                                                                                             |
-| **B6 reconciliation**  | 仮 seriesId × allTitles 完全一致 → nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）→ 検証 OK: ep の seriesId を実 ID に付け替え → `store.series.delete(負数ID)` → `data/series/<neg>.json` 削除（再インジェスト防止） |
-| **ハッシュ衝突リスク** | 32-bit ハッシュで異なるタイトルが同じ負数になる確率 ≈ 2^-32。実用上許容                                                                                                                                                                |
+| 項目                   | 内容                                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **seriesId**           | `provisionalSeriesId(seriesTitle)` が返す**負整数**（決定的・再実行で同値）                                                                                                                                                                                                                                           |
+| **ハッシュ式**         | djb2 変形: `h = Math.imul(h,31) + ch.codePointAt(0) \| 0`（全文字）。`h <= 0 ? h-1 : -h` で必ず負数                                                                                                                                                                                                                   |
+| **contentId 復元**     | `thumbnailUrl` の `/thumbnails/<N>/` → `so<N>` （`contentIdFromThumbnail`）                                                                                                                                                                                                                                           |
+| **seriesTitle 抽出**   | `extractSeriesTitle`（「第N話」「#N」「Episode N」前の語を抽出）                                                                                                                                                                                                                                                      |
+| **フロント表示**       | `seriesId < 0` → 公式シリーズページボタンを disabled + ツールチップ「公式シリーズ情報を取得中です」                                                                                                                                                                                                                   |
+| **isAvailable**        | 仮登録時は `true`（E7 grace 対象外・仮のまま）                                                                                                                                                                                                                                                                        |
+| **解消タイミング**     | **毎時 B6**（`listIndexByTitle` 照合で候補ありなら〜1時間で昇格）を第一線に、日次 B6（store allTitles 照合）＋ B3（新規 nvapi 登録）で確実化。カタログ未掲載の真の新作のみ nico 側ラグ分待つ                                                                                                                          |
+| **B6 reconciliation**  | 仮 seriesId × タイトル照合 → nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）→ 検証 OK: ep の seriesId を実 ID に付け替え → `store.series.delete(負数ID)` → `data/series/<neg>.json` 削除（再インジェスト防止）。毎時は `NICO_HOURLY_RECONCILE_LIMIT`（既定20）で nvapi 呼数を上限・候補ありのみ検証 |
+| **ハッシュ衝突リスク** | 32-bit ハッシュで異なるタイトルが同じ負数になる確率 ≈ 2^-32。実用上許容                                                                                                                                                                                                                                               |
 
 ---
 
 ### 4-2. 正シリーズ間のメンバーシップ是正（誤登録の自己修復）
 
-**背景**: seriesId 未取得の各話が、シーズン標識ガード導入前は補助経路の前方一致で**隣接シーズン（正の実 ID）に誤登録**されることがあった（例: 「…第3期 第1話」が「…（第1期）」に）。§4 のガードで**新規発生は予防**されるが、既に**正→正で誤登録済み**のデータは遡及されない（`upsertEpisodes` の PRESERVE で non-null seriesId は保護されるため）。これを nvapi の**排他的メンバーシップ**（1 contentId = 1 シリーズ）を権威として是正する。
+**背景**: snapshot は seriesId を持たないため、各話の所属は補助経路の推測（タグ/タイトル前方一致）で仮割当する。§4 のシーズン標識ガードで**新規の隣接シーズン誤吸着は予防**するが、次の2つは推測では直せない: ①既に**正→正で誤登録済み**のデータ（`upsertEpisodes` の PRESERVE で non-null seriesId が保護される）②推測が別の正シリーズに吸着させた場合。これを **nvapi の排他的メンバーシップ（1 contentId = 1 シリーズ）を唯一の権威**として是正する。
 
-| フェーズ              | 契機                                                           | 動作                                                                                                                                                                                                                                |
-| --------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **B3 高速パス**       | 新規シリーズを nvapi 取得した瞬間                              | その各話一覧に、現在**別の正シリーズ**に属する contentId があれば `moveEpisodeToSeries` で引き取る（`planAuthoritativeMoves`）。取得済み nvapi を再利用し**追加アクセス0**。                                                        |
-| **B7 空シリーズ照合** | 各話0件の正・available シリーズ（`findEmptyRealSeries`）が存在 | 各対象を nvapi 再取得（1件1回・1 run 件数上限あり）→ 権威メンバーシップで別の正シリーズから各話を引き取り、未取得話は新規作成。**既存の誤登録データ（第3期 空シリーズ等）を修復**する。空シリーズは稀・治癒後は候補外＝自己沈静化。 |
+**設計原則（2レーン）**: 「速さが要るもの」と「遅くてよいもの」を分ける。
+
+- **速報＋新規レーン（許容遅延 〜1時間〜最大翌日）**: 新着・仮シリーズ・新規シリーズ。毎時＋日次で即解決する。**新規が偽シリーズのまま7日放置されることは構造的に起こさない**。
+- **総ざらいレーン（許容遅延 最大7日）**: 既存の全正シリーズを **1/7 ずつ日次ローテーション**で nvapi 権威照合。古い作品の潜在誤登録を拾う安全網。ユーザーは既に正しく見えている作品を見ているので7日でも体験に影響しない。
+
+| フェーズ                          | 契機・頻度                                          | 動作                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **B3 高速パス**                   | 新規シリーズを nvapi 取得した瞬間（日次）           | その各話一覧に、現在**別の正シリーズ**に属する contentId があれば `moveEpisodeToSeries` で引き取る（`planAuthoritativeMoves`）。取得済み nvapi を再利用し**追加アクセス0**。                                                                                                                                                                                                                                  |
+| **B6 仮→実 統合**                 | 仮シリーズ(負ID)が存在（**毎時＋日次**）            | 仮シリーズのタイトルを実シリーズ候補と照合（毎時は `listIndexByTitle` = list.json 全カタログ、日次は store 内 allTitles）→ 候補ありのみ nvapi 検証（支店＋仮 ep が nvapi 話一覧に存在）→ 移動＋仮削除。毎時は `NICO_HOURLY_RECONCILE_LIMIT`（既定20）で nvapi 呼数を上限。**新規の偽シリーズを最短〜1時間で本物に昇格**。                                                                                     |
+| **B7 ローテーション権威スイープ** | 日次・全正シリーズを 1/7 巡回（＋空シリーズは毎回） | `selectSweepTargets(store,{batch,cursor})` が「各話0件の正シリーズ**全件**（優先・`findEmptyRealSeries`）」∪「sorted 正ID の cursor から batch 件（wrap）」を返す。各対象を nvapi 再取得 → `planAuthoritativeMoves`＋`moveEpisodeToSeries` で別正シリーズから各話を奪還し、未取得話は新規作成。`meta.sweepCursor` を進める。空/partial/既知非空すべての誤登録を「所属リストとの不一致」として自明に是正する。 |
 
 - **移動の実体** `moveEpisodeToSeries(store, contentId, target, episodeNo)`: `ep.seriesId` を直接付け替え（PRESERVE を迂回）、`episodeNo` を nvapi 話順で是正、**旧・新の両シリーズを dirty 化**（旧ファイルから消え・新ファイルに載る）。旧シリーズは削除しない（正当な他の各話を保持しうる。負の仮シリーズ削除は §4-1 B6 が担当）。
-- **収束**: `series-index.json` は日次で全再構築／毎時は値上書きで自己修正。`works.json` 等 projection は `ep.seriesId` から再集計。`ep.seriesId` は run 間で**正→正に変わり得る**（従来は null/負→正のみ）。
-- **B7 の自己再武装**: `findEmptyRealSeries` は「各話0件の正・available シリーズ」を毎 run 再計算するため、空シリーズが空である限り**毎日候補に入れ直される**（自己再武装）。1 run で治癒できなくても翌日また候補になる＝取りこぼしなく再試行され続ける設計。
-- **nvapi の間欠失敗への対処**: GitHub Actions ランナーからの nvapi 呼び出しは間欠的〜慢性的に失敗しうる（403/429/5xx/timeout）。`fetchWithToS`（`scripts/lib/http.mjs`）がこれらを指数バックオフ＋jitterでリトライし（429/503 は `Retry-After` を尊重）、B7 が「候補にはなったが1件も治癒しない」まま無音で失敗し続けるのを防ぐ。可観測化として `scripts/nico/nvapi.mjs` が run 単位の成功/失敗数を集計し（`[JS] nvapi stats`）、成功時は `state/meta.json` の `nvapiLastOkAt` を更新する。`pnpm ops:health` はこの `nvapiLastOkAt` の鮮度と仮/空シリーズの残存有無から nvapi 劣化（＝B7 が実効的に走れていない疑い）を検知する。
+- **なぜローテーションか（旧 B7 空シリーズ限定の限界）**: 旧実装は「各話0件の正シリーズ」だけを対象にしていた。だが誤登録は **partial**（例: `幼女戦記Ⅱ` が自前の話を1つ持ちつつ別の話を第1期に奪われる）でも起こり、被害シリーズが**空でない**と旧 B7 は永久に対象外だった。B3(新規)・B6(仮) も“入口”限定で、**一度正シリーズに座った各話を再点検する経路が存在しなかった**。ローテーションは「賢く対象を絞る」のをやめ、**全正シリーズを順に権威照合**することで、この構造的な穴（空・partial・既知非空を問わず）を塞ぐ。
+- **収束の保証**: `batch = ceil(総正シリーズ数 / 7)`（既定・`NICO_SWEEP_BATCH` で上書き可）。ハード上限 `NICO_SWEEP_LIMIT`（既定1500・ToS 保護）。cursor は sorted 正ID を巡回し、**約7日で全シリーズを一巡**＝どの誤登録も最悪7日で必ず是正。空シリーズは cursor 位置に関係なく毎回含めるので**ユーザー可視の unavailable は翌日中に回復**。
+- **projection 収束**: `series-index.json` は日次で全再構築／毎時は値上書きで自己修正。`works.json` 等 projection は `ep.seriesId` から再集計。`ep.seriesId` は run 間で**正→正に変わり得る**（従来は null/負→正のみ）。
+- **nvapi の間欠失敗への対処**: GitHub Actions ランナーからの nvapi 呼び出しは間欠的〜慢性的に失敗しうる（403/429/5xx/timeout）。`fetchWithToS` が指数バックオフ＋jitter でリトライ（429/503 は `Retry-After` 尊重）。`scripts/nico/nvapi.mjs` が run 単位の成功/失敗を集計（`[JS] nvapi stats`）し、成功時は `state/meta.json` の `nvapiLastOkAt` を更新。`pnpm ops:health` は `nvapiLastOkAt` の鮮度＋**各話0件の正シリーズ数**の残存からスイープの劣化を検知する。
+
+#### 実装契約（レビュー基準・正本）
+
+このセクションの各項目は実装の受け入れ条件。実装は下記シグネチャ・既定値・不変条件に**一字一句**沿うこと。
+
+1. **`selectSweepTargets(store, { batch, cursor })` → `{ targets: number[], nextCursor: number }`**（`scripts/store/store.mjs`）
+   - `sorted` = 正の seriesId を昇順ソートした配列。`total = sorted.length`。
+   - `empty` = `findEmptyRealSeries(store)`（優先・全件）。
+   - `slice` = `sorted` の index `cursor` から `batch` 件（末尾で先頭へ wrap）。
+   - `targets` = `empty ∪ slice` を**重複排除**（Set）。`nextCursor` = `total === 0 ? 0 : (cursor + batch) % total`。
+   - `total === 0` のとき `targets = empty`（通常は空）・`nextCursor = 0`。負値/仮シリーズは対象外。
+2. **`meta.sweepCursor: number`**（`state/meta.json`）: `createStore` で既定 `0`、`loadStore`/`_loadState` で復元、`writeBackStore` が `store.meta` を丸ごと書くため自動永続。`MetaRecord` typedef に追記。
+3. **日次 B7 ローテーション**（`runFullJS`・旧 B7 空シリーズブロックを置換）: `cursor = store.meta.sweepCursor ?? 0`／`batch = Number(process.env.NICO_SWEEP_BATCH ?? Math.ceil(total/7))`（`total<7` でも最低1）／処理件数は `NICO_SWEEP_LIMIT`（既定1500）で上限。各 target: `fetchSeriesData` → `isBranchSeries` false はスキップ → `planAuthoritativeMoves`＋`moveEpisodeToSeries` → `storeUpsertEps`。完了後 `storeUpdateMeta(store,{ sweepCursor: nextCursor })`。ログ `[JS] B7 rotation sweep done { total, batch, processed, empty, moved, created, cursor, nextCursor }`。
+4. **毎時 B6 昇格**（`runHourlyJS`・D3 後 writeback 前）: store 内の各仮シリーズ(負ID)について、`listIndexByTitle.get(仮title)` → 無ければ仮 ep タイトルで `resolveByTitle(epTitle, listIndexByTitle)` で候補実ID を探す。**候補ありのときだけ** `fetchSeriesData` で検証（`isBranchSeries` ＋ 仮 ep contentId が nvapi 話一覧に存在）→ OK なら `moveEpisodeToSeries` で全 ep 移動＋`store.series.delete(負ID)`＋`data/series/<neg>.json` 削除。nvapi 呼数は `NICO_HOURLY_RECONCILE_LIMIT`（既定20）で上限。候補ゼロの単発作品は nvapi を呼ばない。
+5. **不変（変更禁止）**: §4 の予防ガード（`SEASON_MARKER_RE`）・B3・日次 B6・A2・E7・`findEmptyRealSeries`（PR #8 の isAvailable 非絞り込み）はそのまま。ローテーションは B7 ブロックの**置換のみ**。
+6. **UX latency 保証**: 新着話=毎時／新規シリーズ（カタログ掲載済）=毎時 B6 で〜1時間／既存・非空の潜在誤登録=最大7日（1巡）。
 
 ---
 
@@ -268,6 +292,15 @@ Phase D3 : nvapi 更新（正整数 seriesId のみ）
                               storeUpsertEps（実変化チェック → _dirtySeries 更新）
                               insertedEpisodes カウント（series-index 未登録の ep）
 
+Phase D3b: 仮シリーズ昇格（B6・速報レーン）
+              store 内の各仮シリーズ(負ID)を listIndexByTitle で候補実ID 探索
+                （exact → 仮 ep タイトルで resolveByTitle）
+              候補ありのみ nvapi 検証（支店 + 仮 ep が nvapi 話一覧に存在）
+                → OK: moveEpisodeToSeries で全 ep 移動 + store.series.delete(負ID)
+                       + data/series/<neg>.json 削除
+              nvapi 呼数は NICO_HOURLY_RECONCILE_LIMIT（既定20）で上限
+              候補ゼロの単発作品は nvapi を呼ばない（大半はこれ）
+
 書き出し: _dirtySeries 非空 → series/{id}.json + series-index 更新（負数 seriesId ファイルも書き出す）
 deploy  : insertedEpisodes > 0 || hasProvisional → .deploy-needed → Pages deploy
 state   : meta.json + rss.json 書き戻し（常時）
@@ -276,8 +309,8 @@ export  : new.json 更新（常時）
 
 **設計のポイント**:
 
-- タイトル照合は `list-index.json`（前回日次の B5 出力）に依存。初回実行や日次未走行時は空 Map → 照合スキップ（仮シリーズ登録のみ）
-- 仮シリーズは D3 をスキップするが、翌日の B6 reconciliation で本物に統合される
+- タイトル照合は毎時 `list.json` 直取り（D2）＋ `list-index.json`（前回日次 B5 出力）に依存。初回実行や日次未走行時は空 Map → 照合スキップ（仮シリーズ登録のみ）
+- 仮シリーズは D3（nvapi 更新）をスキップするが、**同じ毎時 run の D3b（B6 昇格）**で候補があれば〜1時間で本物に統合される。候補が無い（カタログ未掲載）場合のみ日次 B6/B3 まで持ち越す
 - watch ページ不使用のため bot 検知リスクなし
 - **deploy は `insertedEpisodes > 0 || hasProvisional`**。新着 ep 追加 OR 仮シリーズが存在する場合にのみ Pages deploy。再生数更新はファイルに反映されるが Pages deploy は伴わない
 
@@ -309,6 +342,14 @@ Phase B  : 全 static JSON union（8 本並列取得）
                   → 検証 OK: ep の seriesId を実 ID に付け替え
                   → store.series.delete(仮 id)
                   → data/series/<neg>.json を existsSync + unlinkSync で削除
+              B7: ローテーション権威スイープ（全正シリーズを 1/7 巡回）
+                  selectSweepTargets(store,{batch,cursor}):
+                    targets = 空の正シリーズ全件（findEmptyRealSeries・優先）
+                              ∪ sorted 正 seriesId の cursor から batch 件（wrap）
+                    batch = NICO_SWEEP_BATCH ?? ceil(total/7)・上限 NICO_SWEEP_LIMIT(1500)
+                  各 target: nvapi → isBranchSeries → planAuthoritativeMoves
+                             + moveEpisodeToSeries（別正シリーズから奪還）+ storeUpsertEps
+                  meta.sweepCursor = (cursor + batch) % total（約7日で全件一巡）
 
 Phase A2 : 取得漏れ救出（Phase B 後・allTitles が充実した状態で実行）
               ① store の contentId→seriesId Map で直接解決

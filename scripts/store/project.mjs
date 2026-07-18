@@ -396,7 +396,13 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
 
   for (const sid of seriesIds) {
     const s = store.series.get(sid)
-    if (!s) continue
+    // store から消えた seriesId（例: 毎時 D3b で実シリーズへ昇格・削除された仮シリーズ）は
+    // works.json からも除去する。毎時は full projectAll を回さないため、ここで消さないと
+    // ファイルが消えた仮シリーズのカードが次の日次まで残り、リンク切れになる。
+    if (!s) {
+      worksMap.delete(sid)
+      continue
+    }
     const agg = epAgg.get(sid) ?? {}
     const prev = worksMap.get(sid)
     const w = {
