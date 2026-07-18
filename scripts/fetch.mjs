@@ -69,6 +69,7 @@ import {
   moveEpisodeToSeries,
   planAuthoritativeMoves,
   findEmptyRealSeries,
+  selectSweepTargets,
 } from './store/store.mjs'
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '../data')
@@ -592,24 +593,26 @@ async function runFullJS() {
     logger.info('fetch', '[JS] B6 reconciliation done', { reconciled: reconciledCount })
   }
 
-  // ── B7: 空シリーズのメンバーシップ照合（既存の誤登録データを修復）─────────────
-  // 各話0件の正シリーズ（＝各話が誤って別の正シリーズに取られている疑い。例: 第N期の各話が
-  // 第1期に残存）を nvapi 再取得し、権威的メンバーシップで引き取る。対象は空シリーズのみで
-  // 稀・治癒後は候補から外れる（自己沈静化）。ToS 配慮に 1 run の件数上限で保護。
+  // ── B7: ローテーション権威スイープ（既存の誤登録データを修復・全正シリーズ 1/7 巡回）──
+  // 各話0件の正シリーズ（優先・毎回全件）∪ sorted 正 seriesId の cursor から batch 件（wrap）
+  // を対象に nvapi 再取得し、権威的メンバーシップで別正シリーズから各話を奪還する。空・partial・
+  // 既知非空を問わず、一度正シリーズに座った各話を約7日で全件再点検する安全網（L2 §4-2）。
   {
-    const emptyReal = findEmptyRealSeries(store)
-    const cap = Number(process.env.NICO_EMPTY_RECONCILE_LIMIT ?? 50)
-    const targets = cap > 0 ? emptyReal.slice(0, cap) : emptyReal
-    if (emptyReal.length > targets.length) {
-      logger.warn('fetch', '[JS] B7 empty-series cap reached (deferred to next run)', {
-        empty: emptyReal.length,
-        processed: targets.length,
-        cap,
-      })
-    }
+    const emptyBefore = findEmptyRealSeries(store).length
+    const total = [...store.series.keys()].filter((sid) => sid > 0).length
+    const cursor = store.meta.sweepCursor ?? 0
+    const rawBatch = Number(process.env.NICO_SWEEP_BATCH)
+    const batch =
+      Number.isFinite(rawBatch) && rawBatch > 0 ? rawBatch : Math.max(1, Math.ceil(total / 7))
+    const rawLimit = Number(process.env.NICO_SWEEP_LIMIT)
+    const limit = Number.isFinite(rawLimit) ? rawLimit : 1500
+
+    const { targets, nextCursor } = selectSweepTargets(store, { batch, cursor })
+    const processed = limit > 0 ? targets.slice(0, limit) : targets
+
     let b7Moved = 0
     let b7Created = 0
-    for (const seriesId of targets) {
+    for (const seriesId of processed) {
       let data
       try {
         data = await fetchSeriesData(seriesId)
@@ -632,14 +635,18 @@ async function runFullJS() {
       b7Created += store.episodes.size - beforeCount
       store._dirtySeries.add(seriesId)
     }
-    if (targets.length > 0) {
-      logger.info('fetch', '[JS] B7 empty-series reconciliation done', {
-        emptySeries: emptyReal.length,
-        processed: targets.length,
-        moved: b7Moved,
-        created: b7Created,
-      })
-    }
+
+    storeUpdateMeta(store, { sweepCursor: nextCursor })
+    logger.info('fetch', '[JS] B7 rotation sweep done', {
+      total,
+      batch,
+      processed: processed.length,
+      empty: emptyBefore,
+      moved: b7Moved,
+      created: b7Created,
+      cursor,
+      nextCursor,
+    })
   }
 
   if (missedContentIds.size > 0) {
@@ -967,6 +974,123 @@ async function runHourlyJS() {
     }))
     storeUpsertEps(store, descUpdates)
     logger.info('fetch', '[JS] hourly D4: RSS description applied', { count: descUpdates.length })
+  }
+
+  // ── D3b: 仮シリーズ昇格（速報レーン）─────────────────────────────────────
+  // 新規が偽シリーズのまま放置される時間を短縮する。存在する仮シリーズ（負 seriesId）全件を
+  // series-index + store から網羅し、list.json 全カタログ（listIndexByTitle）でタイトル照合
+  // → 候補ありのみ nvapi 検証 → OK なら実シリーズへ昇格・仮シリーズを削除する。
+  {
+    const negSeriesIds = new Set()
+    for (const sid of contentToSeries.values()) {
+      if (sid < 0) negSeriesIds.add(sid)
+    }
+    for (const sid of store.series.keys()) {
+      if (sid < 0) negSeriesIds.add(sid)
+    }
+
+    if (negSeriesIds.size > 0) {
+      // series-index が把握している既存の仮シリーズ（この run で store に未ロード分）を読み込む。
+      // 今回新規登録された仮シリーズは既に store 上にあるので、ロード結果で上書きしても
+      // 対応するディスクファイルがまだ存在せず読み飛ばされる（安全）。
+      const { store: provStore } = await loadPartialStore(DATA_DIR, [...negSeriesIds])
+      for (const [k, v] of provStore.series) {
+        if (!store.series.has(k)) store.series.set(k, v)
+      }
+      for (const [k, v] of provStore.episodes) {
+        if (!store.episodes.has(k)) store.episodes.set(k, v)
+      }
+    }
+
+    const rawReconcileLimit = Number(process.env.NICO_HOURLY_RECONCILE_LIMIT)
+    const reconcileLimit = Number.isFinite(rawReconcileLimit) ? rawReconcileLimit : 20
+    let nvapiCalls = 0
+    let promoted = 0
+    let deferred = 0
+
+    for (const sid of negSeriesIds) {
+      const s = store.series.get(sid)
+      if (!s) continue
+
+      let realId = listIndexByTitle.get(s.title)
+      if (!realId) {
+        for (const ep of store.episodes.values()) {
+          if (ep.seriesId !== sid) continue
+          realId = resolveByTitle(ep.title ?? '', listIndexByTitle)
+          if (realId) break
+        }
+      }
+      if (!Number.isInteger(realId) || realId <= 0) continue // 候補ゼロ = nvapi を呼ばない
+
+      if (reconcileLimit > 0 && nvapiCalls >= reconcileLimit) {
+        deferred++
+        continue
+      }
+
+      const provisionalCids = new Set()
+      for (const ep of store.episodes.values()) {
+        if (ep.seriesId === sid) provisionalCids.add(ep.contentId)
+      }
+
+      let data
+      nvapiCalls++
+      try {
+        data = await fetchSeriesData(realId)
+      } catch (err) {
+        logger.warn('fetch', '[JS] D3b nvapi failed', { sid, realId, err: err.message })
+        continue
+      }
+      if (!isBranchSeries(data?.detail)) {
+        logger.warn('fetch', '[JS] D3b skip: realId not branch series', { sid, realId })
+        continue
+      }
+
+      const nvapiEps = mapNvapiEpisodes(realId, data?.items ?? [])
+      const orderMap = new Map()
+      for (const e of nvapiEps) orderMap.set(e.contentId, e.episodeNo)
+      const nvapiCids = new Set(nvapiEps.map((e) => e.contentId))
+      const verified = [...provisionalCids].some((cid) => nvapiCids.has(cid))
+      if (!verified) {
+        logger.warn('fetch', '[JS] D3b skip: provisional eps not in realId nvapi list', {
+          sid,
+          realId,
+          title: s.title,
+        })
+        continue
+      }
+
+      storeUpsertEps(store, nvapiEps)
+      for (const cid of provisionalCids) {
+        moveEpisodeToSeries(store, cid, realId, orderMap.get(cid) ?? null)
+      }
+      store.series.delete(sid)
+      const provFile = join(DATA_DIR, 'series', `${sid}.json`)
+      if (existsSync(provFile)) unlinkSync(provFile)
+      resolvedSeriesIds.add(realId)
+      // 削除した仮シリーズ(負ID)も resolvedSeriesIds に載せ、exportWorksPartial で
+      // works.json から除去させる（毎時は full projectAll を回さないため）。
+      resolvedSeriesIds.add(sid)
+      store._dirtySeries.add(realId)
+      promoted++
+      logger.info('fetch', '[JS] D3b promotion: provisional -> real', {
+        sid,
+        realId,
+        title: s.title,
+      })
+    }
+
+    if (deferred > 0) {
+      logger.warn('fetch', '[JS] D3b: nvapi budget exhausted, remaining deferred', {
+        limit: reconcileLimit,
+        deferred,
+      })
+    }
+
+    logger.info('fetch', '[JS] D3b hourly promotion done', {
+      candidates: negSeriesIds.size,
+      promoted,
+      nvapiCalls,
+    })
   }
 
   _trimRss(store, 200)

@@ -212,4 +212,36 @@ describe('exportWorksPartial creditNames マージ（既存表示名を優先・
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it('store から消えた seriesId（毎時 D3b 昇格で削除された仮シリーズ）を works.json から除去する', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'partial-del-'))
+    try {
+      // 前回ビルドの works.json に仮シリーズ(-42)と実シリーズ(1)が載っている。
+      await writeFile(
+        join(dir, 'works.json'),
+        JSON.stringify({
+          lastUpdated: '2026-06-20T00:00:00Z',
+          works: [
+            { seriesId: -42, title: '仮・第3期', credits: [] },
+            { seriesId: 1, title: '実・第1期', credits: [] },
+          ],
+        })
+      )
+      // 昇格後の store: 仮シリーズ(-42)は既に delete 済みで存在しない。実シリーズ1のみ。
+      const store = createStore()
+      upsertSeries(store, [{ seriesId: 1, title: '実・第1期', isAvailable: true }])
+      upsertEpisodes(store, [ep({ contentId: 'so100', seriesId: 1, title: '実 第1話' })])
+
+      // exportWorksPartial に「昇格した実 1」と「削除した仮 -42」を渡す（D3b の挙動）。
+      await exportWorksPartial(store, new Set([1, -42]), dir, '2026-06-21T00:00:00Z')
+      const json = JSON.parse(await readFile(join(dir, 'works.json'), 'utf-8'))
+
+      // 仮シリーズ(-42)は works.json から除去（リンク切れカード防止）
+      expect(json.works.find((w) => w.seriesId === -42)).toBeFalsy()
+      // 実シリーズ1は残る
+      expect(json.works.find((w) => w.seriesId === 1)).toBeTruthy()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })
