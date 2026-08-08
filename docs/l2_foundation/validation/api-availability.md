@@ -1,4 +1,11 @@
-﻿# データ可用性 実証ログ（ニコニコ API）
+---
+title: データ可用性 実証ログ（ニコニコ API）
+layer: L2-validation
+status: current
+updated: 2026-08-08
+---
+
+# データ可用性 実証ログ（ニコニコ API）
 
 > L2（`../foundation.md`）の §6「データ可用性の裏付け」の**詳細根拠**。実クエリ・レスポンス例・件数・フィールド確認を記録する。
 > L2 本体を膨らませないため詳細はここに分離。結論サマリは L2 本体 §6 を参照。
@@ -248,21 +255,22 @@ snapshot は `channelId` が **filter 不可**（取得のみ。詳細は後述�
 - **判定**: 「シリーズ概要＝第1話 description 流用」は**第1話のあらすじを表示することになる**（厳密なシリーズ要約ではない）。
   proxy としては許容可だが「第1話のあらすじ」と明示するのが正直。HTML 除去が前提。
 
-## D. 各話の取得元（シリーズページ）→ **nvapi v2 series が最適**
+## D. 各話の取得元（シリーズページ）→ **nvapi v2 series（実行環境依存）**
 
-`https://nvapi.nicovideo.jp/v2/series/<id>`（ヘッダ `X-Frontend-Id: 6`）→ **200**。`data.detail` ＋ `data.items[]`（各話）。
+`https://nvapi.nicovideo.jp/v2/series/<id>`（ヘッダ `X-Frontend-Id: 6`）は HTTP 200 で `data.detail` と `data.items` を返す。`items` は配列だが、実行環境により有料各話が空配列になる。
 
 ```
 detail: id, owner, title, description, decoratedDescriptionHtml, thumbnailUrl, isListed, createdAt, updatedAt
 detail.owner.channel.id = "ch2632720" / name "dアニメストア ニコニコ支店" ← 支店判定に使える
 items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail, shortDescription, duration …
-例: series 109288「ああっ女神さまっ」 totalCount=26 / items=26（第1話→第26話の順で返る）
+ローカル実測例: series 109288「ああっ女神さまっ」 totalCount=26 / items=26（第1話→第26話の順で返る）
 ```
 
-- **各話リスト・話順・contentId・再生数が一発で取れる**。**snapshot+list.json の series グルーピングより確実**
-  （snapshot は series id を持たず、タイトル検索はノイズ＋低再生話の取りこぼしがあり不適）。
-- **owner.channel.id == "ch2632720" でシリーズ単位の支店判定**も可能（list.json は元から支店カタログ）。
-- 役割分担: **各話リスト＝nvapi series**、**ジャンル/タグ＝snapshot**、**五十音＝list.json `col_key`**。
+- `items` が非空なら、各話の contentId・話順・再生数をシリーズ単位で取得できる。snapshot は seriesId を持たないため、非空 `items` を membership の主源とする。
+- `detail.owner.channel.id == "ch2632720"` でシリーズ単位の支店判定ができる。
+- GitHub hosted runner では、`detail` が正しく支店シリーズを示しても有料各話の `items` だけが空配列になる場合がある。HTTP 200 を各話取得成功と同一視しない。
+- 役割分担: **各話リスト＝nvapi `items`（利用可能時）**、**シリーズ所有・タイトル＝nvapi `detail`**、**ジャンル/タグ＝snapshot**、**五十音・タイトル候補＝list.json `col_key/title`**。
+- 空配列時は `detail` の支店所有とタイトル一致に加え、対象となる全話の厳格タイトル照合が成立する場合だけ所属を補完する。話順は各話タイトルの話数表記と既存のシリーズ内オフセットから推定する。
 
 ## E. 出所マップ（詳細ページ「?」ツールチップ用）
 
@@ -276,7 +284,7 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
 | シリーズ概要                   | **第1話の snapshot `description`**（=第1話あらすじ・HTML除去。真のシリーズ要約源は無し）        |
 | 各話あらすじ                   | snapshot `description`（話ごと・HTML混じり）                                                    |
 | 再生数                         | snapshot `viewCounter`（累計） ／ nvapi `count.view`                                            |
-| 各話リスト（#/話順/contentId） | **nvapi v2 series `items[]`**（主源）                                                           |
+| 各話リスト（#/話順/contentId） | **nvapi v2 series `items[]`**（非空時の主源）／空配列時は検証済みタイトル補完                   |
 | 公式シリーズリンク             | nvapi series `id` → `nicovideo.jp/series/<id>` ／ list.json `url`                               |
 | 各話リンク                     | `nicovideo.jp/watch/<contentId>`                                                                |
 | 勢いスコア                     | **計算**（前日比 delta＋velocity＋recency のブレンド・`prev_view_counter` の1スロット bounded） |
@@ -289,7 +297,7 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
   ただし完全 yomi が無いため**行内の厳密50音ソートは不可**（title順フォールバック）。
 - **ジャンル（B）**: 全話に入るが**ほぼ「アニメ」一色**＝サブジャンル軸に使えない → **tags/categoryTags 主軸**。
 - **概要（C）**: 各話 description は**話ごとの個別あらすじ**（HTML混じり）。シリーズ概要の真源は無く、**第1話あらすじを流用**するのが現実解（その旨明示）。
-- **各話取得元（D）**: **nvapi v2 series が最適**（話順・contentId・支店判定込み）。snapshot グルーピングより確実。
+- **各話取得元（D）**: nvapi v2 series は非空 `items` が取れる環境では話順・contentId の主源。`detail` は支店判定とタイトル検証に利用できるが、hosted runner の空配列を前提に補完経路が必要。
 
 ---
 
@@ -311,29 +319,29 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
 
 ## マトリクス（行＝表示項目）
 
-| 表示項目                | 取得元                                                                   |   取得可否    | カバレッジ（実測）                                 | 信頼度・注意                                                                                                   | 算出方法                     |
-| ----------------------- | ------------------------------------------------------------------------ | :-----------: | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| タイトル                | list.json `title` / nvapi `detail.title` / snapshot `title`              |       ○       | 100%                                               | 表記のみ（読み無し）                                                                                           | —                            |
-| **読み（五十音）**      | list.json `col_key`                                                      |       △       | 行バケット 100%（6,698件・欠落0）                  | **行（あ〜わ10）粒度のみ正確。完全 yomi 無し→行内厳密ソート不可**                                              | —                            |
-| サムネ                  | snapshot `thumbnailUrl`（各話）/ nvapi `detail.thumbnailUrl`（シリーズ） |       ○       | 100%                                               | —                                                                                                              | —                            |
-| ジャンル                | snapshot `genre`                                                         |       △       | 非空 99.95%（87,281/87,327）だが**「アニメ」一色** | サブジャンル判別不可 → **tags 主軸**                                                                           | —                            |
-| タグ                    | snapshot `tags`                                                          |       ○       | 100%                                               | スペース区切り・表記揺れ有り                                                                                   | —                            |
-| categoryTags            | snapshot `categoryTags`                                                  |       ○       | 100%                                               | tags の補助                                                                                                    | —                            |
-| 概要（あらすじ）        | 各話 snapshot `description`（シリーズは**第1話を流用**）                 |       △       | 各話 100% ／ シリーズ概要の真源**無し**            | **HTML 混じり（要除去）**。流用＝「第1話あらすじ」と明示                                                       | —                            |
-| 各話リスト・話数順      | **nvapi v2 series `items[]`**                                            |       ○       | シリーズ単位で全話・順序付き                       | snapshot+list.json 集約より確実                                                                                | —                            |
-| 各話再生数              | snapshot `viewCounter` / nvapi `count.view`                              |       ○       | 100%（>0）                                         | **累計のみ**（期間内なし）                                                                                     | —                            |
-| シリーズ合算/代表再生数 | 計算（各話 `viewCounter` 合算 or 代表話）                                |    ○(計算)    | —                                                  | 合算は各話の網羅取得が前提（nvapi series 推奨）                                                                | Σ各話 viewCounter            |
-| 投稿日                  | snapshot `startTime`                                                     |       ○       | 100%                                               | ISO8601＋TZ。**ニコ投稿日＝放送日と異なる場合あり**                                                            | —                            |
-| コメント数              | snapshot `commentCounter`                                                | ○取得 / △有用 | 人気100% / **新着46%**                             | 新着話は 0 が多い                                                                                              | —                            |
-| いいね                  | snapshot `likeCounter`                                                   | ○取得 / △有用 | 人気100% / **新着51%**                             | like は2020〜・新着話 0 多い                                                                                   | —                            |
-| マイリスト              | snapshot `mylistCounter`                                                 | ○取得 / △有用 | 人気100% / **新着40%**                             | 新着話 0 多い                                                                                                  | —                            |
-| 尺                      | snapshot `lengthSeconds`                                                 |       ○       | 100%（>0）                                         | 秒                                                                                                             | —                            |
-| 公式シリーズURL         | list.json `url` / nvapi series `id`                                      |       ○       | 100%                                               | `nicovideo.jp/series/<id>`                                                                                     | —                            |
-| 公式watchURL            | snapshot `contentId`                                                     |       ○       | 100%                                               | `nicovideo.jp/watch/<contentId>`（`so…`）                                                                      | —                            |
-| 勢いスコア              | 計算                                                                     |    ○(計算)    | —                                                  | 前日比 delta＋velocity＋recency のブレンド（1スロット bounded）。**新着は comment/like/mylist 疎→view 主体に** | 式は foundation §1.2         |
-| クール判定              | snapshot `startTime`（現行季）/ programlist・period（過去季）            |       △       | 現行季 ◎ / **過去季 ✗**                            | **back-catalog は startTime＝バルク投稿日で放送季と無関係**                                                    | startTime→年・季（現行のみ） |
-| 新着シリーズ判定        | 計算（series 内 `startTime` 最小）                                       |    ○(計算)    | —                                                  | nvapi series で各話網羅が前提                                                                                  | min(各話 startTime)          |
-| 最新話判定              | 計算（`startTime` 最大）                                                 |    ○(計算)    | —                                                  | —                                                                                                              | max(各話 startTime)          |
+| 表示項目                | 取得元                                                                   |   取得可否    | カバレッジ（実測）                                   | 信頼度・注意                                                                                                   | 算出方法                     |
+| ----------------------- | ------------------------------------------------------------------------ | :-----------: | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| タイトル                | list.json `title` / nvapi `detail.title` / snapshot `title`              |       ○       | 100%                                                 | 表記のみ（読み無し）                                                                                           | —                            |
+| **読み（五十音）**      | list.json `col_key`                                                      |       △       | 行バケット 100%（6,698件・欠落0）                    | **行（あ〜わ10）粒度のみ正確。完全 yomi 無し→行内厳密ソート不可**                                              | —                            |
+| サムネ                  | snapshot `thumbnailUrl`（各話）/ nvapi `detail.thumbnailUrl`（シリーズ） |       ○       | 100%                                                 | —                                                                                                              | —                            |
+| ジャンル                | snapshot `genre`                                                         |       △       | 非空 99.95%（87,281/87,327）だが**「アニメ」一色**   | サブジャンル判別不可 → **tags 主軸**                                                                           | —                            |
+| タグ                    | snapshot `tags`                                                          |       ○       | 100%                                                 | スペース区切り・表記揺れ有り                                                                                   | —                            |
+| categoryTags            | snapshot `categoryTags`                                                  |       ○       | 100%                                                 | tags の補助                                                                                                    | —                            |
+| 概要（あらすじ）        | 各話 snapshot `description`（シリーズは**第1話を流用**）                 |       △       | 各話 100% ／ シリーズ概要の真源**無し**              | **HTML 混じり（要除去）**。流用＝「第1話あらすじ」と明示                                                       | —                            |
+| 各話リスト・話数順      | **nvapi v2 series `items[]`**                                            |     ○ / △     | ローカルは全話・順序付き／hosted runner は空配列あり | 非空時は主源。空配列時は detail と厳格タイトル照合による補完が必要                                             | —                            |
+| 各話再生数              | snapshot `viewCounter` / nvapi `count.view`                              |       ○       | 100%（>0）                                           | **累計のみ**（期間内なし）                                                                                     | —                            |
+| シリーズ合算/代表再生数 | 計算（各話 `viewCounter` 合算 or 代表話）                                |    ○(計算)    | —                                                    | 合算は各話の網羅取得が前提（nvapi series 推奨）                                                                | Σ各話 viewCounter            |
+| 投稿日                  | snapshot `startTime`                                                     |       ○       | 100%                                                 | ISO8601＋TZ。**ニコ投稿日＝放送日と異なる場合あり**                                                            | —                            |
+| コメント数              | snapshot `commentCounter`                                                | ○取得 / △有用 | 人気100% / **新着46%**                               | 新着話は 0 が多い                                                                                              | —                            |
+| いいね                  | snapshot `likeCounter`                                                   | ○取得 / △有用 | 人気100% / **新着51%**                               | like は2020〜・新着話 0 多い                                                                                   | —                            |
+| マイリスト              | snapshot `mylistCounter`                                                 | ○取得 / △有用 | 人気100% / **新着40%**                               | 新着話 0 多い                                                                                                  | —                            |
+| 尺                      | snapshot `lengthSeconds`                                                 |       ○       | 100%（>0）                                           | 秒                                                                                                             | —                            |
+| 公式シリーズURL         | list.json `url` / nvapi series `id`                                      |       ○       | 100%                                                 | `nicovideo.jp/series/<id>`                                                                                     | —                            |
+| 公式watchURL            | snapshot `contentId`                                                     |       ○       | 100%                                                 | `nicovideo.jp/watch/<contentId>`（`so…`）                                                                      | —                            |
+| 勢いスコア              | 計算                                                                     |    ○(計算)    | —                                                    | 前日比 delta＋velocity＋recency のブレンド（1スロット bounded）。**新着は comment/like/mylist 疎→view 主体に** | 式は foundation §1.2         |
+| クール判定              | snapshot `startTime`（現行季）/ programlist・period（過去季）            |       △       | 現行季 ◎ / **過去季 ✗**                              | **back-catalog は startTime＝バルク投稿日で放送季と無関係**                                                    | startTime→年・季（現行のみ） |
+| 新着シリーズ判定        | 計算（series 内 `startTime` 最小）                                       |    ○(計算)    | —                                                    | nvapi series で各話網羅が前提                                                                                  | min(各話 startTime)          |
+| 最新話判定              | 計算（`startTime` 最大）                                                 |    ○(計算)    | —                                                    | —                                                                                                              | max(各話 startTime)          |
 
 ## クール判定の根拠（実データ）
 
@@ -350,14 +358,14 @@ items[].video: id(=contentId so…), title, count.view, registeredAt, thumbnail,
 | シリーズ概要               | **第1話 description を HTML 除去して表示**＋「第1話のあらすじ」表記。別途のシリーズ要約は出さない。   |
 | コメント/いいね/マイリスト | **新着では出さない or 0 を隠す**。勢いスコアの主因にしない（view 主体）。詳細・人気作では補助表示可。 |
 | クール（過去季）           | startTime で出せるのは現行季のみ。過去季は period/programlist で補完、不明は「クール不明」で正直に。  |
-| 各話リスト                 | **nvapi v2 series を主源**に（snapshot 集約は代替）。                                                 |
+| 各話リスト                 | **非空の nvapi `items` を主源**にする。空配列時は支店・タイトル安全条件を満たす対象だけ補完する。     |
 
 ## 5点の結論（実データ）
 
 1. **五十音**: ✅ list.json `col_key` で**行バケット振り分け可能**（全6,698件・欠落0）。読み(yomi)は無く**行内厳密ソートは不可**（公式の細かい50音 yomi 経路は確認できず＝行粒度で割り切る）。
 2. **ジャンル**: 全話に在るが**99.95%「アニメ」**＝サブジャンル不可。**決定ルール: genre は「アニメ判定」程度に留め、分類は tags 主軸**。
 3. **概要**: description は**各話固有のあらすじ**（HTML混じり）。シリーズ概要の真源は無く、**「第1話あらすじ流用（明示）」が妥当**。
-4. **各話取得元**: **nvapi v2 `series/<id>` が最も信頼できる**（全話・話順・contentId・owner.channel で支店判定）。snapshot+list.json 集約より優位。
+4. **各話取得元**: nvapi v2 `series/<id>` は、非空 `items` が得られる環境では全話・話順・contentId の主源。`detail.owner.channel` は支店判定に使える。hosted runner の空配列時は title 候補と安全条件による補完が必要。
 5. **クール判定**: **現行季のみ startTime で機械判定可**。**過去作はバルク投稿日のため不可** → period/programlist 補助 or 「不明」。
 
 ---

@@ -1,7 +1,15 @@
+---
+title: データインベントリ
+layer: L2
+status: current
+updated: 2026-08-08
+---
+
 # データインベントリ（Data Dictionary）
 
 dアニメストア ニコニコ支店ビューア — システムが保持する全データの一覧。
 「何のデータをどこにどう持っているか」を網羅した参照ドキュメント。
+変更の経緯は [`CHANGELOG.md`](../../CHANGELOG.md) に記録する。
 
 ---
 
@@ -31,12 +39,12 @@ dアニメストア ニコニコ支店ビューア — システムが保持す�
 
 ## 1. データレイヤー概要
 
-| レイヤー        | 場所                             | 性質                             |
-| --------------- | -------------------------------- | -------------------------------- |
-| **State 正本**  | `data/state/` + `data/series/`   | 永続・プロセス跨ぎで保持         |
-| **配信 output** | `data/*.json`（works/ranking等） | 毎日再生成・git 追跡・Pages 配信 |
-| **Repo Config** | `docs/data/`                     | 手動設定（現在は空）             |
-| **揮発**        | メモリ・一時ファイル             | プロセス終了で消滅               |
+| レイヤー        | 場所                             | 性質                                                   |
+| --------------- | -------------------------------- | ------------------------------------------------------ |
+| **State 正本**  | `data/state/` + `data/series/`   | 永続・プロセス跨ぎで保持                               |
+| **配信 output** | `data/*.json`（works/ranking等） | full pipeline で再生成・main の git 追跡外・Pages 配信 |
+| **Repo Config** | `docs/data/`                     | 手動設定（現在は空）                                   |
+| **揮発**        | メモリ・一時ファイル             | プロセス終了で消滅                                     |
 
 `data/series/` と `data/state/` は `.gitignore` 対象（main ブランチ管理外）。
 state ブランチへの rsync で永続化される。
@@ -56,7 +64,7 @@ state ブランチへの rsync で永続化される。
 | `snapshotVersionLastModified` | `string\|null` | 日次 version gate の前回値（変化なし → 早期終了）                                                                                                                                               | 日次 Phase A              |
 | `lastSeedAt`                  | `string\|null` | nvapi seed 最終実行時刻                                                                                                                                                                         | 日次（seed 時）           |
 | `snapshotFetchedAt`           | `string\|null` | Phase A 完全完了の ISO8601（E7 isAvailable 評価の基準時刻）                                                                                                                                     | 日次 Phase A 末尾         |
-| `nvapiLastOkAt`               | `string\|null` | nvapi 直近成功時刻の ISO8601（`pnpm ops:health` の nvapi 劣化検知に使う）                                                                                                                       | 毎時/日次（nvapi 成功時） |
+| `nvapiLastOkAt`               | `string\|null` | nvapi が非空の `items` を1件以上返した直近時刻。HTTP 200 でも全応答が空配列なら更新しない。`pnpm ops:health` の nvapi 劣化検知に使う                                                            | 毎時/日次（`usable > 0`） |
 | `sweepCursor`                 | `number`       | B7 ローテーション権威スイープの巡回カーソル（sorted 正 seriesId への index・既定 0）。日次で `batch` 件処理するたびに `(cursor+batch)%total` へ進み、約7日で全正シリーズを一巡（§dataflow 4-2） | 日次 B7 スイープ末尾      |
 
 lifecycle: **永続（毎回上書き）**
@@ -76,7 +84,7 @@ lifecycle: **永続（毎回上書き）**
 **用途**: 次回日次実行時に `loadStore` が EpisodeEntry.prevViewCounter に注入 → delta/hotScore 計算の差分元。
 `series/*.json` には書かない（メモリ注入専用）。
 
-lifecycle: **毎日全件上書き**（`writeBackStore` 末尾で全 ep を一括書き出し）
+lifecycle: **日次 full pipeline 完了時に全件上書き**（version gate 早期終了時は更新しない）
 
 ---
 
@@ -177,8 +185,7 @@ format は両者同一。
 > **credits 補足**: `credits` は **SeriesEntry / WorkEntry**（series 単位）に置く 1 列の名前配列。抽出は **1話目（最古話）1件のみ**を
 > パースする（あらすじ＝descriptionFirst と同一ソースに揃え、全話パースのコストも回避）。出演/制作はシリーズ内でほぼ一定なので
 > 1話目で十分。**声優/監督/会社/原作者の区別は持たず名前のみ**（役名・役割ラベルは捨てる）＝発見用途で区別不要のため 1 カテゴリに統合。
-> 旧 `cast`/`staff`/`studios`/`copyright`（役名/役割付き 2 カテゴリ）は廃止し `credits` に統合した。各話単位の構造化フィールド
-> （synopsis/episodeLinks/descriptionStructured）は per-episode パースをやめたため非永続。credits のグローバル facet 化（声優別/制作別 index）は未実装。
+> 各話単位の synopsis / episodeLinks / descriptionStructured は永続化しない。credits のグローバル facet（声優別・制作別 index）は持たない。
 > **どう分析し・どう抽出し・どう誤検知を防ぐか・カバレッジ実測**の正本は [`description-extraction.md`](description-extraction.md)。
 
 **メモリのみ（ファイル非永続）**:
@@ -215,10 +222,10 @@ format は両者同一。
 
 **メモリのみ — ファイル非永続**:
 
-| フィールド        | 型             | 内容                                                                                                                                                               | 注入元                                             |
-| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
-| `seriesId`        | `number\|null` | null=orphan、負=仮シリーズ。series JSON のファイル名（キー）から再構築される。run 間で null/負→正だけでなく**正→正にも変わりうる**（誤登録の権威是正 B3/B7・§3-1） | `_ingestSeriesJson()`                              |
-| `prevViewCounter` | `number\|null` | 前回 viewCounter（delta/hotScore 計算用）。writeBack 時は series JSON に**含めない**                                                                               | `_loadState()` が `state/prev-views.json` から注入 |
+| フィールド        | 型             | 内容                                                                                                                                                                       | 注入元                                             |
+| ----------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `seriesId`        | `number\|null` | null=orphan、負=仮シリーズ。series JSON のファイル名（キー）から再構築される。run 間で null/負→正だけでなく**正→正にも変わりうる**（メンバーシップ整合化 B3/B7/B7b・§3-1） | `_ingestSeriesJson()`                              |
+| `prevViewCounter` | `number\|null` | 前回 viewCounter（delta/hotScore 計算用）。writeBack 時は series JSON に**含めない**                                                                                       | `_loadState()` が `state/prev-views.json` から注入 |
 
 ---
 
@@ -239,28 +246,33 @@ return h <= 0 ? h - 1 : -h // 必ず負数・0 にならない
 
 ### ライフサイクル
 
-| フェーズ                      | 処理                                                                                                                                                                                                                                    |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **作成（毎時 D2）**           | RSS ep が `list-index` でタイトル未解決 → `registerProvisionalSeries()` → `seriesId<0` の series + ep を store に登録                                                                                                                   |
-| **作成（日次 A2 step3）**     | snapshot ep が全解決ルート失敗 → 同関数を呼んで仮シリーズ登録                                                                                                                                                                           |
-| `isAvailable`                 | 常に `true` 固定（E7 grace の評価対象外）                                                                                                                                                                                               |
-| **reconciliation（日次 B6）** | 実シリーズの `allTitles` マップと完全一致照合 → nvapi 検証（支店判定 + 仮 ep の contentId が nvapi 話一覧に存在）→ 検証 OK なら ep の `seriesId` を実 ID に付け替え → `store.series.delete(neg)` + `unlinkSync(data/series/<neg>.json)` |
-| **cleanup（日次 A2 末尾）**   | A2 step2 で ep が実 ID に付け替えられた後、空になった仮シリーズを B6 同様に `delete` + `unlinkSync`                                                                                                                                     |
-| **ファイル残存リスク**        | 削除せずに次回 `loadStore` で再インジェストされると seriesId が揺れる → B6/A2 cleanup で必ず消す設計                                                                                                                                    |
+| フェーズ                                 | 処理                                                                                                                                                                                                             |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **作成（毎時 D2）**                      | RSS ep が `list-index` でタイトル未解決 → `registerProvisionalSeries()` → `seriesId<0` の series + ep を store に登録                                                                                            |
+| **作成（日次 A2 step3）**                | snapshot ep が全解決ルート失敗 → 同関数を呼んで仮シリーズ登録                                                                                                                                                    |
+| `isAvailable`                            | 常に `true` 固定（E7 grace の評価対象外）                                                                                                                                                                        |
+| **reconciliation（毎時 D3b / 日次 B6）** | 実 ID 候補を nvapi で検証する。`items` 非空は仮話 contentId の所属、空配列は支店所有・`detail.title` 一致・全仮話の厳格タイトル照合を要求する。確認後に各話を実 ID へ移動し、負 ID と `series/<neg>.json` を削除 |
+| **cleanup（日次 A2 末尾）**              | A2 step2 で ep が実 ID に付け替えられた後、空になった仮シリーズを B6 同様に `delete` + `unlinkSync`                                                                                                              |
+| **ファイル残存リスク**                   | 削除せずに次回 `loadStore` で再インジェストされると seriesId が揺れる → B6/A2 cleanup で必ず消す設計                                                                                                             |
 
 ---
 
-## 3-1. 正シリーズ間の誤登録是正（自己修復）
+## 3-1. シリーズメンバーシップの整合性
 
-seriesId 未取得の各話が、シーズン標識ガード導入前は前方一致で**隣接シーズン（正の実 ID）に誤登録**されることがあった（例: 第3期 第1話 → 第1期）。予防・治癒の二段構え:
+各 Episode の `seriesId` は、次の規則で更新できる。
 
-- **予防**: `resolveByTitle` のシーズン標識ガード（残りが `第N期`/`シーズン`/`Season`/序数 で始まる基底候補を棄却）。未取得シーズンは仮シリーズ（負 ID）へ落とし、既存 B6（負→実）で正しく統合する。話数標識（`第N話`/`第N章`/`#N`/`EP`/`本編` 等＝「期」を含まない）は棄却しない。
-- **治癒**: 既に正→正で誤登録済みのデータ（`upsertEpisodes` の PRESERVE で保護され遡及不可）を、nvapi の**排他的メンバーシップ**を権威に是正する。
-  - `moveEpisodeToSeries(store, contentId, target, episodeNo)`: `ep.seriesId` を直接付け替え（PRESERVE 迂回）・`episodeNo` を nvapi 話順で是正・**旧新両シリーズを dirty 化**。旧シリーズは削除しない（B6 の負シリーズと異なり、旧＝正当な他の各話を保持）。
-  - **B3 高速パス**: 新規シリーズ取得時、その nvapi 各話が別の正シリーズにあれば引き取る（追加アクセス0）。
-  - **B6 毎時昇格**: 仮シリーズを毎時も `listIndexByTitle` 照合＋nvapi 検証で実シリーズへ昇格（速報レーン・`NICO_HOURLY_RECONCILE_LIMIT` 上限）。新規が偽シリーズのまま放置される時間を〜1時間に短縮。
-  - **B7 ローテーション権威スイープ**: 日次で全正シリーズを 1/7 巡回（`selectSweepTargets`／`meta.sweepCursor`／空シリーズは毎回優先）。各対象を nvapi 再取得し `planAuthoritativeMoves` で別正シリーズから各話を奪還。**空・partial・既知非空すべての誤登録**を「所属リストとの不一致」として是正し、約7日で全件一巡＝どの誤登録も最悪7日で回復。旧「空シリーズ限定 B7」は partial（例: `幼女戦記Ⅱ` が自前1話を持ちつつ別話を奪われる）を拾えなかったため、対象を絞らないローテーションに置換した。
-- **収束**: `state/series-index.json` は日次全再構築／毎時値上書きで自己修正。`data/series/*.json` は旧新とも dirty で再出力（旧から消え・新に載る）。projection（`works.json` 等）は `ep.seriesId` から再集計。
+| 証拠                 | 必須条件                                                                              | 更新内容                                                         |
+| -------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| nvapi `items` 非空   | 支店所有、`items` が配列、対象 contentId が配列に存在                                 | 所属先を対象 seriesId に変更し、配列順を `episodeNo` に設定      |
+| nvapi `items` 空配列 | 支店所有、`detail.title` と候補タイトルが正規化一致、対象全話が厳格タイトル照合を通過 | 対象話だけを移動し、タイトルから安全に読めるシリーズ内話数を設定 |
+
+正→正の移動では、現在のシリーズタイトルが各話タイトルに一致しないか、移動先タイトルの方が具体的であることを追加条件とする。候補シリーズが Store に無い場合、`items` が非配列の場合、またはいずれかの安全条件が欠ける場合は変更しない。
+
+- **B3**: 新規シリーズの非空 `items` から、既存の別シリーズにある同じ contentId を引き取る
+- **B7**: `list.json` / title hint から検出した既知タイトル不一致を日次 full pipeline ごとに優先し、空シリーズと正 ID の 1/7 巡回も同じ run で検証する
+- **B7b**: A2 完了後に既知タイトル不一致だけを再検出し、export 前に同じ規則で整合化する
+- **永続化**: `moveEpisodeToSeries` が移動元・移動先の両シリーズを dirty にする。`series-index.json` と `works.json` 等は更新後の `ep.seriesId` から再構築する
+- **再試行**: 未確認の既知不一致は残存する限り次の日次でも対象になる。`sweepCursor` の巡回位置には依存しない
 
 ---
 
@@ -459,10 +471,12 @@ RSS ch.nicovideo.jp
 
 【日次】
 snapshot API ──────────→ episodes（viewCounter/tags/desc/...）→ missedContentIds 収集
-list/programlist/theme JSON → seriesId union → B3 nvapi → series/*.json（新規）
-                           → B4 col_key パッチ
-                           → B6 仮シリーズ reconciliation（nvapi 検証 → 実 ID に統合）
+list/programlist/theme JSON + title hint → seriesId候補 → B3 nvapi → series/*.json（新規）
+                                      → B4 col_key パッチ
+                                      → B6 仮→実 reconciliation
+                                      → B7 既知不一致優先 + 正シリーズ巡回
 A2 救出（missedContentIds） → nvapi / タイトル照合 / 仮シリーズ登録
+B7b 救出後 reconciliation → 既知タイトル不一致だけを export 前に再検証
 E1-E7 ETL（descriptionFirst / tags / cours / franchiseKey / timestamps / thumbs / isAvailable）
 detectShrink guard
   ├─ 縮小検出 → meta.json のみ保存・export スキップ
