@@ -44,7 +44,7 @@ function createModal(): HTMLElement {
   emptyToggleLabel.className = 'settings-toggle'
   const emptyToggle = document.createElement('input')
   emptyToggle.type = 'checkbox'
-  emptyToggle.className = 'settings-empty-toggle'
+  emptyToggle.className = 'settings-toggle-input settings-empty-toggle'
   emptyToggle.setAttribute('role', 'switch')
   const emptyTrack = document.createElement('span')
   emptyTrack.className = 'settings-toggle-track'
@@ -61,7 +61,7 @@ function createModal(): HTMLElement {
   unavailToggleLabel.className = 'settings-toggle'
   const unavailToggle = document.createElement('input')
   unavailToggle.type = 'checkbox'
-  unavailToggle.className = 'settings-unavail-toggle'
+  unavailToggle.className = 'settings-toggle-input settings-unavail-toggle'
   unavailToggle.setAttribute('role', 'switch')
   const unavailTrack = document.createElement('span')
   unavailTrack.className = 'settings-toggle-track'
