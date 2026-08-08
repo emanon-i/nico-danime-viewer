@@ -19,16 +19,28 @@ const NVAPI_HEADERS = {
 // run 終端で getNvapiStats() を読んで stats ログ + meta.nvapiLastOkAt 更新に使う。
 let _nvapiOk = 0
 let _nvapiFailed = 0
+let _nvapiUsable = 0
+let _nvapiEmpty = 0
+let _nvapiInvalid = 0
 
 /** 現在の run（プロセス）の nvapi 成功/失敗件数を返す。 */
 export function getNvapiStats() {
-  return { ok: _nvapiOk, failed: _nvapiFailed }
+  return {
+    ok: _nvapiOk,
+    failed: _nvapiFailed,
+    usable: _nvapiUsable,
+    empty: _nvapiEmpty,
+    invalid: _nvapiInvalid,
+  }
 }
 
 /** テスト用 / run 開始時用: カウンタをリセットする。 */
 export function _resetNvapiStats() {
   _nvapiOk = 0
   _nvapiFailed = 0
+  _nvapiUsable = 0
+  _nvapiEmpty = 0
+  _nvapiInvalid = 0
 }
 
 /**
@@ -48,9 +60,16 @@ export async function fetchSeriesData(seriesId) {
     _nvapiFailed++
     throw new Error(`[nvapi] HTTP ${resp.status} for series/${seriesId}`)
   }
-  _nvapiOk++
   const json = await resp.json()
-  return json.data
+  const data = json.data
+  _nvapiOk++
+  if (Array.isArray(data?.items)) {
+    if (data.items.length > 0) _nvapiUsable++
+    else _nvapiEmpty++
+  } else {
+    _nvapiInvalid++
+  }
+  return data
 }
 
 /**

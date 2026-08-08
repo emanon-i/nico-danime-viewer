@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { findTitleMismatchTargets } from '../../scripts/etl/reconcile.mjs'
+import {
+  findTitleMismatchTargets,
+  inferEpisodeNo,
+  isSafeTitleFallbackCandidate,
+} from '../../scripts/etl/reconcile.mjs'
 import {
   createStore,
   moveEpisodeToSeries,
@@ -71,5 +75,55 @@ describe('findTitleMismatchTargets', () => {
     store.series.delete(569817)
 
     expect(findTitleMismatchTargets(store, byTitle)).toEqual([])
+  })
+
+  it('短い旧作名への前方一致は偽陽性として除外する', () => {
+    const store = createStore()
+    upsertSeries(store, [
+      { seriesId: 127293, title: 'BUZZER BEATER 2nd Quarter' },
+      { seriesId: 96678, title: 'BUZZER BEATER' },
+    ])
+    upsertEpisodes(store, [
+      {
+        contentId: 'so32026579',
+        seriesId: 127293,
+        title: 'BUZZER BEATER 2nd Quarter　第1話　OUT OF BOUNDS',
+      },
+    ])
+
+    expect(findTitleMismatchTargets(store, new Map([['BUZZER BEATER', 96678]]))).toEqual([])
+  })
+
+  it('同名別版への候補は偽陽性として除外する', () => {
+    const store = createStore()
+    upsertSeries(store, [
+      { seriesId: 95774, title: 'どろろ' },
+      { seriesId: 303573, title: 'どろろ' },
+    ])
+    upsertEpisodes(store, [
+      { contentId: 'so31969689', seriesId: 95774, title: 'どろろ　第1話　百鬼丸の巻' },
+    ])
+
+    expect(findTitleMismatchTargets(store, new Map([['どろろ', 303573]]))).toEqual([])
+  })
+
+  it('仮シリーズは確認済みの具体的な候補タイトルへ救済できる', () => {
+    const store = createStore()
+    upsertSeries(store, [
+      { seriesId: -1, title: '魔法少女猫たると　にゃーの２' },
+      { seriesId: 572284, title: '魔法少女猫たると' },
+    ])
+    upsertEpisodes(store, [
+      {
+        contentId: 'so46602808',
+        seriesId: -1,
+        title: '魔法少女猫たると　にゃーの２　「さいたさいた」',
+      },
+    ])
+    const ep = store.episodes.get('so46602808')
+
+    expect(isSafeTitleFallbackCandidate(store, ep, 572284, '魔法少女猫たると')).toBe(true)
+    expect(inferEpisodeNo(ep.title)).toBe(2)
+    expect(inferEpisodeNo('渡くんの××が崩壊寸前　BREAK 13　「本当に好きなの？」')).toBe(13)
   })
 })
