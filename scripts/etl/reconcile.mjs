@@ -3,6 +3,7 @@ import { resolveByTitle } from '../nico/list.mjs'
 function normalizeTitle(value) {
   return String(value ?? '')
     .trim()
+    .replace(/\s+/g, ' ')
     .replace(/[‘’ʼ]/g, "'")
     .replace(/＆/g, '&')
 }
@@ -41,6 +42,56 @@ export function inferEpisodeNo(title) {
     if (Number.isInteger(value) && value > 0) return value
   }
   return null
+}
+
+export function inferEpisodeNoForSeries(store, title, targetSeriesId) {
+  const absoluteNo = inferEpisodeNo(title)
+  if (absoluteNo == null) return null
+
+  const offsets = new Set()
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId !== targetSeriesId || !Number.isInteger(ep.episodeNo)) continue
+    const existingAbsoluteNo = inferEpisodeNo(ep.title)
+    if (existingAbsoluteNo == null) continue
+    offsets.add(existingAbsoluteNo - ep.episodeNo)
+    if (offsets.size > 1) return absoluteNo
+  }
+
+  const offset = offsets.values().next().value ?? 0
+  const relativeNo = absoluteNo - offset
+  return relativeNo > 0 ? relativeNo : absoluteNo
+}
+
+export function inferEpisodeNosForSeries(store, targetSeriesId, candidateContentIds = []) {
+  const candidateIds = new Set(candidateContentIds)
+  const rows = []
+  const offsets = new Set()
+
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId !== targetSeriesId && !candidateIds.has(ep.contentId)) continue
+    const absoluteNo = inferEpisodeNo(ep.title)
+    if (absoluteNo == null) continue
+    rows.push({ contentId: ep.contentId, absoluteNo })
+    if (ep.seriesId === targetSeriesId && Number.isInteger(ep.episodeNo)) {
+      offsets.add(absoluteNo - ep.episodeNo)
+    }
+  }
+
+  let offset
+  if (offsets.size === 1) {
+    offset = offsets.values().next().value
+  } else if (offsets.size === 0 && rows.length > 0) {
+    offset = Math.min(...rows.map((row) => row.absoluteNo)) - 1
+  } else {
+    offset = 0
+  }
+
+  return new Map(
+    rows.map(({ contentId, absoluteNo }) => {
+      const relativeNo = absoluteNo - offset
+      return [contentId, relativeNo > 0 ? relativeNo : absoluteNo]
+    })
+  )
 }
 
 /**

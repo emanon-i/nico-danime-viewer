@@ -48,7 +48,8 @@ import { projectAll, exportNew as exportNewStore, exportWorksPartial } from './s
 import { summarizeCreditExtraction } from './etl/credits.mjs'
 import {
   findTitleMismatchTargets,
-  inferEpisodeNo,
+  inferEpisodeNoForSeries,
+  inferEpisodeNosForSeries,
   isSafeTitleFallbackCandidate,
   seriesTitlesEqual,
 } from './etl/reconcile.mjs'
@@ -343,6 +344,89 @@ async function rescueMissingEps(store, missedContentIds, contentToSeries, byTitl
   logger.info('fetch', '[JS] A2 rescue done', { remaining: missedContentIds.size })
 }
 
+export async function _reconcilePostRescueMismatches(
+  store,
+  byTitle,
+  bySeriesId,
+  fetchSeries = fetchSeriesData
+) {
+  const groups = findTitleMismatchTargets(store, byTitle)
+  let moved = 0
+  let confirmed = 0
+  let unconfirmed = 0
+
+  for (const { seriesId, contentIds } of groups) {
+    let data
+    try {
+      data = await fetchSeries(seriesId)
+    } catch (err) {
+      unconfirmed += contentIds.length
+      logger.warn('fetch', '[JS] B7b nvapi failed', { seriesId, err: err.message })
+      continue
+    }
+    if (!isBranchSeries(data?.detail) || !Array.isArray(data?.items)) {
+      unconfirmed += contentIds.length
+      logger.warn('fetch', '[JS] B7b invalid/non-branch series skipped', { seriesId })
+      continue
+    }
+
+    const eps = mapNvapiEpisodes(seriesId, data.items)
+    const byContentId = new Map(eps.map((ep) => [ep.contentId, ep]))
+    const fallbackEpisodeNos = inferEpisodeNosForSeries(store, seriesId, contentIds)
+    let candidates
+    if (eps.length > 0) {
+      candidates = contentIds.filter((cid) => byContentId.has(cid))
+      confirmed += candidates.length
+      unconfirmed += contentIds.length - candidates.length
+    } else {
+      const candidateTitle = bySeriesId.get(seriesId) ?? store.series.get(seriesId)?.title
+      const safeFallback =
+        seriesTitlesEqual(data?.detail?.title, candidateTitle) &&
+        contentIds.every((cid) =>
+          isSafeTitleFallbackCandidate(store, store.episodes.get(cid), seriesId, candidateTitle)
+        )
+      candidates = safeFallback ? contentIds : []
+      confirmed += candidates.length
+      unconfirmed += contentIds.length - candidates.length
+      if (safeFallback) {
+        logger.warn('fetch', '[JS] B7b title fallback: nvapi items empty', {
+          seriesId,
+          candidates: candidates.length,
+        })
+      }
+    }
+
+    for (const cid of candidates) {
+      const ep = store.episodes.get(cid)
+      const episodeNo =
+        byContentId.get(cid)?.episodeNo ??
+        fallbackEpisodeNos.get(cid) ??
+        inferEpisodeNoForSeries(store, ep?.title, seriesId)
+      if (moveEpisodeToSeries(store, cid, seriesId, episodeNo)) moved++
+    }
+    if (eps.length > 0) {
+      storeUpsertEps(store, eps)
+      for (const ep of eps) {
+        moveEpisodeToSeries(store, ep.contentId, seriesId, ep.episodeNo)
+      }
+    } else if (candidates.length > 0) {
+      for (const [cid, episodeNo] of fallbackEpisodeNos) {
+        if (store.episodes.get(cid)?.seriesId === seriesId) {
+          moveEpisodeToSeries(store, cid, seriesId, episodeNo)
+        }
+      }
+    }
+  }
+
+  logger.info('fetch', '[JS] B7b post-rescue reconciliation done', {
+    mismatchTargets: groups.length,
+    mismatchEpisodes: groups.reduce((n, group) => n + group.contentIds.length, 0),
+    confirmed,
+    unconfirmed,
+    moved,
+  })
+}
+
 // RSS pubDate は RFC822（"Wed, 01 Jul 2026 22:30:00 +0900"）。文字列比較だと曜日名の
 // アルファベット順で「最古」が決まってしまい、火・水曜の item だけ生き残る事故になる
 // （exportNew の ts() と同じ方式に揃え、Date.parse の数値で比較する）。
@@ -586,7 +670,10 @@ async function runFullJS() {
           if (safeFallback) {
             mergeVerified = true
             for (const cid of provisionalCids) {
-              orderMap.set(cid, inferEpisodeNo(store.episodes.get(cid)?.title))
+              orderMap.set(
+                cid,
+                inferEpisodeNoForSeries(store, store.episodes.get(cid)?.title, realId)
+              )
             }
             logger.warn('fetch', '[JS] B6 title fallback: nvapi items empty', { sid, realId })
           }
@@ -688,7 +775,7 @@ async function runFullJS() {
                 store,
                 cid,
                 seriesId,
-                inferEpisodeNo(store.episodes.get(cid)?.title)
+                inferEpisodeNoForSeries(store, store.episodes.get(cid)?.title, seriesId)
               )
             ) {
               moved++
@@ -697,7 +784,7 @@ async function runFullJS() {
           // 同じシリーズに既に入っていた話も、タイトルから安全に読める話順を補完する。
           for (const ep of store.episodes.values()) {
             if (ep.seriesId !== seriesId || ep.episodeNo != null) continue
-            const inferred = inferEpisodeNo(ep.title)
+            const inferred = inferEpisodeNoForSeries(store, ep.title, seriesId)
             if (inferred != null) {
               moveEpisodeToSeries(store, ep.contentId, seriesId, inferred)
             }
@@ -770,6 +857,10 @@ async function runFullJS() {
     await rescueMissingEps(store, missedContentIds, contentToSeries, listByTitle, DATA_DIR)
     logger.info('fetch', '[JS] phase A2: done', { remaining: missedContentIds.size })
   }
+
+  // A2 は nvapi/list.json から未解決話を後挿入するため、B7 後に新しい誤所属を作り得る。
+  // export 直前にもう一度既知 mismatch だけを検証し、同一 run 内で収束させる。
+  await _reconcilePostRescueMismatches(store, listByTitle, listBySeriesId)
 
   for (const cid of snapshotContentIds) {
     const ep = store.episodes.get(cid)
@@ -1176,7 +1267,10 @@ async function runHourlyJS() {
           )
         if (verified) {
           for (const cid of provisionalCids) {
-            orderMap.set(cid, inferEpisodeNo(store.episodes.get(cid)?.title))
+            orderMap.set(
+              cid,
+              inferEpisodeNoForSeries(store, store.episodes.get(cid)?.title, realId)
+            )
           }
           logger.warn('fetch', '[JS] D3b title fallback: nvapi items empty', { sid, realId })
         }
