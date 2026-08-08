@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   extractServerResponse,
+  extractSeriesPageContentIds,
   parseContentIds,
   parseSeriesIds,
   summarizeSeriesResponse,
+  summarizeSeriesPageResponse,
   summarizeWatchResponse,
 } from '../scripts/diagnose-series.mjs'
 
@@ -63,6 +65,21 @@ describe('diagnose-series', () => {
       itemCount: 2,
       contentIds: ['so46522236', 'so46548806'],
       orders: [1, 2],
+    })
+  })
+
+  it('seriesページHTMLから話IDを出現順に重複なく記録する', () => {
+    const html = [
+      '<a href="/watch/so46522236">第1話</a>',
+      '<a href="/watch/so46547458">第2話</a>',
+      '<a href="/watch/so46522236">第1話への重複リンク</a>',
+    ].join('')
+    expect(extractSeriesPageContentIds(html)).toEqual(['so46522236', 'so46547458'])
+    expect(summarizeSeriesPageResponse(569817, 200, html)).toMatchObject({
+      seriesId: 569817,
+      httpStatus: 200,
+      itemCount: 2,
+      contentIds: ['so46522236', 'so46547458'],
     })
   })
 })

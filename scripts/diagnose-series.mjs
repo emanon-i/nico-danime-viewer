@@ -12,6 +12,7 @@ import {
 } from './nico/nvapi.mjs'
 
 const WATCH_BASE = 'https://www.nicovideo.jp/watch'
+const SERIES_BASE = 'https://www.nicovideo.jp/series'
 const MAX_TARGETS = 60
 
 export function parseSeriesIds(value) {
@@ -70,6 +71,21 @@ export function summarizeWatchResponse(contentId, status, payload) {
     firstContentId: series?.video?.first?.id ?? null,
   }
 }
+export function extractSeriesPageContentIds(html) {
+  return [...new Set(String(html).match(/\bso\d+\b/g) ?? [])]
+}
+
+export function summarizeSeriesPageResponse(seriesId, status, html) {
+  const contentIds = extractSeriesPageContentIds(html)
+  return {
+    kind: 'series-page',
+    seriesId,
+    httpStatus: status,
+    htmlLength: html.length,
+    itemCount: contentIds.length,
+    contentIds,
+  }
+}
 
 export function summarizeSeriesResponse(seriesId, data) {
   const items = Array.isArray(data?.items) ? data.items : null
@@ -96,6 +112,11 @@ async function diagnoseWatch(contentId) {
   const payload = extractServerResponse(html)
   return summarizeWatchResponse(contentId, response.status, payload)
 }
+async function diagnoseSeriesPage(seriesId) {
+  const response = await fetchWithToS(`${SERIES_BASE}/${seriesId}`)
+  const html = await response.text()
+  return summarizeSeriesPageResponse(seriesId, response.status, html)
+}
 
 async function main() {
   const requestedSeriesIds = parseSeriesIds(process.env.NICO_DIAG_SERIES_IDS)
@@ -120,6 +141,15 @@ async function main() {
   _resetNvapiStats()
   const seriesIds = [...new Set([...requestedSeriesIds, ...discoveredSeriesIds])]
   for (const seriesId of seriesIds) {
+    try {
+      const result = await diagnoseSeriesPage(seriesId)
+      console.log(`[series-diagnostic] ${JSON.stringify(result)}`)
+    } catch (error) {
+      console.log(
+        `[series-diagnostic] ${JSON.stringify({ kind: 'series-page', seriesId, error: error.message })}`
+      )
+    }
+
     try {
       const data = await fetchSeriesData(seriesId)
       console.log(`[series-diagnostic] ${JSON.stringify(summarizeSeriesResponse(seriesId, data))}`)
