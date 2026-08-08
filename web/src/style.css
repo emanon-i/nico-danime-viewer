@@ -1467,7 +1467,7 @@
     }
   }
 
-  /* 「取得できていないシリーズも表示」トグルスイッチ（§67） */
+  /* 設定モーダルのトグルスイッチ（§67・§PH-0013） */
   .settings-toggle {
     display: flex;
     align-items: center;
@@ -1477,7 +1477,7 @@
     font-size: var(--text-l3);
     color: var(--text);
   }
-  .settings-empty-toggle {
+  .settings-toggle-input {
     position: absolute;
     opacity: 0;
     width: 0;
@@ -1504,14 +1504,14 @@
       transition: translate 0.15s;
     }
   }
-  .settings-empty-toggle:checked + .settings-toggle-track {
+  .settings-toggle-input:checked + .settings-toggle-track {
     background: var(--accent);
 
     &::after {
       translate: calc(2.5rem - 1.4rem) 0;
     }
   }
-  .settings-empty-toggle:focus-visible + .settings-toggle-track {
+  .settings-toggle-input:focus-visible + .settings-toggle-track {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
