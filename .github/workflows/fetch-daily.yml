@@ -35,6 +35,16 @@ on:
         required: false
         default: false
         type: boolean
+      diagnostic_series_ids:
+        description: 'read-only診断: nvapi series ID（カンマ区切り）'
+        required: false
+        default: ''
+        type: string
+      diagnostic_content_ids:
+        description: 'read-only診断: 視聴ページcontent ID（カンマ区切り）'
+        required: false
+        default: ''
+        type: string
 
 # 最小権限
 permissions:
@@ -48,10 +58,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  diagnose-series:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.diagnostic_series_ids != '' || inputs.diagnostic_content_ids != '')
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout diagnostic source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '20'
+
+      - name: Diagnose watch pages and nvapi series payloads
+        run: node scripts/diagnose-series.mjs
+        env:
+          NICO_USER_AGENT: 'nico-danime-viewer/diagnostic (https://github.com/emanon-i/nico-danime-viewer)'
+          NICO_HTTP_RETRIES: '1'
+          NICO_DIAG_SERIES_IDS: ${{ inputs.diagnostic_series_ids }}
+          NICO_DIAG_CONTENT_IDS: ${{ inputs.diagnostic_content_ids }}
+
   fetch-and-deploy:
     runs-on: ubuntu-latest
     # 暴走・ロック長時間占有を防ぐ上限（フルでも閑散帯1回で収まる想定）
     timeout-minutes: 150
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      (inputs.diagnostic_series_ids == '' && inputs.diagnostic_content_ids == '')
 
     environment:
       name: github-pages
