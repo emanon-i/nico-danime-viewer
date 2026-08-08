@@ -46,6 +46,7 @@ import {
 import { deriveCoursFromTagsFromStore } from './etl/cours.mjs'
 import { projectAll, exportNew as exportNewStore, exportWorksPartial } from './store/project.mjs'
 import { summarizeCreditExtraction } from './etl/credits.mjs'
+import { findTitleMismatchTargets } from './etl/reconcile.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -607,11 +608,21 @@ async function runFullJS() {
     const rawLimit = Number(process.env.NICO_SWEEP_LIMIT)
     const limit = Number.isFinite(rawLimit) ? rawLimit : 1500
 
-    const { targets, nextCursor } = selectSweepTargets(store, { batch, cursor })
+    const { targets: rotationTargets, nextCursor } = selectSweepTargets(store, { batch, cursor })
+    // list.json から正しい候補 ID が既知なのに、現在は別の正シリーズにいる話を最優先で検証する。
+    // タイトルは移動の根拠にせず、対象 nvapi の話一覧に contentId が存在した場合だけ移動する。
+    // 誤登録が残る限り毎日再選出されるため、nvapi の一時的な空・partial 応答で B7 カーソルが
+    // 通過しても、次の7日周期まで（あるいは永久に）取り残されない。
+    const mismatchGroups = findTitleMismatchTargets(store, listByTitle)
+    const mismatchBySeriesId = new Map(mismatchGroups.map((g) => [g.seriesId, g.contentIds]))
+    const targets = [...new Set([...mismatchGroups.map((g) => g.seriesId), ...rotationTargets])]
     const processed = limit > 0 ? targets.slice(0, limit) : targets
 
     let b7Moved = 0
     let b7Created = 0
+    let b7Invalid = 0
+    let b7MismatchConfirmed = 0
+    let b7MismatchUnconfirmed = 0
     for (const seriesId of processed) {
       let data
       try {
@@ -624,7 +635,42 @@ async function runFullJS() {
         logger.warn('fetch', '[JS] B7 non-branch series skipped', { seriesId })
         continue
       }
-      const eps = mapNvapiEpisodes(seriesId, data?.items ?? [])
+      if (!Array.isArray(data?.items)) {
+        b7Invalid++
+        logger.warn('fetch', '[JS] B7 invalid nvapi payload: items is not an array', {
+          seriesId,
+          itemsType: typeof data?.items,
+        })
+        continue
+      }
+      const eps = mapNvapiEpisodes(seriesId, data.items)
+      const suspectedContentIds = mismatchBySeriesId.get(seriesId) ?? []
+      if (eps.length === 0 && suspectedContentIds.length > 0) {
+        b7Invalid++
+        b7MismatchUnconfirmed += suspectedContentIds.length
+        logger.warn(
+          'fetch',
+          '[JS] B7 empty nvapi items for known membership mismatch; retry next daily',
+          {
+            seriesId,
+            suspected: suspectedContentIds.length,
+          }
+        )
+        continue
+      }
+      if (suspectedContentIds.length > 0) {
+        const returnedContentIds = new Set(eps.map((ep) => ep.contentId))
+        const confirmed = suspectedContentIds.filter((cid) => returnedContentIds.has(cid)).length
+        b7MismatchConfirmed += confirmed
+        b7MismatchUnconfirmed += suspectedContentIds.length - confirmed
+        if (confirmed === 0) {
+          logger.warn(
+            'fetch',
+            '[JS] B7 known membership mismatch not present in nvapi response; retry next daily',
+            { seriesId, suspected: suspectedContentIds.length, returned: eps.length }
+          )
+        }
+      }
       // 移動を先に計画・実行（PRESERVE 迂回）→ その後 upsert で未登録話を新規作成
       const moves = planAuthoritativeMoves(store, seriesId, eps)
       for (const mv of moves) {
@@ -642,6 +688,11 @@ async function runFullJS() {
       batch,
       processed: processed.length,
       empty: emptyBefore,
+      mismatchTargets: mismatchGroups.length,
+      mismatchEpisodes: [...mismatchBySeriesId.values()].reduce((n, ids) => n + ids.length, 0),
+      mismatchConfirmed: b7MismatchConfirmed,
+      mismatchUnconfirmed: b7MismatchUnconfirmed,
+      invalidPayloads: b7Invalid,
       moved: b7Moved,
       created: b7Created,
       cursor,
