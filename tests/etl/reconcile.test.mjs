@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   findTitleMismatchTargets,
   inferEpisodeNo,
+  inferEpisodeNoForSeries,
   isSafeTitleFallbackCandidate,
+  seriesTitlesEqual,
 } from '../../scripts/etl/reconcile.mjs'
 import {
   createStore,
@@ -125,5 +127,34 @@ describe('findTitleMismatchTargets', () => {
     expect(isSafeTitleFallbackCandidate(store, ep, 572284, '魔法少女猫たると')).toBe(true)
     expect(inferEpisodeNo(ep.title)).toBe(2)
     expect(inferEpisodeNo('渡くんの××が崩壊寸前　BREAK 13　「本当に好きなの？」')).toBe(13)
+  })
+
+  it('通算話数表記を既存のシリーズ内話順から相対話数へ変換する', () => {
+    const store = createStore()
+    upsertSeries(store, [
+      { seriesId: 109065, title: 'テイルズ オブ ゼスティリア ザ クロス　第2期' },
+    ])
+    upsertEpisodes(store, [
+      {
+        contentId: 'so36357921',
+        seriesId: 109065,
+        episodeNo: 1,
+        title: 'テイルズ オブ ゼスティリア ザ クロス　第2期　第14話(#13)　穢れなき世界',
+      },
+    ])
+    expect(
+      seriesTitlesEqual(
+        'テイルズ オブ ゼスティリア ザ クロス　第2期',
+        'テイルズ オブ ゼスティリア ザ クロス 第2期'
+      )
+    ).toBe(true)
+
+    expect(
+      inferEpisodeNoForSeries(
+        store,
+        'テイルズ オブ ゼスティリア ザ クロス　第2期　第15話(#14)　風の天族デゼル',
+        109065
+      )
+    ).toBe(2)
   })
 })
