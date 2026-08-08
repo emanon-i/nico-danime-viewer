@@ -133,10 +133,10 @@ describe('fetchSeriesData 到達性メトリクス（nvapi 慢性失敗の可観
   })
 
   it('_resetNvapiStats 直後は ok/failed とも 0', () => {
-    expect(getNvapiStats()).toEqual({ ok: 0, failed: 0 })
+    expect(getNvapiStats()).toEqual({ ok: 0, failed: 0, usable: 0, empty: 0, invalid: 0 })
   })
 
-  it('HTTP 200 は ok をインクリメントする', async () => {
+  it('HTTP 200でもitems空ならemptyとして区別する', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -146,19 +146,45 @@ describe('fetchSeriesData 到達性メトリクス（nvapi 慢性失敗の可観
       })
     )
     await fetchSeriesData(123)
-    expect(getNvapiStats()).toEqual({ ok: 1, failed: 0 })
+    expect(getNvapiStats()).toEqual({ ok: 1, failed: 0, usable: 0, empty: 1, invalid: 0 })
+  })
+
+  it('HTTP 200で各話ありならusableを記録する', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ data: { detail: {}, items: [{ video: { id: 'so1' } }] } }),
+      })
+    )
+    await fetchSeriesData(123)
+    expect(getNvapiStats()).toEqual({ ok: 1, failed: 0, usable: 1, empty: 0, invalid: 0 })
+  })
+
+  it('HTTP 200でもitems欠落ならinvalidを記録する', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ data: { detail: {} } }),
+      })
+    )
+    await fetchSeriesData(123)
+    expect(getNvapiStats()).toEqual({ ok: 1, failed: 0, usable: 0, empty: 0, invalid: 1 })
   })
 
   it('非200（リトライ非対象・例: 404）は failed をインクリメントし throw する', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 404, headers: { get: () => null } }))
     await expect(fetchSeriesData(123)).rejects.toThrow('HTTP 404')
-    expect(getNvapiStats()).toEqual({ ok: 0, failed: 1 })
+    expect(getNvapiStats()).toEqual({ ok: 0, failed: 1, usable: 0, empty: 0, invalid: 0 })
   })
 
   it('ネットワーク例外（fetch reject の恒久失敗）は failed をインクリメントし rethrow する', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNRESET')))
     await expect(fetchSeriesData(123)).rejects.toThrow('ECONNRESET')
-    expect(getNvapiStats()).toEqual({ ok: 0, failed: 1 })
+    expect(getNvapiStats()).toEqual({ ok: 0, failed: 1, usable: 0, empty: 0, invalid: 0 })
   })
 
   it('複数回の呼び出しで ok/failed が累積する', async () => {
@@ -178,6 +204,6 @@ describe('fetchSeriesData 到達性メトリクス（nvapi 慢性失敗の可観
     await fetchSeriesData(1)
     await expect(fetchSeriesData(2)).rejects.toThrow()
     await fetchSeriesData(3)
-    expect(getNvapiStats()).toEqual({ ok: 2, failed: 1 })
+    expect(getNvapiStats()).toEqual({ ok: 2, failed: 1, usable: 0, empty: 2, invalid: 0 })
   })
 })

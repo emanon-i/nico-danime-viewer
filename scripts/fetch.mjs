@@ -46,6 +46,13 @@ import {
 import { deriveCoursFromTagsFromStore } from './etl/cours.mjs'
 import { projectAll, exportNew as exportNewStore, exportWorksPartial } from './store/project.mjs'
 import { summarizeCreditExtraction } from './etl/credits.mjs'
+import {
+  findTitleMismatchTargets,
+  inferEpisodeNo,
+  isSafeTitleFallbackCandidate,
+  seriesTitlesEqual,
+} from './etl/reconcile.mjs'
+import { mergeSeriesTitleHints, SERIES_TITLE_HINTS } from './series-hints.mjs'
 
 import { logger } from './lib/logger.mjs'
 
@@ -418,8 +425,10 @@ async function runFullJS() {
   logger.info('fetch', '[JS] phase B: full static JSON union')
   const { listJson, programlist, extras } = await fetchAllStaticJsons()
   const { byTitle: listByTitle, bySeriesId: listBySeriesId } = buildListIndex(listJson)
+  mergeSeriesTitleHints(listByTitle, listBySeriesId)
 
   const allSeriesIds = new Set()
+  for (const hint of SERIES_TITLE_HINTS) allSeriesIds.add(hint.seriesId)
   for (const item of listJson) {
     const sid = extractSeriesIdFromUrl(item.url)
     if (sid) allSeriesIds.add(sid)
@@ -562,6 +571,26 @@ async function runFullJS() {
         for (const e of nvapiEps) orderMap.set(e.contentId, e.episodeNo)
         const nvapiCids = new Set(nvapiEps.map((e) => e.contentId))
         mergeVerified = [...provisionalCids].some((cid) => nvapiCids.has(cid))
+        if (
+          !mergeVerified &&
+          provisionalCids.size > 0 &&
+          Array.isArray(verifyData?.items) &&
+          nvapiEps.length === 0
+        ) {
+          const candidateTitle = store.series.get(realId)?.title ?? ''
+          const safeFallback =
+            seriesTitlesEqual(verifyData?.detail?.title, candidateTitle) &&
+            [...provisionalCids].every((cid) =>
+              isSafeTitleFallbackCandidate(store, store.episodes.get(cid), realId, candidateTitle)
+            )
+          if (safeFallback) {
+            mergeVerified = true
+            for (const cid of provisionalCids) {
+              orderMap.set(cid, inferEpisodeNo(store.episodes.get(cid)?.title))
+            }
+            logger.warn('fetch', '[JS] B6 title fallback: nvapi items empty', { sid, realId })
+          }
+        }
         if (mergeVerified) storeUpsertEps(store, nvapiEps)
       } catch (err) {
         logger.warn('fetch', '[JS] B6 nvapi verify failed', { realId, err: err.message })
@@ -607,11 +636,21 @@ async function runFullJS() {
     const rawLimit = Number(process.env.NICO_SWEEP_LIMIT)
     const limit = Number.isFinite(rawLimit) ? rawLimit : 1500
 
-    const { targets, nextCursor } = selectSweepTargets(store, { batch, cursor })
+    const { targets: rotationTargets, nextCursor } = selectSweepTargets(store, { batch, cursor })
+    // list.json から正しい候補 ID が既知なのに、現在は別の正シリーズにいる話を最優先で検証する。
+    // タイトルは移動の根拠にせず、対象 nvapi の話一覧に contentId が存在した場合だけ移動する。
+    // 誤登録が残る限り毎日再選出されるため、nvapi の一時的な空・partial 応答で B7 カーソルが
+    // 通過しても、次の7日周期まで（あるいは永久に）取り残されない。
+    const mismatchGroups = findTitleMismatchTargets(store, listByTitle)
+    const mismatchBySeriesId = new Map(mismatchGroups.map((g) => [g.seriesId, g.contentIds]))
+    const targets = [...new Set([...mismatchGroups.map((g) => g.seriesId), ...rotationTargets])]
     const processed = limit > 0 ? targets.slice(0, limit) : targets
 
     let b7Moved = 0
     let b7Created = 0
+    let b7Invalid = 0
+    let b7MismatchConfirmed = 0
+    let b7MismatchUnconfirmed = 0
     for (const seriesId of processed) {
       let data
       try {
@@ -624,7 +663,74 @@ async function runFullJS() {
         logger.warn('fetch', '[JS] B7 non-branch series skipped', { seriesId })
         continue
       }
-      const eps = mapNvapiEpisodes(seriesId, data?.items ?? [])
+      if (!Array.isArray(data?.items)) {
+        b7Invalid++
+        logger.warn('fetch', '[JS] B7 invalid nvapi payload: items is not an array', {
+          seriesId,
+          itemsType: typeof data?.items,
+        })
+        continue
+      }
+      const eps = mapNvapiEpisodes(seriesId, data.items)
+      const suspectedContentIds = mismatchBySeriesId.get(seriesId) ?? []
+      if (eps.length === 0 && suspectedContentIds.length > 0) {
+        const candidateTitle = listBySeriesId.get(seriesId) ?? store.series.get(seriesId)?.title
+        const safeFallback =
+          seriesTitlesEqual(data?.detail?.title, candidateTitle) &&
+          suspectedContentIds.every((cid) =>
+            isSafeTitleFallbackCandidate(store, store.episodes.get(cid), seriesId, candidateTitle)
+          )
+        if (safeFallback) {
+          let moved = 0
+          for (const cid of suspectedContentIds) {
+            if (
+              moveEpisodeToSeries(
+                store,
+                cid,
+                seriesId,
+                inferEpisodeNo(store.episodes.get(cid)?.title)
+              )
+            ) {
+              moved++
+            }
+          }
+          // 同じシリーズに既に入っていた話も、タイトルから安全に読める話順を補完する。
+          for (const ep of store.episodes.values()) {
+            if (ep.seriesId !== seriesId || ep.episodeNo != null) continue
+            const inferred = inferEpisodeNo(ep.title)
+            if (inferred != null) {
+              moveEpisodeToSeries(store, ep.contentId, seriesId, inferred)
+            }
+          }
+          b7Moved += moved
+          b7MismatchConfirmed += suspectedContentIds.length
+          logger.warn('fetch', '[JS] B7 title fallback: nvapi items empty', {
+            seriesId,
+            moved,
+          })
+        } else {
+          b7Invalid++
+          b7MismatchUnconfirmed += suspectedContentIds.length
+          logger.warn('fetch', '[JS] B7 empty nvapi items; unsafe title fallback skipped', {
+            seriesId,
+            suspected: suspectedContentIds.length,
+          })
+        }
+        continue
+      }
+      if (suspectedContentIds.length > 0) {
+        const returnedContentIds = new Set(eps.map((ep) => ep.contentId))
+        const confirmed = suspectedContentIds.filter((cid) => returnedContentIds.has(cid)).length
+        b7MismatchConfirmed += confirmed
+        b7MismatchUnconfirmed += suspectedContentIds.length - confirmed
+        if (confirmed === 0) {
+          logger.warn(
+            'fetch',
+            '[JS] B7 known membership mismatch not present in nvapi response; retry next daily',
+            { seriesId, suspected: suspectedContentIds.length, returned: eps.length }
+          )
+        }
+      }
       // 移動を先に計画・実行（PRESERVE 迂回）→ その後 upsert で未登録話を新規作成
       const moves = planAuthoritativeMoves(store, seriesId, eps)
       for (const mv of moves) {
@@ -642,6 +748,11 @@ async function runFullJS() {
       batch,
       processed: processed.length,
       empty: emptyBefore,
+      mismatchTargets: mismatchGroups.length,
+      mismatchEpisodes: [...mismatchBySeriesId.values()].reduce((n, ids) => n + ids.length, 0),
+      mismatchConfirmed: b7MismatchConfirmed,
+      mismatchUnconfirmed: b7MismatchUnconfirmed,
+      invalidPayloads: b7Invalid,
       moved: b7Moved,
       created: b7Created,
       cursor,
@@ -791,8 +902,8 @@ async function runFullJS() {
   // nvapi 到達性サマリ（PR #6 の自己修復が実際に走れたかの可観測化）。writeback 前に確定させる。
   const nvapiStats = getNvapiStats()
   if (nvapiStats.ok + nvapiStats.failed > 0) {
-    if (nvapiStats.ok === 0) {
-      logger.error('fetch', '[JS] nvapi stats: nvapi all requests failed this run', nvapiStats)
+    if (nvapiStats.usable === 0) {
+      logger.error('fetch', '[JS] nvapi stats: no usable item payloads this run', nvapiStats)
     } else {
       logger.info('fetch', '[JS] nvapi stats', nvapiStats)
       storeUpdateMeta(store, { nvapiLastOkAt: now })
@@ -867,6 +978,7 @@ async function runHourlyJS() {
   try {
     const listJson = await fetchListJson()
     const { byTitle } = buildListIndex(listJson)
+    mergeSeriesTitleHints(byTitle)
     listIndexByTitle = byTitle
     logger.info('fetch', '[JS] hourly D2: list.json loaded', { count: listIndexByTitle.size })
   } catch (err) {
@@ -1049,7 +1161,26 @@ async function runHourlyJS() {
       const orderMap = new Map()
       for (const e of nvapiEps) orderMap.set(e.contentId, e.episodeNo)
       const nvapiCids = new Set(nvapiEps.map((e) => e.contentId))
-      const verified = [...provisionalCids].some((cid) => nvapiCids.has(cid))
+      let verified = [...provisionalCids].some((cid) => nvapiCids.has(cid))
+      if (
+        !verified &&
+        provisionalCids.size > 0 &&
+        Array.isArray(data?.items) &&
+        nvapiEps.length === 0
+      ) {
+        const candidateTitle = store.series.get(realId)?.title ?? ''
+        verified =
+          seriesTitlesEqual(data?.detail?.title, candidateTitle) &&
+          [...provisionalCids].every((cid) =>
+            isSafeTitleFallbackCandidate(store, store.episodes.get(cid), realId, candidateTitle)
+          )
+        if (verified) {
+          for (const cid of provisionalCids) {
+            orderMap.set(cid, inferEpisodeNo(store.episodes.get(cid)?.title))
+          }
+          logger.warn('fetch', '[JS] D3b title fallback: nvapi items empty', { sid, realId })
+        }
+      }
       if (!verified) {
         logger.warn('fetch', '[JS] D3b skip: provisional eps not in realId nvapi list', {
           sid,
@@ -1125,8 +1256,8 @@ async function runHourlyJS() {
   // nvapi 到達性サマリ（D3 nvapi seed 分）。meta.json 書き出し前に確定させる。
   const nvapiStats = getNvapiStats()
   if (nvapiStats.ok + nvapiStats.failed > 0) {
-    if (nvapiStats.ok === 0) {
-      logger.error('fetch', '[JS] nvapi stats: nvapi all requests failed this run', nvapiStats)
+    if (nvapiStats.usable === 0) {
+      logger.error('fetch', '[JS] nvapi stats: no usable item payloads this run', nvapiStats)
     } else {
       logger.info('fetch', '[JS] nvapi stats', nvapiStats)
       storeUpdateMeta(store, { nvapiLastOkAt: now })
