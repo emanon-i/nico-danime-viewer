@@ -78,7 +78,7 @@
 
 **対象ファイル**: `scripts/nico/list.mjs`（または provisional 登録箇所 `fetch.mjs:140-173`）、`tests/nico/list.test.mjs`。
 
-**変更方針**: provisional 登録時に「その負 ID が既に**別タイトル**に割当済みか」を series-index/store で確認。衝突時は salt 付き再ハッシュ（`title + ' ' + n`）で空きを探し、`logger.warn` で記録。既存データは触らない（発生していない前提・発生済みなら daily の再照合で顕在化する）。
+**変更方針**: provisional 登録時に「その負 ID が既に**別タイトル**に割当済みか」を series-index/store で確認。衝突時は salt 付き再ハッシュ（`title + '\0' + n`）で空きを探し、`logger.warn` で記録。既存データは触らない（発生していない前提・発生済みなら daily の再照合で顕在化する）。
 
 **受け入れ条件**: 人工的に衝突する 2 タイトルのフィクスチャで別 ID が割り当てられ warn が出るテスト。
 
