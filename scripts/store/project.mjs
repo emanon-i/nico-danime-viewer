@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { recalcSeriesMetricsJS } from '../etl/metrics.mjs'
+import { isTitleTag, normalizeTagKey } from '../etl/tags.mjs'
 import { buildCreditIndex, worksCreditKeys, buildCreditDisplayMap } from './credit-index.mjs'
 
 // ── ヘルパ ───────────────────────────────────────────────────────────────────
@@ -187,21 +188,53 @@ export async function exportRanking(store, outDir, lastUpdated, metricsMap) {
 
 // ── tags.json ─────────────────────────────────────────────────────────────────
 
-export async function exportTags(store, outDir, lastUpdated, metricsMap) {
-  // タグ → {seriesCount, isCurated}
-  const tagMap = new Map() // name → {name, isCurated, seriesCount}
-  for (const s of store.series.values()) {
-    if (!s.isAvailable) continue
-    for (const t of s.tags) {
-      let entry = tagMap.get(t.name)
+function canonicalTagsForSeries(series) {
+  const byKey = new Map()
+  for (const tag of series.tags ?? []) {
+    const name = normalizeTagKey(tag.name)
+    if (!name) continue
+    let entry = byKey.get(name)
+    if (!entry) {
+      entry = { name, isCurated: false, hasNonTitleUse: false }
+      byKey.set(name, entry)
+    }
+    if (tag.isCurated) entry.isCurated = true
+    if (!isTitleTag(tag.name, series.title)) entry.hasNonTitleUse = true
+  }
+  return byKey
+}
+
+/**
+ * 検索候補用のタグ索引を構築する。
+ * 検索本体（series.tags）は全タグを保持し、候補からは単独作品だけの作品名タグを除く。
+ * NFKC 同値表記は同じ key にまとめ、同一シリーズ内では一度だけ数える。
+ */
+export function buildTagCandidateMap(store) {
+  const all = new Map()
+  for (const series of store.series.values()) {
+    if (!series.isAvailable) continue
+    for (const [key, local] of canonicalTagsForSeries(series)) {
+      let entry = all.get(key)
       if (!entry) {
-        entry = { name: t.name, isCurated: false, seriesCount: 0 }
-        tagMap.set(t.name, entry)
+        entry = {
+          name: local.name,
+          isCurated: false,
+          seriesCount: 0,
+          hasNonTitleUse: false,
+        }
+        all.set(key, entry)
       }
       entry.seriesCount++
-      if (t.isCurated) entry.isCurated = true
+      if (local.isCurated) entry.isCurated = true
+      if (local.hasNonTitleUse) entry.hasNonTitleUse = true
     }
   }
+
+  return new Map([...all].filter(([, entry]) => entry.seriesCount >= 2 || entry.hasNonTitleUse))
+}
+
+export async function exportTags(store, outDir, lastUpdated, metricsMap) {
+  const tagMap = buildTagCandidateMap(store)
 
   const tags = [...tagMap.values()].sort(
     (a, b) => b.seriesCount - a.seriesCount || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
@@ -228,9 +261,10 @@ export async function exportTags(store, outDir, lastUpdated, metricsMap) {
 
   const topTagsFrom = (seriesList) => {
     const tc = new Map()
-    for (const s of seriesList) {
-      for (const t of s.tags) {
-        tc.set(t.name, (tc.get(t.name) ?? 0) + 1)
+    for (const series of seriesList) {
+      for (const key of canonicalTagsForSeries(series).keys()) {
+        if (!tagMap.has(key)) continue
+        tc.set(key, (tc.get(key) ?? 0) + 1)
       }
     }
     return [...tc.entries()]

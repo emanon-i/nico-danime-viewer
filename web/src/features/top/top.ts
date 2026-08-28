@@ -8,6 +8,7 @@ import { icon } from '../../components/icon'
 import { progressiveReveal } from '../../components/reveal'
 import { initMarquee, initAutoScroll } from '../../components/marquee'
 import { buildHeader } from '../shared/header'
+import { buildListUrl } from '../router'
 
 let heroObserver: IntersectionObserver | null = null
 
@@ -144,7 +145,7 @@ function fillTagRow(row: HTMLElement, label: string, tags: string[]): void {
   labelEl.className = 'tag-section-label'
   labelEl.textContent = label
   row.appendChild(labelEl)
-  tags.forEach((t) => row.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`)))
+  tags.forEach((t) => row.appendChild(chip(t, buildListUrl({ tags: [t] }))))
 }
 
 /** タグ辞書として使うタグ（巨大な汎用タグ「アニメ」「第1話/第一話」を除外＝§27）。 */
@@ -195,7 +196,7 @@ function populateTags(
     const renderRandom = () => {
       randomDiv.querySelectorAll('.tag-chip').forEach((c) => c.remove())
       for (const t of currentSample) {
-        randomDiv.appendChild(chip(t, `?tag=${encodeURIComponent(t)}`))
+        randomDiv.appendChild(chip(t, buildListUrl({ tags: [t] })))
       }
       randomDiv.scrollLeft = 0 // 引き直したら先頭から見せる（sticky ボタンは不動）
     }
@@ -225,7 +226,7 @@ function populateTags(
     progressiveReveal(
       curatedDiv,
       all.length,
-      (i) => chip(all[i], `?tag=${encodeURIComponent(all[i])}`),
+      (i) => chip(all[i], buildListUrl({ tags: [all[i]] })),
       {
         initial: 24,
         step: 40,
@@ -325,7 +326,7 @@ export function renderTop(container: HTMLElement, data?: Partial<TopData>): void
     const names = discoveryTags(data.allTags).map((t) => t.name)
     const picked = sampleTags(names, 16)
     const build = (t: string, dup: boolean): HTMLElement => {
-      const c = chip(`#${t}`, `?tag=${encodeURIComponent(t)}`)
+      const c = chip(`#${t}`, buildListUrl({ tags: [t] }))
       c.classList.add('quick-tag')
       if (dup) c.setAttribute('aria-hidden', 'true') // 複製分は読み上げ対象外
       return c

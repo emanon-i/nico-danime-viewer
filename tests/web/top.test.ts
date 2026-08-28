@@ -182,6 +182,7 @@ describe('renderTop with data (F-0032)', () => {
     expect(quickTags.length % 2).toBe(0)
     quickTags.forEach((t) => {
       expect(t.getAttribute('href')).toContain('tag=')
+      expect(t.getAttribute('href')).toContain('tagv=2')
       expect(t.textContent?.startsWith('#')).toBe(true)
     })
     // 複製分は読み上げ対象外（前半は可視・後半は aria-hidden）
@@ -262,6 +263,7 @@ describe('renderTop with data (F-0032)', () => {
     const chip = container.querySelector('[data-section="tags"] .tag-chip')
     expect(chip).not.toBeNull()
     expect(chip?.getAttribute('href')).toContain('tag=')
+    expect(chip?.getAttribute('href')).toContain('tagv=2')
   })
 
   it('test_random_tag_reshuffle: シャッフルボタンクリックでランダムタグが再描画される', () => {

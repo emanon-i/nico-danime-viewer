@@ -35,8 +35,11 @@ import {
 } from './nico/nvapi.mjs'
 import { fetchRssMultiPage, extractWatchId } from './nico/rss.mjs'
 
-import { deriveSeriesTagsFromStore } from './etl/tags.mjs'
-import { processEpisodeTags } from './etl/tags.mjs'
+import {
+  assertSeriesTagCoverage,
+  deriveSeriesTagsFromStore,
+  processEpisodeTags,
+} from './etl/tags.mjs'
 import {
   extractSeriesIdFromUrl,
   deriveSeriesOverviewsFromStore,
@@ -481,7 +484,7 @@ async function runFullJS() {
   assertSnapshotOk({ meta: { status: 200, totalCount: snapEps.length }, data: snapEps }, null)
 
   const mappedEps = snapEps.map((ep) => {
-    const processedTags = processEpisodeTags(ep.tags ?? '', null)
+    const processedTags = processEpisodeTags(ep.tags ?? '')
     return {
       ...ep,
       tags: processedTags.map((t) => t.name),
@@ -913,8 +916,9 @@ async function runFullJS() {
 
   const seriesTags = deriveSeriesTagsFromStore(store)
   for (const { seriesId, tags } of seriesTags) {
-    if (tags.length > 0) storeReplaceSeriesTags(store, seriesId, tags)
+    storeReplaceSeriesTags(store, seriesId, tags)
   }
+  assertSeriesTagCoverage(store)
   logger.info('fetch', '[JS] E2 series tags done', { count: seriesTags.length })
 
   runCoursFromTagsOnly(store)

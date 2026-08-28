@@ -157,12 +157,13 @@ C3（AGENTS.md 現行化）と C5（設定一元化）は前回トップ 5 か�
 - 導出: `deriveSeriesTagsFromStore`（`scripts/etl/tags.mjs:116-142`）が**全エピソード**の tags を distinct union → `works.json` の `w.tags`（`project.mjs:113`）
 - 照合: `web/src/features/list/filter.ts:107-118` が URL の tags と `w.tags` を両側 NFKC 正規化（`shared/tag-filter.ts normalizeTagForMatch`）で AND マッチ。素のワード検索はタイトルのみ（§87・タグ対象外=設計どおり）
 
-**ただし「union がそのまま残る」わけではない（注意点 4 つ）**:
+**union と候補表示の境界（C16 修正後）**:
 
 1. 導出時除外: ノイズタグ（dアニメストア/アニメ/第1話/第一話 `tags.mjs:7`）、キュレーションマーカー正規化（`_dアニメ` 接尾/`dアニメ_` 接頭）
-2. **isTitleTag ヒューリスティック**（`tags.mjs:70-78`）: タグ==タイトル or タイトルがタグで始まる（タグ 4 文字以上）→そのシリーズから除外。副作用として「物語シリーズ」のようなフランチャイズ名タグが**タイトルがそれで始まるシリーズからだけ**抜け、フランチャイズ横断のタグ検索が非対称になり得る（→ C16）
-3. UI 候補のみの隠蔽: クール由来（`YYYY年<季>アニメ`）・構造タグ（最終回/第N話/#N）はオートコンプリート/チップに出ないが**データには残り、URL 直指定なら照合される**（`shared/tag-filter.ts isHiddenTag`）
-4. 鮮度: タグ導出は日次 full のみ（`fetch.mjs:624`）。毎時は永続化済み `s.tags` を carry-forward（欠損なし・更新は翌日次）。snapshot 未到達のエピソード（nvapi seed/RSS のみ）はタグを供給しない
+2. 作品名タグ: 検索対象の union には残す。`isTitleTag` は候補辞書の整理だけに使い、単独作品だけの作品名タグを候補から隠し、2作品以上で共有するタグは残す
+3. NFKC 集約: `tags.json` は NFKC key ごとに同一シリーズを1回だけ数える。`works.tags` は表示元の表記を保持し、一覧照合時に同じ NFKC 規則で一致させる
+4. UI 候補のみの隠蔽: クール由来（`YYYY年<季>アニメ`）・構造タグ（最終回/第N話/#N）はオートコンプリート/チップに出ないが**データには残り、URL 直指定なら照合される**（`shared/tag-filter.ts isHiddenTag`）
+5. 鮮度: タグ導出は日次 full のみ。毎時は永続化済み `s.tags` を carry-forward（欠損なし・更新は翌日次）。snapshot 未到達のエピソード（nvapi seed/RSS のみ）はタグを供給しない
 
 ### 調査結果③: 第2回全体レビュー（2026-07-03・前回の空白領域の深掘り）
 

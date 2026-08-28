@@ -56,15 +56,21 @@ export function extractTagsFromRaw(rawTag) {
   return { tags: [normalizeTagName(tag)], isCurated: false }
 }
 
-/** タイトル/タグを照合用にコンパクト化（記号・空白除去・小文字化） */
+/** タグ照合用の canonical key（表示値は変えず、比較・集約にだけ使う）。 */
+export function normalizeTagKey(name) {
+  return (name ?? '').normalize('NFKC').trim()
+}
+
+/** タイトル/タグを照合用にコンパクト化（NFKC・記号/空白除去・小文字化） */
 function normCompact(s) {
-  return (s ?? '')
+  return normalizeTagKey(s)
     .toLowerCase()
     .replace(/[\s・:：!！?？|｜/／「」『』【】（）()。、,，.\-―~〜～'"`＿_]+/gu, '')
 }
 
 /**
- * タグが「作品名そのもの」かを判定する（作品名タグはフィルタ候補に出さない＝§2）。
+ * タグが「作品名そのもの」に近いかを判定する。
+ * 検索対象からは除外せず、候補辞書を整理するときだけ使用する。
  * 正規化後にタイトルと完全一致、またはタイトルがタグで始まる（タグ 4 文字以上）場合。
  */
 export function isTitleTag(tagName, title) {
@@ -80,10 +86,9 @@ export function isTitleTag(tagName, title) {
 /**
  * スペース区切りのタグ文字列を処理し、正規化タグセットを返す。
  * @param {string | null} tagsStr - snapshot の生タグ文字列（スペース区切り）
- * @param {string | null} [title] - シリーズ作品名（作品名タグ除外用・任意）
  * @returns {{ name: string, isCurated: boolean }[]} 重複除去済み
  */
-export function processEpisodeTags(tagsStr, title = null) {
+export function processEpisodeTags(tagsStr) {
   if (!tagsStr) return []
   const rawTags = tagsStr
     .split(' ')
@@ -97,8 +102,6 @@ export function processEpisodeTags(tagsStr, title = null) {
       if (!name || seen.has(name)) continue
       // 正規化後にもノイズタグ（全角「第１話」→「第1話」等）を除外（§27）
       if (EXCLUDED_TAGS.has(name)) continue
-      // 作品名タグ（作品名そのもの）はフィルタ候補に出さない
-      if (isTitleTag(name, title)) continue
       seen.add(name)
       result.push({ name, isCurated })
     }
@@ -118,7 +121,6 @@ export function deriveSeriesTagsFromStore(store) {
   const bySeries = new Map()
   for (const ep of store.episodes.values()) {
     if (ep.seriesId == null) continue
-    const seriesTitle = store.series.get(ep.seriesId)?.title ?? null
     let acc = bySeries.get(ep.seriesId)
     if (!acc) {
       acc = new Map()
@@ -127,7 +129,6 @@ export function deriveSeriesTagsFromStore(store) {
     const curatedSet = new Set(ep.tagsCurated ?? [])
     for (const name of ep.tags ?? []) {
       if (!name) continue
-      if (isTitleTag(name, seriesTitle)) continue
       const prev = acc.get(name)
       const isCurated = curatedSet.has(name)
       if (prev) prev.isCurated = prev.isCurated || isCurated
@@ -139,4 +140,34 @@ export function deriveSeriesTagsFromStore(store) {
     seriesId,
     tags: [...tagMap.values()],
   }))
+}
+
+/**
+ * 各話に保持したタグが、同じシリーズの検索用タグへ欠落なく投影されていることを検証する。
+ * @param {import('../store/store.mjs').Store} store
+ */
+export function assertSeriesTagCoverage(store) {
+  let missingCount = 0
+  const examples = []
+
+  for (const ep of store.episodes.values()) {
+    if (ep.seriesId == null) continue
+    const series = store.series.get(ep.seriesId)
+    if (!series) continue
+    const have = new Set((series.tags ?? []).map((tag) => normalizeTagKey(tag.name)))
+    for (const name of ep.tags ?? []) {
+      const key = normalizeTagKey(name)
+      if (!key || have.has(key)) continue
+      missingCount++
+      if (examples.length < 5) {
+        examples.push(`${ep.seriesId}:${ep.contentId}:${name}`)
+      }
+    }
+  }
+
+  if (missingCount > 0) {
+    throw new Error(
+      `[tags] series tag coverage failed: missing=${missingCount} examples=${examples.join(', ')}`
+    )
+  }
 }
