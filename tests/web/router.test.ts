@@ -62,7 +62,15 @@ describe('buildListUrl (F-0022)', () => {
     const params = new URLSearchParams(url.slice(1))
     expect(params.get('q')).toBe('テスト')
     expect(params.get('tag')).toBe('日常')
+    expect(params.get('tagv')).toBe('2')
     expect(params.get('page')).toBe('2')
+  })
+
+  it('複数タグは繰り返し tag パラメータで保持する', () => {
+    const url = buildListUrl({ tags: ['日常', '青春'] })
+    const params = new URLSearchParams(url.slice(1))
+    expect(params.getAll('tag')).toEqual(['日常', '青春'])
+    expect(params.get('tagv')).toBe('2')
   })
 
   it('デフォルト値は省略される（hot ソート・1ページ目）', () => {
@@ -131,5 +139,27 @@ describe('test_history_navigation (F-0022)', () => {
     expect(screen.type).toBe('detail')
     if (screen.type !== 'detail') return
     expect(screen.seriesId).toBe(42)
+  })
+
+  it('カンマ入りタグを1タグのままラウンドトリップする', () => {
+    const tags = ['WAKEUP,GIRLS！青春の影へ移動']
+    const url = buildListUrl({ tags })
+    const screen = parseScreen(new URLSearchParams(url.slice(1)))
+    if (screen.type !== 'list') throw new Error('not list')
+    expect(screen.state.tags).toEqual(tags)
+  })
+
+  it('複数タグにカンマ入りタグが混在しても完全に復元する', () => {
+    const tags = ['日常', '(⌒,_ゝ⌒)', '青春']
+    const url = buildListUrl({ tags })
+    const screen = parseScreen(new URLSearchParams(url.slice(1)))
+    if (screen.type !== 'list') throw new Error('not list')
+    expect(screen.state.tags).toEqual(tags)
+  })
+
+  it('tagv のない従来URLはカンマ区切りとして復元する', () => {
+    const screen = parseScreen(new URLSearchParams('tag=日常,青春'))
+    if (screen.type !== 'list') throw new Error('not list')
+    expect(screen.state.tags).toEqual(['日常', '青春'])
   })
 })

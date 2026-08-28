@@ -11,6 +11,7 @@ import {
 } from '../../web/src/features/list/filter'
 import type { FilterOpts } from '../../web/src/features/list/filter'
 import type { Work, RankingJson } from '../../web/src/data/types'
+import { buildListUrl, parseScreen } from '../../web/src/features/router'
 import type { ListState } from '../../web/src/features/router'
 
 const BASE_WORK: Work = {
@@ -151,6 +152,17 @@ describe('filterWorks (F-0028/0029/0030)', () => {
     const works: Work[] = [{ ...BASE_WORK, seriesId: 1, tags: ['総集編（届け）'] }] // 全角括弧
     const r = filterWorks(works, { ...BASE_STATE, tags: ['総集編(届け)'] }) // 半角括弧
     expect(r.map((w) => w.seriesId)).toEqual([1])
+  })
+
+  it('カンマ入りタグをURL経由でも1タグとして絞り込める', () => {
+    const tag = 'WAKEUP,GIRLS！青春の影へ移動'
+    const works: Work[] = [
+      { ...BASE_WORK, seriesId: 1, tags: [tag] },
+      { ...BASE_WORK, seriesId: 2, tags: ['無関係'] },
+    ]
+    const screen = parseScreen(new URLSearchParams(buildListUrl({ tags: [tag] }).slice(1)))
+    if (screen.type !== 'list') throw new Error('not list')
+    expect(filterWorks(works, screen.state).map((w) => w.seriesId)).toEqual([1])
   })
 
   it('test_cours_filter: クール絞りが機能する', () => {

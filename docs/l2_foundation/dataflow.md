@@ -362,7 +362,9 @@ lastSeenAt: snapshot 出現シリーズ（seriesId > 0）に lastSeenAt = now �
 
 Phase E  : ETL 派生
               E1: series.descriptionFirst（最古話 description・long-wins: 複数源の description は長い方を保持）
-              E2: series.tags（タグ正規化・dアニメ接頭/接尾除去・作品名タグ除外）
+              E2: series.tags（タグ正規化・dアニメ接頭/接尾除去・全話タグの欠落なし union）
+                  作品名タグも検索対象として保持し、候補辞書の整理は Phase G で分離
+                  各話タグ ⊆ series.tags を assert（違反時は writeback/deploy 前に停止）
               E3: cours（タグ主源 → 213クール・約3900作品を網羅）
               E4: franchiseKey（タイトル語幹 + シリーズタグ union-find）+ relatedSeries
               E5: timestamps 同期
@@ -379,6 +381,8 @@ Phase E  : ETL 派生
 
 Phase F  : writeBackStore（_dirtySeries の series/*.json + state/*.json 全量）← atomic
 Phase G  : projectAll（works / ranking / tags / kana / new 等）← 非 atomic（async writeFile）
+           tags.json は NFKC key で集約し、単独作品だけの作品名タグを候補から除外
+           2作品以上で共有する作品名/前方一致タグはフランチャイズ探索用に候補へ残す
            → .deploy-needed → Pages deploy（毎回・shrink 除く）
 ```
 

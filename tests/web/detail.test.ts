@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { renderDetail } from '../../web/src/features/detail/detail'
-import type { SeriesDetail } from '../../web/src/data/types'
+import { filterWorks } from '../../web/src/features/list/filter'
+import { parseScreen } from '../../web/src/features/router'
+import type { SeriesDetail, Work } from '../../web/src/data/types'
 
 const SERIES: SeriesDetail = {
   seriesId: 1,
@@ -158,6 +160,38 @@ describe('renderDetail (F-0025)', () => {
     expect(tagChips.length).toBe(2)
     const firstHref = tagChips[0].getAttribute('href')
     expect(firstHref).toContain('tag=')
+    expect(firstHref).toContain('tagv=2')
+  })
+
+  it('作品名タグ「言の葉の庭」をクリックすると元作品が一覧に残る', () => {
+    const titleTagSeries: SeriesDetail = {
+      ...SERIES,
+      title: '言の葉の庭',
+      tags: ['言の葉の庭'],
+      episodes: [{ ...SERIES.episodes[0], tags: ['言の葉の庭'] }],
+    }
+    renderDetail(container, titleTagSeries)
+    const chip = [...container.querySelectorAll<HTMLAnchorElement>('.detail-tags .tag-chip')].find(
+      (el) => el.textContent === '言の葉の庭'
+    )
+    expect(chip).toBeTruthy()
+
+    const screen = parseScreen(new URLSearchParams((chip?.getAttribute('href') ?? '').slice(1)))
+    if (screen.type !== 'list') throw new Error('not list')
+    const work: Work = {
+      seriesId: 1,
+      title: '言の葉の庭',
+      thumbnailUrl: null,
+      descriptionFirst: null,
+      tags: ['言の葉の庭'],
+      cours: null,
+      franchiseKey: null,
+      colKey: null,
+      episodeCount: 1,
+      relatedSeries: [],
+      isAvailable: true,
+    }
+    expect(filterWorks([work], screen.state).map((item) => item.seriesId)).toEqual([1])
   })
 
   it('各話ドロワーに各話タグがチップ表示され、クール由来タグは除外される（§77）', () => {
@@ -180,6 +214,7 @@ describe('renderDetail (F-0025)', () => {
     expect(chips).toEqual(['監督名', 'アクション/バトル'])
     // クリックで ?tag= へ
     expect(tagsRow!.querySelector('.tag-chip')?.getAttribute('href')).toContain('tag=')
+    expect(tagsRow!.querySelector('.tag-chip')?.getAttribute('href')).toContain('tagv=2')
   })
 
   it('各話タグの構造的定番（最終回）は除外・神回や内容タグは残す（§C）', () => {

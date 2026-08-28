@@ -752,6 +752,13 @@ describe('replaceSeriesTags', () => {
     expect(tags).toHaveLength(2)
     expect(tags?.[0]).toEqual({ name: 'アクション', isCurated: true })
   })
+
+  it('空配列でも以前のタグを残さず置換する', () => {
+    const store = createStore()
+    upsertSeries(store, [makeSeries({ tags: [{ name: '古いタグ', isCurated: false }] })])
+    replaceSeriesTags(store, 99001, [])
+    expect(store.series.get(99001)?.tags).toEqual([])
+  })
 })
 
 // ────────────────────────────────────────────────────────────────────────────

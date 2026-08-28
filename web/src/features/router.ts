@@ -14,7 +14,7 @@ export type SortDir = 'asc' | 'desc'
 export interface ListState {
   q: string
   row: string
-  /** 選択中タグ（複数＝AND）。URL では `tag` をカンマ区切りで保持（§35）。 */
+  /** 選択中タグ（複数＝AND）。URL v2 では `tag` を繰り返して保持（§35）。 */
   tags: string[]
   cours: string
   sort: SortKey
@@ -56,6 +56,7 @@ const LIST_PARAMS = [
   'q',
   'row',
   'tag',
+  'tagv',
   'cours',
   'sort',
   'dir',
@@ -84,10 +85,17 @@ export function parseScreen(params: URLSearchParams): Screen {
       state: {
         q: params.get('q') ?? '',
         row: params.get('row') ?? '',
-        tags: (params.get('tag') ?? '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        tags:
+          params.get('tagv') === '2'
+            ? params
+                .getAll('tag')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : params
+                .getAll('tag')
+                .flatMap((value) => value.split(','))
+                .map((s) => s.trim())
+                .filter(Boolean),
         cours: params.get('cours') ?? '',
         sort,
         dir: params.get('dir') === 'asc' ? 'asc' : 'desc',
@@ -114,7 +122,11 @@ export function buildListUrl(state: Partial<ListState>): string {
   const p = new URLSearchParams()
   if (state.q) p.set('q', state.q)
   if (state.row) p.set('row', state.row)
-  if (state.tags && state.tags.length > 0) p.set('tag', state.tags.join(','))
+  const tags = state.tags?.filter(Boolean) ?? []
+  if (tags.length > 0) {
+    for (const tag of tags) p.append('tag', tag)
+    p.set('tagv', '2')
+  }
   if (state.cours) p.set('cours', state.cours)
   if (state.sort && state.sort !== 'hot') p.set('sort', state.sort)
   if (state.dir === 'asc') p.set('dir', 'asc')

@@ -46,6 +46,16 @@ async function projectWorks(store) {
   }
 }
 
+async function projectTags(store, metricsMap = new Map()) {
+  const dir = await mkdtemp(join(tmpdir(), 'tags-'))
+  try {
+    await exportTags(store, dir, '2026-06-21T00:00:00Z', metricsMap)
+    return JSON.parse(await readFile(join(dir, 'tags.json'), 'utf-8'))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 describe('exportWorks firstAt/latestAt', () => {
   it('firstAt は最古話の投稿時刻（episodeNo の有無に左右されない）', async () => {
     const store = createStore()
@@ -98,6 +108,76 @@ describe('exportTags: seriesCount 同数タイは name 昇順', () => {
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
+  })
+
+  it('単独作品名は候補から除外し、複数作品共有の作品名タグは残す', async () => {
+    const store = createStore()
+    upsertSeries(store, [
+      {
+        seriesId: 1,
+        title: '言の葉の庭',
+        isAvailable: true,
+        tags: [
+          { name: '言の葉の庭', isCurated: false },
+          { name: '新海誠', isCurated: false },
+        ],
+      },
+      {
+        seriesId: 2,
+        title: 'ゴールデンカムイ',
+        isAvailable: true,
+        tags: [{ name: 'ゴールデンカムイ', isCurated: false }],
+      },
+      {
+        seriesId: 3,
+        title: 'ゴールデンカムイ 第二期',
+        isAvailable: true,
+        tags: [{ name: 'ゴールデンカムイ', isCurated: false }],
+      },
+    ])
+    const metrics = new Map([
+      [1, { hotScore: 3, totalViews: 300 }],
+      [2, { hotScore: 2, totalViews: 200 }],
+      [3, { hotScore: 1, totalViews: 100 }],
+    ])
+
+    const json = await projectTags(store, metrics)
+    const names = json.tags.map((tag) => tag.name)
+    expect(names).not.toContain('言の葉の庭')
+    expect(names).toContain('新海誠')
+    expect(json.tags.find((tag) => tag.name === 'ゴールデンカムイ')?.seriesCount).toBe(2)
+    expect(json.topHotTags).not.toContain('言の葉の庭')
+    expect(json.topHotTags).toContain('ゴールデンカムイ')
+    expect(json.topPopularTags).toContain('ゴールデンカムイ')
+  })
+
+  it('NFKC 同値表記を1候補へまとめ、同一作品を二重計上しない', async () => {
+    const store = createStore()
+    upsertSeries(store, [
+      {
+        seriesId: 1,
+        title: '作品A',
+        isAvailable: true,
+        tags: [
+          { name: 'Cﾊﾟｰﾄ', isCurated: false },
+          { name: 'Cパート', isCurated: true },
+        ],
+      },
+      {
+        seriesId: 2,
+        title: '作品B',
+        isAvailable: true,
+        tags: [{ name: 'Cパート', isCurated: false }],
+      },
+    ])
+
+    const json = await projectTags(store)
+    expect(json.tags.filter((tag) => tag.name === 'Cパート')).toHaveLength(1)
+    expect(json.tags.find((tag) => tag.name === 'Cパート')).toEqual({
+      name: 'Cパート',
+      isCurated: true,
+      seriesCount: 2,
+    })
   })
 })
 

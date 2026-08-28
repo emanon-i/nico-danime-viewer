@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizeTagName,
+  normalizeTagKey,
   extractTagsFromRaw,
   processEpisodeTags,
+  deriveSeriesTagsFromStore,
+  assertSeriesTagCoverage,
 } from '../../scripts/etl/tags.mjs'
 
 describe('normalizeTagName (F-0013)', () => {
@@ -16,6 +19,13 @@ describe('normalizeTagName (F-0013)', () => {
 
   it('trim する', () => {
     expect(normalizeTagName('  アクション  ')).toBe('アクション')
+  })
+})
+
+describe('normalizeTagKey', () => {
+  it('NFKC 同値の半角カナ・互換文字を同じ照合キーにする', () => {
+    expect(normalizeTagKey(' Cﾊﾟｰﾄ ')).toBe('Cパート')
+    expect(normalizeTagKey('神回')).toBe('神回')
   })
 })
 
@@ -85,14 +95,48 @@ describe('processEpisodeTags (F-0013)', () => {
     expect(names).toContain('日常')
   })
 
-  it('作品名そのもののタグは除外される（§2(b)）', () => {
+  it('作品名そのもののタグも検索対象として保持する', () => {
     const result = processEpisodeTags(
       'ぼっち・ざ・ろっく！ 日常/ほのぼの_dアニメ',
       'ぼっち・ざ・ろっく！'
     )
     const names = result.map((t) => t.name)
-    expect(names).not.toContain('ぼっち・ざ・ろっく！')
+    expect(names).toContain('ぼっち・ざ・ろっく！')
     expect(names).toContain('日常/ほのぼの')
+  })
+})
+
+describe('deriveSeriesTagsFromStore', () => {
+  it('作品名完全一致・タイトル前方一致タグを含めて全話 union する', () => {
+    const store = {
+      series: new Map([
+        [1, { seriesId: 1, title: '言の葉の庭', tags: [] }],
+        [2, { seriesId: 2, title: 'ゴールデンカムイ 第二期', tags: [] }],
+      ]),
+      episodes: new Map([
+        ['so1', { contentId: 'so1', seriesId: 1, tags: ['言の葉の庭', '新海誠'] }],
+        ['so2', { contentId: 'so2', seriesId: 2, tags: ['ゴールデンカムイ', '冒険'] }],
+      ]),
+    }
+
+    const result = new Map(
+      deriveSeriesTagsFromStore(store).map(({ seriesId, tags }) => [
+        seriesId,
+        tags.map((tag) => tag.name),
+      ])
+    )
+    expect(result.get(1)).toEqual(['言の葉の庭', '新海誠'])
+    expect(result.get(2)).toEqual(['ゴールデンカムイ', '冒険'])
+  })
+
+  it('シリーズ検索タグに欠落があれば公開前ガードが失敗する', () => {
+    const store = {
+      series: new Map([[1, { seriesId: 1, title: '言の葉の庭', tags: [] }]]),
+      episodes: new Map([['so1', { contentId: 'so1', seriesId: 1, tags: ['言の葉の庭'] }]]),
+    }
+    expect(() => assertSeriesTagCoverage(store)).toThrow(/series tag coverage failed/)
+    store.series.get(1).tags = [{ name: '言の葉の庭', isCurated: false }]
+    expect(() => assertSeriesTagCoverage(store)).not.toThrow()
   })
 })
 

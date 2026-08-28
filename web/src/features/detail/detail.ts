@@ -8,7 +8,7 @@ import { buildDisclosure } from '../../components/disclosure'
 import { isHiddenTag } from '../../shared/tag-filter'
 
 /**
- * タグチップ（`.tag-chip`）を生成。クリックで `?tag=` のタグフィルタへ遷移（§82）。
+ * タグチップ（`.tag-chip`）を生成。クリックで v2 タグURLのフィルタへ遷移（§82）。
  * 30ch を超えるラベルは CSS で … 省略され、全文ツールチップを直付けする（§77：
  * ドロワー内チップは初期 hidden で wireTruncationTooltips が計測できないため、
  * 文字数で判定して data-tooltip を確定的に付与する）。
@@ -16,7 +16,7 @@ import { isHiddenTag } from '../../shared/tag-filter'
 function tagChip(tag: string): HTMLAnchorElement {
   const chip = document.createElement('a')
   chip.className = 'tag-chip'
-  chip.href = '?tag=' + encodeURIComponent(tag)
+  chip.href = buildListUrl({ tags: [tag] })
   chip.textContent = tag
   if ([...tag].length > 30) chip.dataset.tooltip = tag
   return chip
@@ -178,7 +178,7 @@ function buildEpisodeRow(ep: SeriesEpisode): HTMLElement {
   rightCol.appendChild(dmeta)
   // 各話タグ（§77）。メタと説明の間。クール由来タグ（「2026年春アニメ」等・§68）は
   // 各話でも除外。除外後 0 件なら行ごと出さない。チップ作法はタグUI全体に統一（1行ピル20ch・
-  // 超過は … 省略＋ツールチップ・クリックで ?tag= へ）。
+  // 超過は … 省略＋ツールチップ・クリックで v2 タグURLへ）。
   const epTags = (ep.tags ?? []).filter((tag) => !isHiddenTag(tag))
   if (epTags.length > 0) {
     const tagsRow = document.createElement('div')
