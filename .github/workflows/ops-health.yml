@@ -1,7 +1,6 @@
 # 運用ヘルスチェック（PH-0014 / ④-2）。
-# scripts/ops-health.mjs を定期実行し、--ci で「データの正しさ」FAIL のときだけジョブを失敗
-# させる＝GitHub 標準の workflow 失敗通知メールがリポジトリ owner に飛ぶ。
-# 鮮度（cron がやや遅い等）の WARN/FAIL では落とさない（通知過多を避ける）。
+# 必要なときだけ手動実行する。定期通知は Daily / Hourly / Pages の各 workflow に任せる。
+# --ci では「データの正しさ」FAIL のときだけジョブを失敗させる。
 #
 # 検査対象は Pages 配信物 + state ブランチ（raw）+ GitHub Actions 履歴（gh）。
 # GH_TOKEN を渡すと Actions/state 鮮度も見られるが、それらは ci=false で通知対象外。
@@ -9,9 +8,6 @@
 name: Ops Health Check
 
 on:
-  schedule:
-    # 6 時間ごと（schedule は間引かれる前提。データ実害の検知用なので高頻度不要）。
-    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 # 最小権限（読み取りのみ。state/Pages の取得と gh API 参照に十分）。
