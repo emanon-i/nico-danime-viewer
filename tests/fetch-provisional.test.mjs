@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { createStore } from '../scripts/store/store.mjs'
-import { registerProvisionalSeries } from '../scripts/fetch.mjs'
+import { registerProvisionalSeries, compareByFirstSeen } from '../scripts/fetch.mjs'
 
 describe('registerProvisionalSeries サムネ伝播', () => {
   it('series と episode の両方に thumbnailUrl が入る', () => {
@@ -37,5 +37,18 @@ describe('registerProvisionalSeries サムネ伝播', () => {
       thumbnailUrl: null,
     })
     expect(sid).toBeNull()
+  })
+})
+
+describe('compareByFirstSeen（関連シリーズの並び＝初話の投稿日の古い順）', () => {
+  it('古い順・日時不明は末尾・同時刻と不明同士は seriesId 昇順', () => {
+    const list = [
+      { seriesId: 5, firstSeen: null },
+      { seriesId: 3, firstSeen: '2020-04-01T00:00:00+09:00' },
+      { seriesId: 2, firstSeen: 'Sat, 20 Jun 2015 00:00:00 +0900' },
+      { seriesId: 1, firstSeen: '2020-04-01T00:00:00+09:00' },
+      { seriesId: 4, firstSeen: 'invalid' },
+    ]
+    expect(list.sort(compareByFirstSeen).map((s) => s.seriesId)).toEqual([2, 1, 3, 4, 5])
   })
 })

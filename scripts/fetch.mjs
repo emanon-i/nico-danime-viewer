@@ -100,6 +100,15 @@ function detectShrinkFromStore(store, dataDir, threshold = 0.9) {
   return { ep0, baseline, shrink: baseline > 0 && ep0 < Math.floor(baseline * threshold) }
 }
 
+/** 初話の投稿日（firstSeen）の古い順。日時不明は末尾、同時刻・不明同士は seriesId 昇順（決定的）。 */
+export function compareByFirstSeen(a, b) {
+  const t = (s) => {
+    const ms = s.firstSeen ? Date.parse(s.firstSeen) : NaN
+    return Number.isNaN(ms) ? Infinity : ms
+  }
+  return t(a) - t(b) || a.seriesId - b.seriesId
+}
+
 function runCoursFromTagsOnly(store) {
   for (const s of store.series.values()) {
     if (s.cours !== null) {
@@ -938,13 +947,24 @@ async function runFullJS() {
   for (const [seriesId, franchiseKey] of franchiseKeys) {
     storeUpdateSeries(store, seriesId, { franchiseKey })
   }
+  // 関連シリーズは初話の投稿日（firstSeen）の古い順＝前作→続編の時系列で並べる。そのため
+  // firstSeen を先に最新化する（episodes だけを読む処理なので franchise とは独立）。
+  storeSyncTimestamps(store)
   const byFranchise = new Map()
   for (const s of store.series.values()) {
-    if (!s.franchiseKey) continue
+    if (!s.franchiseKey) {
+      // 束から外れたシリーズに前回の関連（誤結合の名残）を残さない
+      if (s.relatedSeries?.length) {
+        s.relatedSeries = []
+        store._dirtySeries.add(s.seriesId)
+      }
+      continue
+    }
     if (!byFranchise.has(s.franchiseKey)) byFranchise.set(s.franchiseKey, [])
     byFranchise.get(s.franchiseKey).push(s)
   }
   for (const members of byFranchise.values()) {
+    members.sort(compareByFirstSeen)
     for (const s of members) {
       s.relatedSeries = members
         .filter((m) => m.seriesId !== s.seriesId && m.isAvailable)
@@ -954,7 +974,6 @@ async function runFullJS() {
   }
   logger.info('fetch', '[JS] E4 franchise keys done', { count: franchiseKeys.size })
 
-  storeSyncTimestamps(store)
   storeSyncThumbs(store)
   logger.info('fetch', '[JS] E6 thumbnails synced')
 
