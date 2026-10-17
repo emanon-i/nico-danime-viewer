@@ -18,13 +18,11 @@ const BASE_WORK: Work = {
   seriesId: 0,
   title: '',
   thumbnailUrl: null,
-  descriptionFirst: null,
   tags: [],
   cours: null,
   franchiseKey: null,
   colKey: null,
   episodeCount: 12, // 既定は有効な作品（§59 の空シェル除外＝episodeCount 0 に該当しない）
-  relatedSeries: [],
 }
 
 const BASE_STATE: ListState = {

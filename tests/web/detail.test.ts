@@ -182,13 +182,11 @@ describe('renderDetail (F-0025)', () => {
       seriesId: 1,
       title: '言の葉の庭',
       thumbnailUrl: null,
-      descriptionFirst: null,
       tags: ['言の葉の庭'],
       cours: null,
       franchiseKey: null,
       colKey: null,
       episodeCount: 1,
-      relatedSeries: [],
       isAvailable: true,
     }
     expect(filterWorks([work], screen.state).map((item) => item.seriesId)).toEqual([1])

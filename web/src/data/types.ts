@@ -8,11 +8,15 @@ export interface RelatedSeries {
   thumbnailUrl: string | null
 }
 
+/**
+ * 一覧（works.json）1 件。発見 UI の全作品ブラウズ・絞り込み・並び替えに必要な軽量メタのみ。
+ * あらすじ（descriptionFirst）と関連シリーズ（relatedSeries）は一覧では使わず詳細のみで要るため、
+ * works.json には載せず per-series の SeriesDetail(Json) にだけ持たせる（初回ロード転送量の削減）。
+ */
 export interface Work {
   seriesId: number
   title: string
   thumbnailUrl: string | null
-  descriptionFirst: string | null
   tags: string[]
   cours: string | null
   franchiseKey: string | null
@@ -47,7 +51,6 @@ export interface Work {
   hotScore?: number
   /** snapshot 由来の配信可否（false = soft tombstone・非公式・配信終了など） */
   isAvailable?: boolean
-  relatedSeries: RelatedSeries[]
 }
 
 export interface WorksJson {

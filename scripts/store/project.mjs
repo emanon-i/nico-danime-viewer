@@ -110,7 +110,8 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       seriesId: s.seriesId,
       title: s.title,
       thumbnailUrl: s.thumbnailUrl,
-      descriptionFirst: s.descriptionFirst,
+      // descriptionFirst / relatedSeries は一覧では使わないため works.json に載せない
+      // （詳細は per-series series/<id>.json から読む）。初回ロード転送量を削減する。
       tags: s.tags.map((t) => t.name),
       cours: s.cours,
       franchiseKey: s.franchiseKey,
@@ -127,7 +128,6 @@ export async function exportWorks(store, outDir, lastUpdated, metricsMap) {
       durationTotal: agg.durationTotal ?? 0,
       totalViews: m?.totalViews ?? agg.totalViews ?? 0,
       hotScore: m?.hotScore ?? 0,
-      relatedSeries: s.relatedSeries ?? [],
     }
     // 人物フィルタ用 credits（全 canonical key・空なら付けない＝肥大最小化）。
     const keys = worksCreditKeys(creditIndex.perSeries.get(s.seriesId))
@@ -361,7 +361,7 @@ export async function exportNew(store, outDir, lastUpdated) {
 /**
  * works.json の指定シリーズを差分 upsert する（毎時・partial store で実行）。
  * 新規シリーズ・仮シリーズを日次を待たずに即座に works.json へ反映させる。
- * hotScore/relatedSeries は既存値を引き継ぎ（日次の full 計算には干渉しない）。
+ * hotScore は既存値を引き継ぐ（日次の full 計算には干渉しない）。
  *
  * @param {import('./store.mjs').Store} store
  * @param {Set<number>} seriesIds - 追加/更新対象 seriesId（正数・負数両方可）
@@ -443,7 +443,7 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
       seriesId: s.seriesId,
       title: s.title,
       thumbnailUrl: s.thumbnailUrl,
-      descriptionFirst: s.descriptionFirst,
+      // descriptionFirst / relatedSeries は works.json に載せない（daily 側とパリティ・詳細は series/<id>.json）
       tags: s.tags.map((t) => t.name),
       cours: s.cours,
       franchiseKey: s.franchiseKey,
@@ -460,7 +460,6 @@ export async function exportWorksPartial(store, seriesIds, outDir, lastUpdated) 
       durationTotal: agg.durationTotal ?? 0,
       totalViews: agg.totalViews ?? 0,
       hotScore: prev?.hotScore ?? 0,
-      relatedSeries: s.relatedSeries ?? prev?.relatedSeries ?? [],
     }
     // credits（全 canonical key）は1話目から再算出する（carry-forward 不要）。
     const keys = worksCreditKeys(creditIndex.perSeries.get(sid))
