@@ -3,6 +3,7 @@ import {
   stripHtml,
   extractSeriesIdFromUrl,
   computeFranchiseKeys,
+  seriesTagMatchesTitle,
   titleStem,
   isStructuredDescription,
   chooseDescription,
@@ -118,7 +119,12 @@ describe('computeFranchiseKeys (F-0017 / §15)', () => {
       [2, ['ゆるキャン△シリーズ', 'ほのぼの']],
       [3, ['アクション']],
     ])
-    const result = computeFranchiseKeys(map)
+    const titles = new Map([
+      [1, 'ゆるキャン△'],
+      [2, '映画『ゆるキャン△』'],
+      [3, '別の作品'],
+    ])
+    const result = computeFranchiseKeys(map, titles)
     expect(result.get(1)).toBeDefined()
     expect(result.get(1)).toBe(result.get(2)) // 同一フランチャイズ＝同一キー
     expect(result.has(3)).toBe(false)
@@ -159,6 +165,49 @@ describe('computeFranchiseKeys (F-0017 / §15)', () => {
     expect(result.get(1)).toBeDefined()
     expect(result.get(1)).toBe(result.get(2))
     expect(result.has(3)).toBe(false)
+  })
+
+  it('`〜シリーズ` タグは「〜」が題名に含まれないシリーズでは束ねない（ネタタグの連鎖防止）', () => {
+    // 本番で 60 作品の寄せ集めを作っていた形: 語尾がたまたま「シリーズ」のネタタグで無関係な作品が連鎖する
+    const tags = new Map([
+      [1, ['公式が病気シリーズ', 'プリティーシリーズ']],
+      [2, ['公式が病気シリーズ']],
+      [3, ['公式が病気シリーズ', 'テニスしろシリーズ']],
+    ])
+    const titles = new Map([
+      [1, 'プリパラ'],
+      [2, 'ゆるキャン△'],
+      [3, 'テニスの王子様'],
+    ])
+    const result = computeFranchiseKeys(tags, titles)
+    expect(result.size).toBe(0)
+  })
+
+  it('題名の無いシリーズにはシリーズタグのエッジを張らない', () => {
+    const tags = new Map([
+      [1, ['ゆるキャン△シリーズ']],
+      [2, ['ゆるキャン△シリーズ']],
+    ])
+    expect(computeFranchiseKeys(tags).size).toBe(0)
+    expect(computeFranchiseKeys(tags, new Map([[1, 'ゆるキャン△']])).size).toBe(0)
+  })
+
+  it('seriesTagMatchesTitle: 大小・全半角・空白・Dアニメストア_ マーカーを無視して題名と照合する', () => {
+    expect(seriesTagMatchesTitle('FATEシリーズ', 'Fate/Zero')).toBe(true)
+    expect(
+      seriesTagMatchesTitle('装甲騎兵ボトムズシリーズ', '装甲騎兵ボトムズ　赫奕たる異端')
+    ).toBe(true)
+    expect(
+      seriesTagMatchesTitle(
+        'Dアニメストア＿涼宮ハルヒの憂鬱シリーズ',
+        '涼宮ハルヒの憂鬱(2009年放送版)'
+      )
+    ).toBe(true)
+    expect(seriesTagMatchesTitle('ゆるキャン△シリーズ', 'ゆるキャン△ ＳＥＡＳＯＮ２')).toBe(true)
+    expect(seriesTagMatchesTitle('公式が病気シリーズ', 'プリパラ')).toBe(false)
+    expect(seriesTagMatchesTitle('やりたい放題シリーズ', '機動警察パトレイバー')).toBe(false)
+    expect(seriesTagMatchesTitle('ゆるキャン△', 'ゆるキャン△')).toBe(false) // シリーズタグでない
+    expect(seriesTagMatchesTitle('Aシリーズ', 'Aの物語')).toBe(false) // 語幹が短すぎる
   })
 
   it('titleStem: 続編/形式マーカーを除去して語幹を返す', () => {

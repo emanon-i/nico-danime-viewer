@@ -2314,6 +2314,21 @@
     font-size: var(--text-l3);
   }
 
+  /* 検索語に一致するタグの提案（題名検索の結果の上に 1 行） */
+  .list-tag-suggest {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--text-l4);
+
+    a {
+      color: var(--accent);
+      font-weight: 500;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
   .list-empty-reset {
     display: inline-block;
     margin-top: var(--sp-3);

@@ -230,6 +230,38 @@ describe('filterWorks (F-0028/0029/0030)', () => {
   it('q が空なら全件返す', () => {
     expect(filterWorks(WORKS, { ...BASE_STATE, q: '' })).toHaveLength(3)
   })
+
+  describe('q 検索の表記ゆれ（題名・検索語の両方を正規化）', () => {
+    const TITLES: Work[] = [
+      { ...BASE_WORK, seriesId: 11, title: 'Re:ゼロから始める異世界生活\u30004th season' },
+      { ...BASE_WORK, seriesId: 12, title: 'ハイキュー!! TO THE TOP' },
+      { ...BASE_WORK, seriesId: 13, title: 'ＳＰＹ×ＦＡＭＩＬＹ' },
+      { ...BASE_WORK, seriesId: 14, title: 'ﾄﾞﾗｺﾞﾝ物語' },
+      { ...BASE_WORK, seriesId: 15, title: '東京マーブルチョコレート～マタアイマショウ～' },
+    ]
+    const hit = (q: string) => filterWorks(TITLES, { ...BASE_STATE, q }).map((w) => w.seriesId)
+
+    it('全角記号・全角英字を半角と同一視する', () => {
+      expect(hit('Re：ゼロ')).toEqual([11])
+      expect(hit('spy×family')).toEqual([13])
+    })
+    it('ひらがなとカタカナを同一視する', () => {
+      expect(hit('はいきゅー')).toEqual([12])
+    })
+    it('半角カナを全角カナと同一視する', () => {
+      expect(hit('ドラゴン')).toEqual([14])
+    })
+    it('空白の有無・全角半角を無視する', () => {
+      expect(hit('異世界生活 4th')).toEqual([11])
+      expect(hit('異世界生活4th')).toEqual([11])
+    })
+    it('波ダッシュ（〜／～）を同一視する', () => {
+      expect(hit('チョコレート〜マタ')).toEqual([15])
+    })
+    it('空白だけの検索語は絞り込まない', () => {
+      expect(hit('　 ')).toHaveLength(TITLES.length)
+    })
+  })
 })
 
 describe('sortWorks (F-0031)', () => {

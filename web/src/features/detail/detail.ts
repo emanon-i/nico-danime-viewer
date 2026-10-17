@@ -5,6 +5,7 @@ import { icon } from '../../components/icon'
 import { hiResThumb } from '../../components/card'
 import { detailMeta, formatNumberFull, formatDateTime, formatDuration } from '../../components/meta'
 import { buildDisclosure } from '../../components/disclosure'
+import { progressiveReveal } from '../../components/reveal'
 import { isHiddenTag } from '../../shared/tag-filter'
 
 /**
@@ -372,6 +373,40 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     container.appendChild(synopsis)
   }
 
+  // ── 関連シリーズ（あらすじの直後・各話一覧の前＝話数の多い作品でも埋もれない）
+  const relatedSection = document.createElement('section')
+  relatedSection.className = 'detail-related'
+  relatedSection.dataset.section = 'related'
+
+  if (!hasRelated) {
+    relatedSection.setAttribute('hidden', '')
+  } else {
+    const heading = document.createElement('h2')
+    heading.textContent = '▸ 関連シリーズ/続編'
+    relatedSection.appendChild(heading)
+
+    // 並びは ETL 側で初話の投稿日（支店に追加された日）の古い順。多い束でも各話を押し下げないよう
+    // 先頭 8 件＋もっと見る（トップ/一覧と同じ段階表示）。
+    const list = document.createElement('div')
+    list.className = 'related-list'
+    const related = series.relatedSeries
+    progressiveReveal(
+      list,
+      related.length,
+      (i) => {
+        const link = document.createElement('a')
+        link.className = 'related-series-link'
+        link.dataset.action = 'related-series'
+        link.href = buildDetailUrl(related[i].seriesId)
+        link.textContent = related[i].title
+        return link
+      },
+      { initial: 8, step: 24, itemClass: 'related-series-link' }
+    )
+    relatedSection.appendChild(list)
+  }
+  container.appendChild(relatedSection)
+
   // ── 各話一覧 ────────────────────────────────────────────────
   const episodesSection = document.createElement('section')
   episodesSection.className = 'detail-episodes'
@@ -392,30 +427,4 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     })
   }
   container.appendChild(episodesSection)
-
-  // ── 関連シリーズ ────────────────────────────────────────────
-  const relatedSection = document.createElement('section')
-  relatedSection.className = 'detail-related'
-  relatedSection.dataset.section = 'related'
-
-  if (!hasRelated) {
-    relatedSection.setAttribute('hidden', '')
-  } else {
-    const heading = document.createElement('h2')
-    heading.textContent = '▸ 関連シリーズ/続編'
-    relatedSection.appendChild(heading)
-
-    const list = document.createElement('div')
-    list.className = 'related-list'
-    series.relatedSeries.forEach((r) => {
-      const link = document.createElement('a')
-      link.className = 'related-series-link'
-      link.dataset.action = 'related-series'
-      link.href = buildDetailUrl(r.seriesId)
-      link.textContent = r.title
-      list.appendChild(link)
-    })
-    relatedSection.appendChild(list)
-  }
-  container.appendChild(relatedSection)
 }

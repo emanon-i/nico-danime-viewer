@@ -166,14 +166,35 @@ export function getSeriesTagsMapFromStore(store) {
   return map
 }
 
+// 照合用の正規化（NFKC・小文字・空白除去）。タグは ETL で英字大文字化されている（FATEシリーズ）ため大小も無視する。
+const foldForMatch = (s) => s.normalize('NFKC').toLowerCase().replace(/\s+/gu, '')
+
+/**
+ * `〜シリーズ` タグが、そのシリーズの題名に対してフランチャイズの手掛かりになるかを判定する。
+ * 「〜」（語尾のシリーズと、先頭の `Dアニメストア_` マーカーを除いた部分）が題名に含まれるときだけ true。
+ * 例: 「ゆるキャン△シリーズ」×「ゆるキャン△ SEASON２」→ true ／「公式が病気シリーズ」×「プリパラ」→ false。
+ * @param {string} tag
+ * @param {string} title
+ * @returns {boolean}
+ */
+export function seriesTagMatchesTitle(tag, title) {
+  if (!/シリーズ$/u.test(tag) || !title) return false
+  const stem = foldForMatch(tag.replace(/シリーズ$/u, '').replace(/^dアニメストア[_＿]/iu, ''))
+  return stem.length >= 2 && foldForMatch(title).includes(stem)
+}
+
 /**
  * フランチャイズ（続編/関連シリーズ）束ねキーを決定する（ベストエフォート・§15）。
  * union-find で次のエッジを張り、同一連結成分を 1 フランチャイズとする:
  *  (1) **タイトル語幹**（4 文字以上）が一致するシリーズ同士＝続編の主シグナル
- *  (2) **`〜シリーズ` タグ**を共有するシリーズ同士＝キュレーション済みの束ね
+ *  (2) **`〜シリーズ` タグ**を共有するシリーズ同士。ただし「〜」の部分が**そのシリーズの題名に
+ *      含まれる**ときだけエッジにする（seriesTagMatchesTitle）。ニコニコには語尾が「シリーズ」の
+ *      ネタタグ（公式が病気シリーズ・お茶の間の良い子号泣シリーズ 等）が多く、無条件だと無関係な
+ *      作品が推移的に 1 つの束へ連鎖していた（本番で 60 作品の寄せ集め）。
  * 声優・スタッフ・汎用タグ（旧実装の 2〜50 共有ルール）は**使わない**（誤束ねの主因）。
  * @param {Map<number, string[]>} seriesTagsMap - series_id → tag名[]
- * @param {Map<number, string>} [titleMap] - series_id → title（語幹計算用・省略時は語幹エッジ無し）
+ * @param {Map<number, string>} [titleMap] - series_id → title（語幹計算・シリーズタグ照合用。
+ *   省略時、または題名の無いシリーズには語幹エッジもシリーズタグのエッジも張らない）
  * @returns {Map<number, string>} series_id → franchise_key（成分サイズ 2 以上のみ）
  */
 export function computeFranchiseKeys(seriesTagsMap, titleMap) {
@@ -211,11 +232,13 @@ export function computeFranchiseKeys(seriesTagsMap, titleMap) {
     }
   }
 
-  // (2) `〜シリーズ` タグでエッジ
+  // (2) `〜シリーズ` タグでエッジ（「〜」が題名に含まれるシリーズだけ）
   const bySeriesTag = new Map()
   for (const [id, tags] of seriesTagsMap) {
+    const title = titleMap?.get(id)
+    if (!title) continue
     for (const tag of tags) {
-      if (/シリーズ$/u.test(tag)) {
+      if (seriesTagMatchesTitle(tag, title)) {
         if (!bySeriesTag.has(tag)) bySeriesTag.set(tag, [])
         bySeriesTag.get(tag).push(id)
       }

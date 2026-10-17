@@ -133,6 +133,28 @@ describe('renderDetail (F-0025)', () => {
     expect(isHidden).toBe(true)
   })
 
+  it('関連シリーズは各話一覧より前に出し、9 件以上は先頭 8 件＋もっと見る', () => {
+    const related = Array.from({ length: 12 }, (_, i) => ({
+      seriesId: 100 + i,
+      title: `関連${i}`,
+      thumbnailUrl: null,
+    }))
+    renderDetail(container, { ...SERIES, relatedSeries: related })
+    const sections = [...container.querySelectorAll('[data-section]')].map(
+      (e) => (e as HTMLElement).dataset.section
+    )
+    expect(sections.indexOf('related')).toBeLessThan(sections.indexOf('episodes'))
+    const links = container.querySelectorAll(
+      '[data-section="related"] [data-action="related-series"]'
+    )
+    expect(links).toHaveLength(8)
+    expect(links[0].textContent).toBe('関連0') // ETL の並び（古い順）をそのまま保つ
+    container.querySelector<HTMLButtonElement>('[data-section="related"] .reveal-more-btn')!.click()
+    expect(
+      container.querySelectorAll('[data-section="related"] [data-action="related-series"]')
+    ).toHaveLength(12)
+  })
+
   it('test_detail_related_series_links: 関連シリーズのリンクがシリーズ詳細へ遷移する', () => {
     renderDetail(container, SERIES)
     const links = container.querySelectorAll(

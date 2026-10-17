@@ -10,6 +10,7 @@ import type { MetaSpec } from '../../components/meta'
 import { progressiveReveal } from '../../components/reveal'
 import { attachTagAutocomplete } from '../shared/tag-autocomplete'
 import { coursList, toggleCours } from './filter'
+import { normalizeForSearch } from '../../shared/text-match'
 
 export interface ListData {
   tags: Tag[]
@@ -290,6 +291,13 @@ function buildTagSearch(
   })
 
   return root
+}
+
+/** 検索語と（正規化して）完全一致するタグを返す。選択済みタグは除く。無ければ null。 */
+export function findTagForQuery(q: string, tags: Tag[], selected: string[]): Tag | null {
+  const key = normalizeForSearch(q)
+  if (!key) return null
+  return tags.find((t) => !selected.includes(t.name) && normalizeForSearch(t.name) === key) ?? null
 }
 
 /**
@@ -723,6 +731,23 @@ export function renderList(
   applied.appendChild(sizeWrap)
 
   results.appendChild(applied)
+
+  // ── タグ提案（検索語がタグ名と一致するとき）─────────────────────────
+  // 略称（ガルパン等）は題名に無くてもタグとしてはある。題名検索の結果に混ぜず（§87 の役割分担を維持）、
+  // 「タグで探す」リンクとして明示するだけ＝押したときだけタグ絞り込みに切り替わる。
+  const suggested = state.q ? findTagForQuery(state.q, data?.tags ?? [], state.tags) : null
+  if (suggested) {
+    const suggest = document.createElement('p')
+    suggest.className = 'list-tag-suggest'
+    suggest.dataset.part = 'tag-suggest'
+    const next: ListState = { ...state, q: '', tags: [...state.tags, suggested.name], page: 1 }
+    const a = document.createElement('a')
+    a.href = buildListUrl(next)
+    a.textContent = `タグ「#${suggested.name}」（${suggested.seriesCount}作品）で探す`
+    wireSpaLink(a, next)
+    suggest.appendChild(a)
+    results.appendChild(suggest)
+  }
 
   // ── 作品グリッド ─────────────────────────────────────────────
   const grid = document.createElement('div')
