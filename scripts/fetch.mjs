@@ -109,6 +109,57 @@ export function compareByFirstSeen(a, b) {
   return t(a) - t(b) || a.seriesId - b.seriesId
 }
 
+/**
+ * フランチャイズ束ね（franchiseKey）と関連シリーズ（relatedSeries）を Store 上で計算し直す（日次 E4）。
+ * firstSeen も最新化する（関連シリーズを初話の投稿日＝支店に追加された日の古い順に並べるため）。
+ * @param {import('./store/store.mjs').Store} store
+ * @returns {number} franchiseKey を持つシリーズ数
+ */
+export function applyFranchises(store) {
+  const seriesTagsMap = getSeriesTagsMapFromStore(store)
+  const titleMap = new Map()
+  for (const s of store.series.values()) {
+    if (s.isAvailable && s.seriesId > 0) titleMap.set(s.seriesId, s.title)
+  }
+  const franchiseKeys = computeFranchiseKeys(seriesTagsMap, titleMap)
+  for (const s of store.series.values()) {
+    if (s.franchiseKey !== null) {
+      s.franchiseKey = null
+      store._dirtySeries.add(s.seriesId)
+    }
+  }
+  for (const [seriesId, franchiseKey] of franchiseKeys) {
+    storeUpdateSeries(store, seriesId, { franchiseKey })
+  }
+  // 関連シリーズは初話の投稿日（firstSeen＝支店に追加された日）の古い順に並べる。多くは前作→続編の
+  // 順になるが、まとめて再投稿された作品では放送順と食い違うことがある（放送順の公式データは無い）。
+  // そのため firstSeen を先に最新化する（episodes だけを読む処理なので franchise とは独立）。
+  storeSyncTimestamps(store)
+  const byFranchise = new Map()
+  for (const s of store.series.values()) {
+    if (!s.franchiseKey) {
+      // 束から外れたシリーズに前回の関連（誤結合の名残）を残さない
+      if (s.relatedSeries?.length) {
+        s.relatedSeries = []
+        store._dirtySeries.add(s.seriesId)
+      }
+      continue
+    }
+    if (!byFranchise.has(s.franchiseKey)) byFranchise.set(s.franchiseKey, [])
+    byFranchise.get(s.franchiseKey).push(s)
+  }
+  for (const members of byFranchise.values()) {
+    members.sort(compareByFirstSeen)
+    for (const s of members) {
+      s.relatedSeries = members
+        .filter((m) => m.seriesId !== s.seriesId && m.isAvailable)
+        .map((m) => ({ seriesId: m.seriesId, title: m.title, thumbnailUrl: m.thumbnailUrl }))
+      store._dirtySeries.add(s.seriesId)
+    }
+  }
+  return franchiseKeys.size
+}
+
 function runCoursFromTagsOnly(store) {
   for (const s of store.series.values()) {
     if (s.cours !== null) {
@@ -932,47 +983,8 @@ async function runFullJS() {
 
   runCoursFromTagsOnly(store)
 
-  const seriesTagsMap = getSeriesTagsMapFromStore(store)
-  const titleMap = new Map()
-  for (const s of store.series.values()) {
-    if (s.isAvailable && s.seriesId > 0) titleMap.set(s.seriesId, s.title)
-  }
-  const franchiseKeys = computeFranchiseKeys(seriesTagsMap, titleMap)
-  for (const s of store.series.values()) {
-    if (s.franchiseKey !== null) {
-      s.franchiseKey = null
-      store._dirtySeries.add(s.seriesId)
-    }
-  }
-  for (const [seriesId, franchiseKey] of franchiseKeys) {
-    storeUpdateSeries(store, seriesId, { franchiseKey })
-  }
-  // 関連シリーズは初話の投稿日（firstSeen）の古い順＝前作→続編の時系列で並べる。そのため
-  // firstSeen を先に最新化する（episodes だけを読む処理なので franchise とは独立）。
-  storeSyncTimestamps(store)
-  const byFranchise = new Map()
-  for (const s of store.series.values()) {
-    if (!s.franchiseKey) {
-      // 束から外れたシリーズに前回の関連（誤結合の名残）を残さない
-      if (s.relatedSeries?.length) {
-        s.relatedSeries = []
-        store._dirtySeries.add(s.seriesId)
-      }
-      continue
-    }
-    if (!byFranchise.has(s.franchiseKey)) byFranchise.set(s.franchiseKey, [])
-    byFranchise.get(s.franchiseKey).push(s)
-  }
-  for (const members of byFranchise.values()) {
-    members.sort(compareByFirstSeen)
-    for (const s of members) {
-      s.relatedSeries = members
-        .filter((m) => m.seriesId !== s.seriesId && m.isAvailable)
-        .map((m) => ({ seriesId: m.seriesId, title: m.title, thumbnailUrl: m.thumbnailUrl }))
-      store._dirtySeries.add(s.seriesId)
-    }
-  }
-  logger.info('fetch', '[JS] E4 franchise keys done', { count: franchiseKeys.size })
+  const franchiseCount = applyFranchises(store)
+  logger.info('fetch', '[JS] E4 franchise keys done', { count: franchiseCount })
 
   storeSyncThumbs(store)
   logger.info('fetch', '[JS] E6 thumbnails synced')

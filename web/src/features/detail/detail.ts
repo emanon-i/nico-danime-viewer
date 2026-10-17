@@ -385,7 +385,7 @@ export function renderDetail(container: HTMLElement, series: SeriesDetail | null
     heading.textContent = '▸ 関連シリーズ/続編'
     relatedSection.appendChild(heading)
 
-    // 並びは ETL 側で初話の投稿日の古い順（前作→続編）。多い束でも各話を押し下げないよう
+    // 並びは ETL 側で初話の投稿日（支店に追加された日）の古い順。多い束でも各話を押し下げないよう
     // 先頭 8 件＋もっと見る（トップ/一覧と同じ段階表示）。
     const list = document.createElement('div')
     list.className = 'related-list'
