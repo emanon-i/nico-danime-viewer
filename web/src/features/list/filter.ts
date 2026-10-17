@@ -1,6 +1,18 @@
 import type { Work, RankingJson } from '../../data/types'
 import type { ListState } from '../router'
 import { normalizeTagForMatch } from '../../shared/tag-filter'
+import { normalizeForSearch } from '../../shared/text-match'
+
+// 正規化済み題名のキャッシュ。works はロード後に不変なので、作品オブジェクト単位で 1 回だけ計算する。
+const normalizedTitles = new WeakMap<Work, string>()
+function searchableTitle(w: Work): string {
+  let t = normalizedTitles.get(w)
+  if (t === undefined) {
+    t = normalizeForSearch(w.title)
+    normalizedTitles.set(w, t)
+  }
+  return t
+}
 
 // 既定の 1 ページ表示件数（§42・切りのいい 50。選択 UI で 50/100/200）
 export const PAGE_SIZE = 50
@@ -96,8 +108,10 @@ export function filterWorks(works: Work[], state: ListState, opts?: FilterOpts):
     // 素のワード検索は「シリーズタイトルの部分一致のみ」（§87）。タグは対象外。
     // タグで絞りたい時は #トークン（§35）でピル化して AND フィルタする＝役割分担：
     // 素ワード＝タイトル検索 / #＝タグフィルタ。
-    const q = state.q.toLowerCase()
-    result = result.filter((w) => w.title.toLowerCase().includes(q))
+    // 照合は題名・検索語の両方を normalizeForSearch で揃えてから（全角半角・かなカナ・空白の
+    // 表記ゆれを吸収）。空白だけの検索語は正規化で空になるので絞り込まない。
+    const q = normalizeForSearch(state.q)
+    if (q) result = result.filter((w) => searchableTitle(w).includes(q))
   }
 
   if (state.row) {

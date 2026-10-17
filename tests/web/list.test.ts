@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { renderList } from '../../web/src/features/list/list'
+import { renderList, findTagForQuery } from '../../web/src/features/list/list'
 import type { Work } from '../../web/src/data/types'
 import type { ListState } from '../../web/src/features/router'
 
@@ -91,6 +91,41 @@ describe('renderList (F-0024)', () => {
     renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1 })
     const kanaBtns = container.querySelectorAll('[data-part="kana"] .kana-btn')
     expect(kanaBtns.length).toBe(11)
+  })
+
+  it('検索語がタグ名と一致するとき「タグで探す」リンクを出す（題名検索の結果には混ぜない）', () => {
+    renderList(container, {
+      state: { ...BASE_STATE, q: 'がるぱん' },
+      works: [],
+      totalCount: 0,
+      totalPages: 1,
+      data: { tags: [{ name: 'ガルパン', isCurated: false, seriesCount: 10 }], cours: [] },
+    })
+    const a = container.querySelector<HTMLAnchorElement>('[data-part="tag-suggest"] a')
+    expect(a?.textContent).toBe('タグ「#ガルパン」（10作品）で探す')
+    const params = new URL(a!.href, 'https://example.test/').searchParams
+    expect(params.getAll('tag')).toEqual(['ガルパン'])
+    expect(params.get('q')).toBeNull()
+  })
+
+  it('一致するタグが無い・検索語が空ならタグ提案を出さない', () => {
+    const data = { tags: [{ name: 'ガルパン', isCurated: false, seriesCount: 10 }], cours: [] }
+    renderList(container, {
+      state: { ...BASE_STATE, q: 'ガル' },
+      works: [],
+      totalCount: 0,
+      totalPages: 1,
+      data,
+    })
+    expect(container.querySelector('[data-part="tag-suggest"]')).toBeNull()
+    renderList(container, { state: BASE_STATE, works: [], totalCount: 0, totalPages: 1, data })
+    expect(container.querySelector('[data-part="tag-suggest"]')).toBeNull()
+  })
+
+  it('findTagForQuery: 選択済みのタグは提案しない', () => {
+    const tags = [{ name: 'ガルパン', isCurated: false, seriesCount: 10 }]
+    expect(findTagForQuery('ガルパン', tags, [])?.name).toBe('ガルパン')
+    expect(findTagForQuery('ガルパン', tags, ['ガルパン'])).toBeNull()
   })
 
   it('cards が 0 件でも描画がクラッシュしない', () => {
