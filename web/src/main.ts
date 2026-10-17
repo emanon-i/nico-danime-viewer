@@ -1,6 +1,6 @@
 import './style.css'
 import { parseScreen, buildListUrl } from './features/router'
-import type { SortKey } from './features/router'
+import type { SortKey, Screen } from './features/router'
 import { renderTop } from './features/top/top'
 import type { TopData } from './features/top/top'
 import { renderList } from './features/list/list'
@@ -311,8 +311,65 @@ function setThemeIcon(btn: HTMLElement): void {
 // 直近の render がユーザー操作（遷移）由来かどうか。初回ロード時は false。
 let isNavigation = false
 
+// --- 戻る/進むでスクロール位置を保つ（L0「予測どおりに動く」）-----------------------
+// SPA は遷移のたびに app.innerHTML を作り直すため、ブラウザ標準の scrollRestoration
+// では再構築の前に復元が走って位置がずれる。'manual' にして自前で管理する。
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+
+// history エントリごとの scrollY。キーは各エントリに埋めた navKey。
+const scrollByKey = new Map<string, number>()
+let navAction: 'initial' | 'push' | 'pop' = 'initial'
+let lastScreenSig: string | null = null
+
+function newNavKey(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+function currentNavKey(): string {
+  return (history.state as { navKey?: string } | null)?.navKey ?? 'root'
+}
+// 初期エントリにキーを付与（既存 state を壊さないようマージ）。
+if (!(history.state as { navKey?: string } | null)?.navKey) {
+  history.replaceState({ ...(history.state as object | null), navKey: newNavKey() }, '')
+}
+// スクロールのたびに現在エントリの位置を控える（rAF スロットル）。離脱前に最新値が入るので、
+// popstate 後に「離れたページの位置」を復元できる。
+let scrollSaveQueued = false
+window.addEventListener(
+  'scroll',
+  () => {
+    if (scrollSaveQueued) return
+    scrollSaveQueued = true
+    requestAnimationFrame(() => {
+      scrollSaveQueued = false
+      scrollByKey.set(currentNavKey(), window.scrollY)
+    })
+  },
+  { passive: true }
+)
+
+/** 画面の同一性シグネチャ。list 内のページ送り・フィルタ変更は「同一画面」とみなす
+ * （既存のページネーション先頭スクロールを尊重し、全体スクロールで二重に動かさない）。 */
+function screenSig(screen: Screen): string {
+  return screen.type === 'detail' ? `detail:${screen.seriesId}` : screen.type
+}
+
+/** render 完了後にスクロール位置を適用する。pop=復元 / 別画面への push=先頭 /
+ * 同一画面 push・初回=不干渉。 */
+function applyScrollForRender(sig: string): void {
+  if (navAction === 'pop') {
+    const y = scrollByKey.get(currentNavKey()) ?? 0
+    requestAnimationFrame(() => window.scrollTo(0, y))
+  } else if (navAction === 'push' && sig !== lastScreenSig) {
+    requestAnimationFrame(() => window.scrollTo(0, 0))
+  }
+  lastScreenSig = sig
+  navAction = 'initial'
+}
+
 function navigate(url: string): void {
-  history.pushState(null, '', url)
+  scrollByKey.set(currentNavKey(), window.scrollY) // 離脱位置を確定
+  history.pushState({ navKey: newNavKey() }, '', url)
+  navAction = 'push'
   isNavigation = true
   void render()
 }
@@ -361,7 +418,8 @@ function focusMainIfNavigation(): void {
   // 奪わない（§91）。焦点移動で main へスクロールするとドロワー操作が中断するため。
   if (filterPanelOpen) return
   const main = app.querySelector<HTMLElement>('#main-content')
-  main?.focus()
+  // preventScroll: スクロール位置は applyScrollForRender が一元管理する（focus で奪わない）。
+  main?.focus({ preventScroll: true })
 }
 
 async function render(): Promise<void> {
@@ -690,6 +748,7 @@ async function render(): Promise<void> {
   wireTruncationTooltips(app)
 
   focusMainIfNavigation()
+  applyScrollForRender(screenSig(screen))
 }
 
 // テーマを最初に適用（FOUC を防ぐ）
@@ -700,6 +759,7 @@ initTooltips()
 initVersionCheck()
 
 window.addEventListener('popstate', () => {
+  navAction = 'pop'
   isNavigation = true
   void render()
 })
