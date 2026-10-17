@@ -24,25 +24,21 @@ const SAMPLE_WORKS: Work[] = [
     seriesId: 1,
     title: '作品A',
     thumbnailUrl: null,
-    descriptionFirst: null,
     tags: ['日常'],
     cours: '2026春',
     franchiseKey: null,
     colKey: 'sa',
     episodeCount: 0,
-    relatedSeries: [],
   },
   {
     seriesId: 2,
     title: '作品B',
     thumbnailUrl: null,
-    descriptionFirst: null,
     tags: [],
     cours: null,
     franchiseKey: null,
     colKey: 'sa',
     episodeCount: 0,
-    relatedSeries: [],
   },
 ]
 
@@ -108,7 +104,6 @@ describe('renderList (F-0024)', () => {
       seriesId: 10,
       title: 'メタ確認',
       thumbnailUrl: null,
-      descriptionFirst: null,
       tags: [],
       cours: null,
       franchiseKey: null,
@@ -117,7 +112,6 @@ describe('renderList (F-0024)', () => {
       latestAt: '2026-01-01T00:00:00+09:00',
       totalViews: 3080000,
       mylistFirst: 2707,
-      relatedSeries: [],
     }
     renderList(container, { state: BASE_STATE, works: [work], totalCount: 1, totalPages: 1 })
     const cap = container.querySelector('.card-caption')

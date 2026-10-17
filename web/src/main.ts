@@ -311,8 +311,82 @@ function setThemeIcon(btn: HTMLElement): void {
 // 直近の render がユーザー操作（遷移）由来かどうか。初回ロード時は false。
 let isNavigation = false
 
+// --- 戻る/進むでスクロール位置を保つ（L0「予測どおりに動く」）-----------------------
+// このアプリは 2 種類の遷移が混在する: 一覧↔詳細は通常のリンク遷移（フルリロード）、
+// 一覧内のページ送り/フィルタ/検索は pushState（再描画のみ）。どちらでも「戻ると元の位置」に
+// するため、各 history エントリに navKey を埋め（history.state はフルリロードをまたいで保持
+// される）、スクロール位置を sessionStorage に navKey 単位で保存し、render 完了後に復元する。
+// ブラウザ標準の復元は「データ取得(await)→DOM 構築」より前の空の瞬間に走って効かないため、
+// manual にして描画後に自前で適用する。
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+
+const SCROLL_KEY_PREFIX = 'nico-scroll:'
+let spaPushPending = false // 直近の render が SPA 前進遷移(navigate)由来か
+
+function newNavKey(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+function currentNavKey(): string {
+  return (history.state as { navKey?: string } | null)?.navKey ?? 'root'
+}
+// 現在の history エントリに navKey を付与（既存 state は壊さない）。フルリロード後も保持される。
+if (!(history.state as { navKey?: string } | null)?.navKey) {
+  history.replaceState({ ...(history.state as object | null), navKey: newNavKey() }, '')
+}
+
+function saveScroll(): void {
+  try {
+    sessionStorage.setItem(SCROLL_KEY_PREFIX + currentNavKey(), String(window.scrollY))
+  } catch {
+    // sessionStorage 不可（プライベートブラウズ等）は復元しないだけで動作に影響させない。
+  }
+}
+function savedScroll(): number | null {
+  try {
+    const v = sessionStorage.getItem(SCROLL_KEY_PREFIX + currentNavKey())
+    return v === null ? null : Number(v)
+  } catch {
+    return null
+  }
+}
+
+// スクロールのたびに現在エントリの位置を控える（rAF スロットル）。
+let scrollSaveQueued = false
+window.addEventListener(
+  'scroll',
+  () => {
+    if (scrollSaveQueued) return
+    scrollSaveQueued = true
+    requestAnimationFrame(() => {
+      scrollSaveQueued = false
+      saveScroll()
+    })
+  },
+  { passive: true }
+)
+// 離脱直前（フルリロード遷移・タブ閉じ）に最終位置を確実に残す。
+window.addEventListener('pagehide', saveScroll)
+
+/** render 完了後にスクロール位置を適用する。保存値があれば復元（戻る/進む）、無ければ
+ * SPA 前進遷移のときだけ先頭へ（新規フルロードは既に先頭なので不干渉）。 */
+function applyScrollForRender(): void {
+  const y = savedScroll()
+  if (y !== null) {
+    // DOM 構築直後で高さは確定済み。画像遅延での伸長に備え 2 フレーム適用する。
+    requestAnimationFrame(() => {
+      window.scrollTo(0, y)
+      requestAnimationFrame(() => window.scrollTo(0, y))
+    })
+  } else if (spaPushPending) {
+    requestAnimationFrame(() => window.scrollTo(0, 0))
+  }
+  spaPushPending = false
+}
+
 function navigate(url: string): void {
-  history.pushState(null, '', url)
+  saveScroll() // 離脱位置を確定
+  history.pushState({ navKey: newNavKey() }, '', url)
+  spaPushPending = true
   isNavigation = true
   void render()
 }
@@ -361,7 +435,8 @@ function focusMainIfNavigation(): void {
   // 奪わない（§91）。焦点移動で main へスクロールするとドロワー操作が中断するため。
   if (filterPanelOpen) return
   const main = app.querySelector<HTMLElement>('#main-content')
-  main?.focus()
+  // preventScroll: スクロール位置は applyScrollForRender が一元管理する（focus で奪わない）。
+  main?.focus({ preventScroll: true })
 }
 
 async function render(): Promise<void> {
@@ -690,6 +765,7 @@ async function render(): Promise<void> {
   wireTruncationTooltips(app)
 
   focusMainIfNavigation()
+  applyScrollForRender()
 }
 
 // テーマを最初に適用（FOUC を防ぐ）
